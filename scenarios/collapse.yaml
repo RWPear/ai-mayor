@@ -1,0 +1,10 @@
+# Worst case: a greedy start (40% tax), an angry audience, a protest wave. Should end in a recall.
+city: New Harbor
+days: 30
+start_followers: 200
+growth: {daily: 8}
+engagement: 0.3
+archetypes: {loyal: 0.1, worker: 0.25, activist: 0.45, shopper: 0.1, troll: 0.1}
+balance: {start_tax_rate: 0.40, start_treasury: 2000}
+overrides:
+  - {days: [5, 25], command_share: {PROTEST: 0.7}}

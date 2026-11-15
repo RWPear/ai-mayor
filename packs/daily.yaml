@@ -1,0 +1,8 @@
+# The everyday post.
+post: daily
+window_hours: 24
+commands:
+  WORK: work
+  PROTEST: protest
+  SHOP: shop
+  VOLUNTEER: volunteer

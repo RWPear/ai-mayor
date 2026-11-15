@@ -1,0 +1,243 @@
+# The storyteller picks from these when the city gets too calm (or too wild).
+#   when:     condition on city stats (pop, approval, treasury, tax, unrest, economy, season_day, has('id'))
+#   scope:    city or ward (ward events pick a ward, prefer ward_trait if given)
+#   on_start / while (daily) / on_help / on_timeout: effects
+#   commands: comment words that fit this event -> help or hinder (use them in that day's pack)
+#   options:  what the mayor can do about it
+# Effect keys: treasury_pc, economy, service.<s>, mood, mood.<faction>, mood.ward, loyalty, loyalty.<faction>,
+#              wealth_pc, wealth_pc.<faction>, wealth_pc.ward, unrest.ward
+- id: water_main
+  title: "Water main bursts in {ward}"
+  scope: ward
+  weight: 3
+  days: 3
+  on_start: {mood.ward: -0.08, service.housing: -0.03}
+  while: {mood.ward: -0.03}
+  commands: {FIX: help, COMPLAIN: hinder}
+  help_needed: 0.6
+  on_help: {text: "Neighbors and city crews got the water back on in {ward}.", mood.ward: 0.06, loyalty: 0.02}
+  on_timeout: {text: "{ward} went days without water. People haven't forgotten.", loyalty: -0.03, mood.ward: -0.05}
+  options:
+    - {id: emergency_crew, label: "Pay for emergency crews", cost_pc: 4, ends: true, effects: {mood.ward: 0.05, loyalty: 0.02}, text: "Emergency crews fixed it overnight."}
+    - {id: wait, label: "Let the utility handle it", cost_pc: 0, effects: {}, text: "The mayor said the utility would handle it."}
+
+- id: heatwave
+  title: "Heatwave hits the city"
+  scope: city
+  weight: 2
+  days: 4
+  while: {mood: -0.03, economy: -0.03}
+  commands: {COOL: help, CHILL: help}
+  help_needed: 0.5
+  on_help: {text: "Neighbors opened cooling centers and checked on each other.", mood: 0.04, loyalty: 0.01}
+  on_timeout: {text: "The heatwave finally broke.", mood: 0.02}
+  options:
+    - {id: cooling, label: "Open city cooling centers", cost_pc: 3, effects: {mood: 0.03, loyalty.residents: 0.03}, text: "Cooling centers opened in every ward."}
+    - {id: nothing, label: "Do nothing", cost_pc: 0, effects: {loyalty.residents: -0.02}, text: "City Hall stayed quiet during the heatwave."}
+
+- id: tech_hq
+  title: "A tech giant wants to build its HQ here"
+  scope: city
+  weight: 2
+  when: "pop >= 40"
+  days: 3
+  commands: {WELCOME: help, REJECT: hinder}
+  help_needed: 0.5
+  on_help: {text: "The people welcomed the tech HQ. Rents are already rising.", economy: 0.08, mood.business: 0.06, mood.labor: -0.04, service.housing: -0.06}
+  on_timeout: {text: "The tech giant took its HQ elsewhere.", mood.business: -0.04}
+  options:
+    - {id: tax_break, label: "Offer a 5-year tax break", cost_pc: 6, ends: true, effects: {economy: 0.1, mood.business: 0.07, mood.labor: -0.05, service.housing: -0.06}, text: "The mayor handed the tech giant a tax break. The HQ is coming."}
+    - {id: demand_housing, label: "Only if they fund housing", cost_pc: 0, effects: {mood.labor: 0.04, mood.business: -0.02}, text: "The mayor demanded they fund affordable housing first."}
+    - {id: refuse, label: "Turn them away", cost_pc: 0, ends: true, effects: {mood.business: -0.06, mood.labor: 0.03}, text: "The mayor turned the tech giant away."}
+
+- id: transit_strike
+  title: "Bus drivers go on strike"
+  scope: city
+  weight: 2
+  when: "tax < 0.2 or approval < 0.5"
+  days: 4
+  on_start: {service.transit: -0.1}
+  while: {economy: -0.05, mood.business: -0.03}
+  commands: {SOLIDARITY: help, SCAB: hinder}
+  help_needed: 0.5
+  on_help: {text: "Public support pushed City Hall into a deal with the drivers.", mood.labor: 0.06, treasury_pc: -3, service.transit: 0.1}
+  on_timeout: {text: "The strike fizzled out. The drivers went back angry.", mood.labor: -0.05, service.transit: 0.08}
+  options:
+    - {id: raise, label: "Give drivers a raise", cost_pc: 5, ends: true, effects: {mood.labor: 0.06, service.transit: 0.1, mood.business: -0.02}, text: "The mayor gave the drivers a raise. Buses are back."}
+    - {id: replace, label: "Hire replacement drivers", cost_pc: 2, ends: true, effects: {mood.labor: -0.08, service.transit: 0.05, loyalty.labor: -0.05}, text: "The mayor brought in replacement drivers."}
+
+- id: food_festival
+  title: "A food truck festival takes over {ward}"
+  scope: ward
+  weight: 3
+  days: 2
+  while: {mood.ward: 0.04, economy: 0.04}
+  commands: {EAT: help, SHOP: help}
+  help_needed: 0.4
+  on_help: {text: "The food festival in {ward} was a huge hit.", wealth_pc.business: 30, mood: 0.03}
+  on_timeout: {text: "The food festival wrapped up.", mood.ward: 0.01}
+  options:
+    - {id: sponsor, label: "Sponsor it", cost_pc: 2, effects: {mood.ward: 0.04, loyalty: 0.01}, text: "City Hall sponsored the festival."}
+    - {id: permits, label: "Charge permit fees", cost_pc: -2, effects: {mood.business: -0.03}, text: "City Hall charged festival permit fees."}
+
+- id: crime_wave
+  title: "Break-ins spike in {ward}"
+  scope: ward
+  weight: 2
+  when: "q_safety < 0.85"
+  days: 4
+  while: {mood.ward: -0.04, unrest.ward: 0.03}
+  commands: {WATCH: help, PANIC: hinder}
+  help_needed: 0.5
+  on_help: {text: "A neighborhood watch in {ward} helped put a stop to the break-ins.", mood.ward: 0.05, service.safety: 0.03}
+  on_timeout: {text: "The break-ins in {ward} slowed, but trust in City Hall took a hit.", loyalty: -0.02}
+  options:
+    - {id: patrols, label: "Extra patrols", cost_pc: 3, ends: true, effects: {service.safety: 0.06, mood.business: 0.03, mood.ward: 0.03}, text: "Extra patrols were sent into {ward}."}
+    - {id: youth, label: "Fund youth programs", cost_pc: 4, effects: {mood.residents: 0.04, service.culture: 0.03}, text: "The mayor funded youth programs in {ward}."}
+
+- id: flood
+  title: "Flooding in {ward}"
+  scope: ward
+  ward_trait: flood-prone
+  weight: 2
+  days: 3
+  on_start: {wealth_pc.ward: -60, service.housing: -0.05, mood.ward: -0.1}
+  while: {mood.ward: -0.03}
+  commands: {SANDBAG: help, EVACUATE: help}
+  help_needed: 0.5
+  on_help: {text: "Residents sandbagged {ward} and saved most of the homes.", mood.ward: 0.08, loyalty: 0.02}
+  on_timeout: {text: "The water receded from {ward}, leaving a mess behind.", mood.ward: -0.04}
+  options:
+    - {id: relief, label: "Emergency relief payments", cost_pc: 6, effects: {wealth_pc.ward: 50, mood.ward: 0.06, loyalty: 0.03}, text: "The mayor sent relief payments to {ward}."}
+    - {id: levee, label: "Promise a new levee", cost_pc: 0, effects: {mood.ward: 0.02}, text: "The mayor promised {ward} a new levee."}
+
+- id: rent_spike
+  title: "Landlords hike rents across the city"
+  scope: city
+  weight: 2
+  when: "q_housing < 0.9"
+  days: 5
+  while: {mood.labor: -0.04, mood.residents: -0.02}
+  commands: {ORGANIZE: help, PAY: hinder}
+  help_needed: 0.5
+  on_help: {text: "Tenants organized and forced landlords to the table.", mood.labor: 0.06, mood.business: -0.03}
+  on_timeout: {text: "The rent hikes stuck.", wealth_pc.labor: -40}
+  options:
+    - {id: rent_cap, label: "Cap rent increases", cost_pc: 0, ends: true, effects: {mood.labor: 0.07, mood.business: -0.06}, text: "The mayor capped rent increases."}
+    - {id: build, label: "Fast-track new housing", cost_pc: 8, effects: {service.housing: 0.08, mood.business: 0.02}, text: "The mayor fast-tracked new housing."}
+
+- id: blackout
+  title: "Blackout across the city"
+  scope: city
+  weight: 1
+  days: 2
+  on_start: {economy: -0.08, mood: -0.05}
+  commands: {HELP: help, LOOT: hinder}
+  help_needed: 0.5
+  on_help: {text: "Neighbors shared generators and candles until the power came back.", mood: 0.05}
+  on_timeout: {text: "The power came back on.", mood: 0.01}
+  options:
+    - {id: generators, label: "Rent emergency generators", cost_pc: 3, ends: true, effects: {mood: 0.03}, text: "Emergency generators kept the hospitals and shops running."}
+
+- id: scandal
+  title: "Scandal: a city contractor overbilled millions"
+  scope: city
+  weight: 2
+  when: "has('newspaper')"
+  days: 3
+  on_start: {loyalty: -0.04}
+  commands: {INVESTIGATE: help, IGNORE: hinder}
+  help_needed: 0.4
+  on_help: {text: "Public pressure forced a full investigation. Money was recovered.", treasury_pc: 5, loyalty: 0.03}
+  on_timeout: {text: "The scandal faded, but people remember.", loyalty: -0.02}
+  options:
+    - {id: fire, label: "Fire the contractor publicly", cost_pc: 0, ends: true, effects: {loyalty: 0.03}, text: "The mayor fired the contractor in front of the cameras."}
+    - {id: deny, label: "Deny everything", cost_pc: 0, effects: {loyalty: -0.04}, text: "The mayor denied any wrongdoing."}
+
+- id: rival_poaching
+  title: "Port Calder is poaching our businesses"
+  scope: city
+  weight: 3
+  when: "has('rival')"
+  days: 5
+  while: {economy: -0.04, mood.business: -0.03}
+  commands: {SHOPLOCAL: help, DEFEND: help, DEFECT: hinder}
+  help_needed: 0.55
+  on_help: {text: "The city rallied behind local businesses. Port Calder backed off.", economy: 0.05, mood.business: 0.06}
+  on_timeout: {text: "Several businesses moved to Port Calder.", economy: -0.05, wealth_pc.business: -50}
+  options:
+    - {id: incentives, label: "Counter with business incentives", cost_pc: 6, effects: {mood.business: 0.05, economy: 0.03}, text: "The mayor countered with incentives for local businesses."}
+    - {id: campaign, label: "Launch a 'Buy Local' campaign", cost_pc: 2, effects: {mood: 0.02}, text: "City Hall launched a Buy Local campaign."}
+
+- id: rival_war
+  title: "Turf war: Port Calder claims the river trade"
+  scope: city
+  weight: 2
+  when: "has('rival') and pop >= 300"
+  days: 6
+  while: {economy: -0.05}
+  commands: {ATTACK: help, DEFEND: help, SURRENDER: hinder}
+  help_needed: 0.6
+  on_help: {text: "The city won the river trade war. Port Calder is furious.", economy: 0.1, mood: 0.06, loyalty: 0.04}
+  on_timeout: {text: "Port Calder took the river trade.", economy: -0.08, mood: -0.05}
+  options:
+    - {id: tariffs, label: "Slap tariffs on Port Calder", cost_pc: 0, effects: {economy: -0.02, mood.labor: 0.03, mood.business: -0.03}, text: "The mayor slapped tariffs on Port Calder."}
+    - {id: negotiate, label: "Negotiate a split", cost_pc: 0, ends: true, effects: {economy: 0.03}, text: "The mayor negotiated a split of the river trade."}
+
+- id: celebrity
+  title: "A celebrity just moved to {ward}"
+  scope: ward
+  weight: 2
+  days: 2
+  on_start: {mood.ward: 0.04}
+  while: {economy: 0.02}
+  commands: {FAN: help, IGNORE: hinder}
+  help_needed: 0.4
+  on_help: {text: "{ward} is suddenly the coolest place in the city.", mood.ward: 0.05, wealth_pc.ward: 20}
+  on_timeout: {text: "The celebrity buzz died down.", mood.ward: 0.0}
+  options:
+    - {id: key, label: "Give them the key to the city", cost_pc: 1, effects: {loyalty.residents: 0.02, loyalty.labor: -0.01}, text: "The mayor gave the celebrity the key to the city."}
+
+- id: budget_hole
+  title: "Audit finds a hole in the city budget"
+  scope: city
+  weight: 3
+  when: "treasury < 0"
+  days: 4
+  on_start: {loyalty: -0.03}
+  commands: {DONATE: help, PANIC: hinder}
+  help_needed: 0.4
+  on_help: {text: "Citizens chipped in to help close the gap.", treasury_pc: 6}
+  on_timeout: {text: "The budget hole is still there.", loyalty: -0.02}
+  options:
+    - {id: cuts, label: "Emergency spending cuts", cost_pc: -8, effects: {service.culture: -0.1, service.housing: -0.05, mood: -0.03}, text: "The mayor announced emergency spending cuts."}
+    - {id: borrow, label: "Borrow from the state", cost_pc: -10, effects: {loyalty: -0.01}, text: "The mayor borrowed from the state to cover the gap."}
+
+- id: union_demands
+  title: "Workers demand higher wages"
+  scope: city
+  weight: 2
+  when: "faction_labor < 0.5"
+  days: 4
+  while: {economy: -0.02}
+  commands: {STRIKE: help, WORK: hinder}
+  help_needed: 0.5
+  on_help: {text: "The workers won higher wages.", mood.labor: 0.08, mood.business: -0.05, wealth_pc.labor: 40}
+  on_timeout: {text: "The wage push ran out of steam.", mood.labor: -0.05}
+  options:
+    - {id: minimum_wage, label: "Raise the city minimum wage", cost_pc: 0, ends: true, effects: {mood.labor: 0.08, mood.business: -0.06, wealth_pc.labor: 30}, text: "The mayor raised the city minimum wage."}
+    - {id: refuse, label: "Refuse", cost_pc: 0, effects: {mood.labor: -0.05, mood.business: 0.03}, text: "The mayor refused the workers' demands."}
+
+- id: startup_boom
+  title: "Startup boom in {ward}"
+  scope: ward
+  weight: 2
+  when: "economy > 1.0"
+  days: 3
+  while: {economy: 0.03, mood.ward: 0.02}
+  commands: {INVEST: help, SHOP: help}
+  help_needed: 0.4
+  on_help: {text: "{ward} became the city's startup hub.", wealth_pc.ward: 40, economy: 0.04}
+  on_timeout: {text: "The startup buzz in {ward} settled down.", mood.ward: 0.0}
+  options:
+    - {id: incubator, label: "Open a city incubator", cost_pc: 4, effects: {economy: 0.03, mood.business: 0.04}, text: "The mayor opened a startup incubator in {ward}."}

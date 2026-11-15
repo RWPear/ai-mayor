@@ -1,0 +1,6 @@
+# Scale test: 100,000 citizens.
+city: New Harbor
+days: 10
+start_followers: 100000
+growth: {daily: 500}
+engagement: 0.03

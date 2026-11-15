@@ -1,0 +1,10 @@
+# Unlocked when the city reaches a population. Each one is a new mechanic and a
+# natural "we just unlocked X" episode. Features are checked in code by id.
+- {id: council,   pop: 25,    title: "City Council",        text: "Each ward elects a councilor - its most active, most trusted resident."}
+- {id: transit,   pop: 75,    title: "Transit Authority",   text: "The city can now build transit projects."}
+- {id: newspaper, pop: 150,   title: "The Daily Ledger",    text: "The city gets a newspaper. Scandals now hit harder."}
+- {id: rival,     pop: 300,   title: "A Rival City",        text: "Port Calder, across the bay, starts competing for business and people."}
+- {id: stadium,   pop: 600,   title: "Big League Dreams",   text: "The city is big enough to dream about a stadium."}
+- {id: subway,    pop: 1500,  title: "Subway Era",          text: "Underground transit becomes possible."}
+- {id: franchise, pop: 5000,  title: "Pro Sports Franchise", text: "A pro team is looking for a home."}
+- {id: metro,     pop: 20000, title: "Metropolis",          text: "The state government starts paying attention."}
