@@ -57,6 +57,8 @@ class City:
         self.history = []         # one row of stats per day
         self.mayor = {"name": "Mayor Vale", "term": 1, "promises": []}
         self.pack = None
+        self.scheduled = []       # events queued by you, the season plan, or follow-ups
+        self.plan = None          # season plan settings + progress (see city/plan.py)
         self.citizens = Citizens()
         for _ in range(cfg["first_wards"]):
             self.add_ward()
@@ -122,7 +124,8 @@ class City:
 
     # ------------------------------------------------------------------ save / load
     STATE_KEYS = ["name", "day", "season", "treasury", "tax_rate", "spend_ratio", "budget", "quality", "economy",
-                  "wards", "events", "event_log", "projects", "milestones", "petitions", "history", "mayor", "pack"]
+                  "wards", "events", "event_log", "projects", "milestones", "petitions", "history", "mayor", "pack",
+                  "scheduled", "plan"]
 
     def save(self, path):
         path = Path(path)
@@ -138,7 +141,8 @@ class City:
         state = json.loads((path / "city.json").read_text())
         c = cls(cfg, state["name"])
         for k in cls.STATE_KEYS:
-            setattr(c, k, state[k])
+            if k in state:  # older saves may not have newer keys
+                setattr(c, k, state[k])
         rs = state["rng"]
         c.rng.setstate((rs[0], tuple(rs[1]), rs[2]))
         c.citizens = Citizens.load(path)

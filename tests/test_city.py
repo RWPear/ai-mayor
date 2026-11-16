@@ -65,3 +65,57 @@ def test_scale_100k_one_day():
     run_day(city, RuleMayor(), [f"user{i}" for i in range(100_000)], [])
     assert city.population() == 100_000
     assert len(city.wards) >= 200
+
+
+def _city_with(n=60):
+    city = City(config.load())
+    run_day(city, RuleMayor(), [f"u{i}" for i in range(n)], [])
+    return city
+
+
+def test_schedule_starts_event_for_that_days_post():
+    from city import storyteller
+    city = _city_with()
+    storyteller.schedule(city, "heatwave", city.day + 2)
+    run_day(city, RuleMayor(), [], [])                   # end of this day -> starts for tomorrow's post
+    assert any(e["id"] == "heatwave" for e in city.events)
+    assert "COOL" in city.pack["commands"]
+
+
+def test_follow_up_chain():
+    from city import storyteller
+    city = _city_with()
+    a = storyteller.start(city, "rival_arrives")
+    a["days_left"] = 1                                   # make it time out today
+    run_day(city, RuleMayor(), [], [])
+    assert any(s["event"] == "rival_poaching" for s in city.scheduled)
+
+
+def test_plan_beats_and_conditions(tmp_path):
+    from city import plan
+    f = tmp_path / "plan.yaml"
+    f.write_text("storyteller: off\nbeats:\n"
+                 "  - {day: 1, event: grand_opening}\n"
+                 "  - {day: 3, if: 'pop > 100000', event: tech_hq, else: {event: heatwave}}\n")
+    city = City(config.load())
+    plan.attach(city, f)
+    from city.day import pack_for_today
+    p = pack_for_today(city)
+    assert "CELEBRATE" in p["commands"]
+    for _ in range(2):
+        run_day(city, RuleMayor(), [f"u{i}" for i in range(50)], [])
+    assert any(e["id"] == "heatwave" for e in city.events)   # condition false -> else branch
+
+
+def test_placeholders_use_real_handles():
+    from city import storyteller
+    city = _city_with()
+    city.wards[0]["councilor"] = 0
+    a = storyteller.start(city, "councilor_scandal", city.wards[0]["name"])
+    assert a["title"].startswith("Leaked texts: @" + city.citizens.handles[0])
+
+
+def test_content_checks_clean():
+    from city.checker import check_all
+    problems, _ = check_all("seasons")
+    assert problems == []

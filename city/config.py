@@ -46,6 +46,7 @@ DEFAULTS = {
     "tension_target_start": 0.25,
     "tension_target_end": 0.7,    # tension ramps up across a season toward the finale
     "max_active_events": 2,
+    "event_effort": 0.6,          # lower = events need fewer helpers (tune to your real comment rate)
     "event_cooldown_days": 2,     # at least this many days between new events
     "protest_contagion": 0.02,    # approval lost by everyone in a ward with a street protest, per day
 }

@@ -1,0 +1,95 @@
+# SEASON 1 - "Founding Days"
+# A brand-new city learns to govern itself. Introduces every mechanic one at a time, builds the
+# mayor's character, plants the Port Calder rivalry, and ends on the first recall vote.
+#
+# Day N's beat is the subject of day N's post (it starts the evening before).
+# `note` is for you - what to film, say or prep. Run `python -m city.run plan --plan seasons` to see it all.
+
+title: "Founding Days"
+theme: "A brand-new city learns to govern itself."
+storyteller: fill        # random events only in quiet stretches between beats
+
+beats:
+  # ---------------------------------------------------------------- week 1: welcome, learn the controls
+  - day: 1
+    event: grand_opening
+    announce: "New Harbor is open. Follow to move in. Comment to live here."
+    note: >
+      LAUNCH POST. Caption explains the rules in 3 lines: follow = you live here; comment the
+      words on each post; comment STATUS to see your citizen. Pin a comment with the same.
+
+  - day: 2
+    pack: {WORK: work, SHOP: shop, VOLUNTEER: volunteer, PROTEST: protest}
+    announce: "Your first real day. What will you do?"
+    note: "Reply to every STATUS comment yourself today - first impressions matter."
+
+  - day: 3
+    event: block_party
+    note: "Feature the ward with the most commenters."
+
+  - day: 5
+    event: first_budget
+    agenda: "Residents are voting PARKS vs POLICE for your first budget. Respect the vote or overrule it - either way, people will remember."
+    note: "First real choice. Video: the mayor making the case for one side (its speech)."
+
+  # ---------------------------------------------------------------- week 2: first crisis, first big decision
+  - day: 8
+    event: water_main
+    note: "First crisis. Show which ward got hit and who helped."
+
+  - day: 10
+    event: tech_hq
+    agenda: "A tech giant wants a tax break to build here. Business loves it; workers fear rent hikes."
+    note: "Big decision episode. Good one for a poll-style hook: 'Should we let them in?'"
+
+  - day: 12
+    if: "approval < 0.5"
+    event: union_demands
+    else: {event: celebrity}
+    note: "If people are unhappy, the workers push back. If not, something fun."
+
+  - day: 14
+    if: "has('council')"
+    event: councilor_scandal
+    else: {event: crime_wave}
+    note: >
+      The scandal names a REAL councilor (a follower). Keep it playful in the caption.
+      If they DEFEND it or nobody cares, it spreads to City Hall two days later.
+
+  # ---------------------------------------------------------------- week 3: midseason, the rival appears
+  - day: 15
+    announce: "Halfway through Season 1."
+    note: "Midseason recap video: approval chart, best moments, top citizens so far."
+
+  - day: 17
+    event: heatwave
+
+  - day: 19
+    event: rival_arrives
+    agenda: "Port Calder, the city across the bay, just publicly mocked New Harbor."
+    note: >
+      Introduce the villain. From here the arc runs itself:
+      clapback/ignore -> poaching (3 days) -> truce or trade war -> truce...
+
+  # ---------------------------------------------------------------- week 4: pressure, then the vote
+  - day: 23
+    if: "treasury < 0"
+    event: budget_hole
+    else: {event: startup_boom}
+
+  - day: 25
+    event: rent_spike
+    note: "Late-season pressure on workers - sets up the recall vote."
+
+  - day: 28
+    event: town_hall
+    agenda: "The recall vote is in two days. This town hall is your last chance to win people over."
+    announce: "The recall vote is in 2 days."
+    note: "Video: the mayor's town hall speech. CHEER or BOO."
+
+  - day: 30
+    pack: packs/recall.yaml
+    announce: "SEASON FINALE: KEEP the mayor or RECALL them?"
+    note: >
+      Finale. Results go up the next morning as the Season 2 opener - either the mayor survived,
+      or a new mayor takes office (change content/mayor.yaml before day 31).

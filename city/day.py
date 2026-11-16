@@ -7,13 +7,13 @@ live city, so what you test is exactly what runs.
   4. events tick (help/hinder from comments counts here)
   5. the whole city simulates a day
   6. season finale: recall vote
-  7. the storyteller may start a new event
+  7. tomorrow's post is set up: scheduled events, season-plan beats, or a storyteller event
   8. the mayor decides tomorrow's policy and writes a diary
   9. reports: daily markdown, episode script, STATUS replies, next post's commands
 """
 import numpy as np
 
-from . import packs, report, sim, storyteller
+from . import packs, plan, report, sim, storyteller
 from .effects import DayContext
 from .roles import JOB_NAMES
 
@@ -29,7 +29,9 @@ def election_pack():
             "commands": {"KEEP": "vote.keep", "RECALL": "vote.recall"}, "caption": ""}
 
 
-def next_pack(city):
+def next_pack(city, plan_pack=None):
+    if plan_pack:
+        return plan_pack
     sd = (city.day) % city.cfg["season_days"] + 1          # tomorrow's season day
     if sd == city.cfg["season_days"]:
         return election_pack()
@@ -77,13 +79,23 @@ def feature(city, actions):
     return lines, people
 
 
+def pack_for_today(city):
+    """The pack for the post about to be judged. On the very first day, applies the plan's day-1 beats."""
+    if city.day == 0 and city.plan and not city.plan.get("done"):
+        p, _ = plan.prepare(city, 1)
+        if p:
+            city.pack = p
+    return city.pack or default_pack()
+
+
 def run_day(city, mayor, followers, comments, pack=None):
+    storyteller.catalog(reload=True)  # pick up edits to content/events.yaml
+    pack = pack or pack_for_today(city)
     city.day += 1
     cfg = city.cfg
     season_day = (city.day - 1) % cfg["season_days"] + 1
     if season_day == 1 and city.day > 1:
         city.season += 1
-    pack = pack or city.pack or default_pack()
     c = city.citizens
 
     # 1-2. people
@@ -132,8 +144,14 @@ def run_day(city, mayor, followers, comments, pack=None):
         sim_report["notes"].append("RECALL VOTE: " + ("the mayor was removed!" if election["recalled"]
                                                       else "the mayor survives."))
 
-    # 7. storyteller
-    started = storyteller.maybe_start_event(city)
+    # 7. tomorrow's post: things you scheduled, then the season plan, then (maybe) the storyteller
+    started = storyteller.start_due(city)
+    plan_pack, plan_started = plan.prepare(city, city.day + 1) if city.plan else (None, [])
+    started += plan_started
+    if not started:
+        s = storyteller.maybe_start_event(city, quiet=plan.quiet(city) if city.plan else False)
+        if s:
+            started.append(s)
 
     # 8. mayor
     log_before = len(city.event_log)
@@ -156,7 +174,7 @@ def run_day(city, mayor, followers, comments, pack=None):
              "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
              "services": {k: round(v, 3) for k, v in city.quality.items()}, "factions": city.faction_moods(),
              "wards": len(city.wards)}
-    summary = (lines + [e["outcome"] for e in ended] + ([started["title"]] if started else [])
+    summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
                + sim_report["notes"] + [f"Approval is {stats['approval']:.0%}."])
     diary = mayor.diary(city, summary, people)
     city.mayor.setdefault("journal", []).append({"day": city.day, "diary": diary, "approval": stats["approval"]})
@@ -165,11 +183,12 @@ def run_day(city, mayor, followers, comments, pack=None):
                                                                      "tax_rate", "tension")},
                          "events": len(city.events), "joined": joined})
     city.history = city.history[-400:]
-    city.pack = next_pack(city)
+    city.pack = next_pack(city, plan_pack)
 
     result = {"city": city.name, "day": city.day, "season": city.season, "season_day": season_day,
               "joined": joined, "tallies": tallies, "stats": stats, "sim": sim_report,
-              "events_started": [started] if started else [], "events_ended": ended,
+              "events_started": started, "events_ended": ended,
+              "announce": list((city.plan or {}).get("announce", [])), "scheduled": list(city.scheduled),
               "events_active": list(city.events), "decision_lines": lines, "speech": speech,
               "decided_by": decision.get("_by", mayor.name), "thought": decision.get("thought", ""),
               "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,

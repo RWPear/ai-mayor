@@ -59,6 +59,7 @@ def brief(city):
         "petitions": city.petitions, "events": events, "projects_available": projects,
         "projects_building": building, "milestones": city.milestones,
         "recent": city.history[-5:],
+        "agenda": list((city.plan or {}).get("agenda", [])),
     }
 
 
@@ -263,7 +264,8 @@ Decide today's policy. Reply with JSON only:
 - "event_choices": for active events you haven't responded to, pick one option_id (or leave the event out to wait).
 - "petition_answers": accept, reject or defer each petition, with a few words in your voice.
 - "project": an id from projects_available to start building, or "".
-- "speech": one or two sentences you say publicly today, in character."""
+- "speech": one or two sentences you say publicly today, in character.
+If the brief has an "agenda", those are pressing matters you're expected to address today."""
         try:
             d = json.loads(self._chat(system, json.dumps(b, indent=1), DECISION_SCHEMA))
             d["_by"] = "llm"
@@ -281,6 +283,10 @@ Decide today's policy. Reply with JSON only:
             "if you mention anyone, use only the residents listed below, by their @handle. Never invent names, "
             "people, groups or organizations. No headings.")
         user = "What happened today:\n" + "\n".join(f"- {s}" for s in day_summary)
+        prev = [j["diary"] for j in city.mayor.get("journal", [])[-2:]]
+        if prev:
+            user += ("\n\nYour last entries (don't repeat their phrases, structure or endings - "
+                     "every entry should sound fresh):\n" + "\n".join(f"- {p[:400]}" for p in prev))
         if people:
             user += "\n\nResidents you might mention (real people):\n" + "\n".join(f"- {p}" for p in people)
         try:

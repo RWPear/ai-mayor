@@ -40,12 +40,13 @@ def status_card(city, i):
 def headline(day_result):
     """The hook for the first two seconds of the video."""
     r = day_result
+    if r.get("election"):
+        e = r["election"]
+        return (f"RECALLED! {e['recall_share']:.0%} voted to remove the mayor." if e["recalled"]
+                else f"The mayor survives the recall vote ({e['keep_share']:.0%} to {e['recall_share']:.0%}).")
     for n in r["sim"]["notes"]:
         if n.startswith("MILESTONE") or n.startswith("Riot"):
             return n.replace("MILESTONE: ", "Unlocked: ")
-    if r.get("election"):
-        e = r["election"]
-        return "The people voted to RECALL the mayor!" if e["recalled"] else "The mayor survived the recall vote!"
     helped = [e for e in r["events_ended"] if e.get("result") in ("helped", "mayor")]
     if helped:
         return helped[0]["outcome"]
@@ -74,6 +75,7 @@ def episode_script(city, r):
         "tallies": r["tallies"],
         "stats": {k: r["stats"][k] for k in ("population", "approval", "treasury", "tax_rate")},
         "next_pack": r["next_pack"],
+        "announce": r.get("announce", []),
         "caption": caption(r),
     }
 
@@ -117,6 +119,11 @@ def markdown(city, r):
         out.append("\n## Featured residents")
         out += [f"- {f}" for f in r["featured"]]
     out.append(f"\n## Next post's commands\n{', '.join(r['next_pack']['commands'])}")
+    if r.get("announce"):
+        out += ["**Announce:** " + a for a in r["announce"]]
+    if r.get("scheduled"):
+        out.append("**Coming up:** " + ", ".join(f"{s['event']} (day {s['day']}, {s['source']})"
+                                               for s in r["scheduled"][:5]))
     return "\n".join(out)
 
 

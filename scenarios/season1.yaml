@@ -1,0 +1,7 @@
+# Season 1 as planned in seasons/season1.yaml, with a normal small audience.
+city: New Harbor
+days: 30
+plan: seasons
+start_followers: 80
+growth: {daily: 8}
+engagement: 0.18

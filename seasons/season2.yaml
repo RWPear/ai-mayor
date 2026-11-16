@@ -1,0 +1,23 @@
+# SEASON 2 - "The Rival" (outline - fill in after Season 1 shows what people respond to)
+# Port Calder becomes the season's antagonist. Bigger city, bigger stakes.
+title: "The Rival"
+theme: "New Harbor versus Port Calder."
+storyteller: fill
+beats:
+  - day: 1
+    announce: "Season 2. The mayor is (still / newly) in charge. Port Calder is watching."
+    note: "Open with the recall result."
+  - day: 4
+    event: rival_poaching
+  - day: 12
+    if: "not happened('rival_war')"
+    event: rival_war
+    else: {event: rival_truce}
+    note: "War episode: ATTACK / DEFEND / SURRENDER."
+  - day: 20
+    event: councilor_scandal
+  - day: 28
+    event: town_hall
+  - day: 30
+    pack: packs/recall.yaml
+    announce: "SEASON 2 FINALE: KEEP or RECALL?"

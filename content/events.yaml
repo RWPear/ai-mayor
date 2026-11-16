@@ -163,8 +163,10 @@
   while: {economy: -0.04, mood.business: -0.03}
   commands: {SHOPLOCAL: help, DEFEND: help, DEFECT: hinder}
   help_needed: 0.55
-  on_help: {text: "The city rallied behind local businesses. Port Calder backed off.", economy: 0.05, mood.business: 0.06}
-  on_timeout: {text: "Several businesses moved to Port Calder.", economy: -0.05, wealth_pc.business: -50}
+  on_help: {text: "The city rallied behind local businesses. Port Calder backed off.", economy: 0.05, mood.business: 0.06,
+            next: {event: rival_truce, in_days: 4}}
+  on_timeout: {text: "Several businesses moved to Port Calder.", economy: -0.05, wealth_pc.business: -50,
+               next: {event: rival_war, in_days: 3}}
   options:
     - {id: incentives, label: "Counter with business incentives", cost_pc: 6, effects: {mood.business: 0.05, economy: 0.03}, text: "The mayor countered with incentives for local businesses."}
     - {id: campaign, label: "Launch a 'Buy Local' campaign", cost_pc: 2, effects: {mood: 0.02}, text: "City Hall launched a Buy Local campaign."}
@@ -178,11 +180,13 @@
   while: {economy: -0.05}
   commands: {ATTACK: help, DEFEND: help, SURRENDER: hinder}
   help_needed: 0.6
-  on_help: {text: "The city won the river trade war. Port Calder is furious.", economy: 0.1, mood: 0.06, loyalty: 0.04}
-  on_timeout: {text: "Port Calder took the river trade.", economy: -0.08, mood: -0.05}
+  on_help: {text: "The city won the river trade war. Port Calder is furious.", economy: 0.1, mood: 0.06, loyalty: 0.04,
+            next: {event: rival_truce, in_days: 5}}
+  on_timeout: {text: "Port Calder took the river trade.", economy: -0.08, mood: -0.05,
+               next: {event: rival_truce, in_days: 6}}
   options:
     - {id: tariffs, label: "Slap tariffs on Port Calder", cost_pc: 0, effects: {economy: -0.02, mood.labor: 0.03, mood.business: -0.03}, text: "The mayor slapped tariffs on Port Calder."}
-    - {id: negotiate, label: "Negotiate a split", cost_pc: 0, ends: true, effects: {economy: 0.03}, text: "The mayor negotiated a split of the river trade."}
+    - {id: negotiate, label: "Negotiate a split", cost_pc: 0, ends: true, effects: {economy: 0.03}, text: "The mayor negotiated a split of the river trade.", next: {event: rival_truce, in_days: 4}}
 
 - id: celebrity
   title: "A celebrity just moved to {ward}"
@@ -241,3 +245,127 @@
   on_timeout: {text: "The startup buzz in {ward} settled down.", mood.ward: 0.0}
   options:
     - {id: incubator, label: "Open a city incubator", cost_pc: 4, effects: {economy: 0.03, mood.business: 0.04}, text: "The mayor opened a startup incubator in {ward}."}
+
+
+# ===================================================================================== story arcs
+# planned_only: true -> the storyteller never picks these at random. They come from a season plan,
+# from you (`city.run event start ...`), or as a follow-up (`next:`) of another event.
+#
+# "A vs B" events: the help word is choice A, the hinder word is choice B.
+#   on_help = A won, on_timeout = B won (or nobody cared enough).
+
+# ---------------------------------------------------------------- launch
+- id: grand_opening
+  planned_only: true
+  title: "New Harbor opens its doors"
+  scope: city
+  days: 1
+  on_start: {mood: 0.05}
+  commands: {CELEBRATE: help, MOVEIN: help}
+  help_needed: 0.3
+  on_help: {text: "Opening day was a party. The whole city showed up.", mood: 0.05, loyalty: 0.03}
+  on_timeout: {text: "Opening day was quiet. People are still finding their way in.", mood: 0.0}
+  options:
+    - {id: ribbon, label: "Cut the ribbon with a speech", cost_pc: 1, effects: {loyalty: 0.02}, text: "The mayor cut the ribbon and gave a very long speech."}
+
+- id: first_budget
+  planned_only: true
+  title: "The first budget vote: parks or police?"
+  scope: city
+  days: 2
+  commands: {PARKS: help, POLICE: hinder}
+  help_needed: 0.35
+  on_help: {text: "The people chose parks. New green space is coming.", service.culture: 0.12, mood.residents: 0.05, mood.business: -0.02}
+  on_timeout: {text: "The people chose police. More patrols are coming.", service.safety: 0.12, mood.business: 0.04, mood.residents: -0.02}
+  options:
+    - {id: overrule_parks, label: "Overrule the vote: fund parks", cost_pc: 4, ends: true, effects: {service.culture: 0.1, loyalty: -0.03}, text: "The mayor ignored the vote and funded parks anyway."}
+    - {id: overrule_police, label: "Overrule the vote: fund police", cost_pc: 4, ends: true, effects: {service.safety: 0.1, loyalty: -0.03}, text: "The mayor ignored the vote and funded police anyway."}
+    - {id: respect, label: "Respect whatever the people choose", cost_pc: 0, effects: {loyalty: 0.02}, text: "The mayor promised to respect the vote."}
+
+- id: block_party
+  planned_only: true
+  title: "Block party in {ward}"
+  scope: ward
+  days: 1
+  while: {mood.ward: 0.04}
+  commands: {PARTY: help, SLEEP: hinder}
+  help_needed: 0.3
+  on_help: {text: "{ward} threw the block party of the year. {resident} DJ'd until 2am.", mood.ward: 0.06}
+  on_timeout: {text: "The {ward} block party fizzled out early.", mood.ward: 0.0}
+  options:
+    - {id: permit, label: "Close the street for it", cost_pc: 1, effects: {mood.ward: 0.03}, text: "City Hall closed the street for the {ward} block party."}
+
+# ---------------------------------------------------------------- the scandal arc
+- id: councilor_scandal
+  planned_only: true
+  title: "Leaked texts: {councilor} took cash from developers"
+  scope: ward
+  days: 3
+  on_start: {loyalty.ward: -0.04, mood.ward: -0.03}
+  commands: {RESIGN: help, DEFEND: hinder}
+  help_needed: 0.4
+  on_help: {text: "Under pressure from the streets, {councilor} resigned in disgrace.", loyalty: 0.03, mood.ward: 0.03}
+  on_timeout: {text: "{councilor} survived the scandal. People are asking who else was paid.", loyalty: -0.03,
+               next: {event: scandal_city_hall, in_days: 2}}
+  options:
+    - {id: suspend, label: "Suspend the councilor", cost_pc: 0, ends: true, effects: {loyalty: 0.03}, text: "The mayor suspended {councilor} pending an investigation."}
+    - {id: stand_by, label: "Stand by your councilor", cost_pc: 0, effects: {loyalty: -0.04}, text: "The mayor stood by {councilor}.", next: {event: scandal_city_hall, in_days: 2}}
+
+- id: scandal_city_hall
+  planned_only: true
+  title: "The {councilor} scandal reaches City Hall"
+  scope: ward
+  days: 3
+  on_start: {loyalty: -0.05}
+  while: {mood: -0.02}
+  commands: {INVESTIGATE: help, MOVEON: hinder}
+  help_needed: 0.45
+  on_help: {text: "An independent investigation cleared City Hall - barely.", loyalty: 0.04}
+  on_timeout: {text: "The scandal never fully went away. It'll come up at the recall vote.", loyalty: -0.04}
+  options:
+    - {id: audit, label: "Order a public audit", cost_pc: 3, effects: {loyalty: 0.03}, text: "The mayor ordered a full public audit."}
+    - {id: blame, label: "Blame the councilor for everything", cost_pc: 0, ends: true, effects: {loyalty: -0.02, mood.ward: -0.04}, text: "The mayor threw {councilor} under the bus."}
+
+# ---------------------------------------------------------------- the rival arc (Port Calder)
+- id: rival_arrives
+  planned_only: true
+  title: "Port Calder's mayor calls New Harbor 'a village with Wi-Fi'"
+  scope: city
+  days: 2
+  commands: {CLAPBACK: help, IGNORE: hinder}
+  help_needed: 0.35
+  on_help: {text: "The city clapped back. Port Calder's mayor deleted the post.", mood: 0.04, loyalty: 0.02,
+            next: {event: rival_poaching, in_days: 3}}
+  on_timeout: {text: "New Harbor stayed quiet. Port Calder took that as weakness.",
+               next: {event: rival_poaching, in_days: 2}}
+  options:
+    - {id: trash_talk, label: "Fire back on social media", cost_pc: 0, effects: {mood: 0.03, loyalty: 0.02}, text: "The mayor fired back: 'At least our Wi-Fi works.'"}
+    - {id: summit, label: "Invite their mayor to talks", cost_pc: 1, ends: true, effects: {economy: 0.02}, text: "The mayor invited Port Calder to a summit.", next: {event: rival_truce, in_days: 5}}
+
+- id: rival_truce
+  planned_only: true
+  title: "Port Calder offers a truce"
+  scope: city
+  days: 2
+  commands: {ACCEPT: help, REFUSE: hinder}
+  help_needed: 0.35
+  on_help: {text: "The people accepted the truce. Trade with Port Calder is open again.", economy: 0.06, mood.business: 0.05}
+  on_timeout: {text: "The truce was refused. Port Calder says this isn't over.", mood.labor: 0.03,
+               next: {event: rival_war, in_days: 6}}
+  options:
+    - {id: sign, label: "Sign it", cost_pc: 0, ends: true, effects: {economy: 0.06, loyalty: 0.01}, text: "The mayor signed the truce with Port Calder."}
+    - {id: demands, label: "Make demands first", cost_pc: 0, effects: {mood: 0.02}, text: "The mayor demanded Port Calder apologise first."}
+
+# ---------------------------------------------------------------- season finale build-up
+- id: town_hall
+  planned_only: true
+  title: "Town hall: the mayor faces the city before the recall vote"
+  scope: city
+  days: 1
+  commands: {CHEER: help, BOO: hinder}
+  help_needed: 0.3
+  on_help: {text: "The town hall went well. The mayor got a standing ovation from the front rows.", loyalty: 0.04}
+  on_timeout: {text: "The town hall was a disaster. The mayor got booed off the stage.", loyalty: -0.05}
+  options:
+    - {id: apologise, label: "Apologise for this season's mistakes", cost_pc: 0, effects: {loyalty: 0.03}, text: "The mayor apologised. Some people even believed it."}
+    - {id: double_down, label: "Double down: 'I was right about everything'", cost_pc: 0, effects: {loyalty: -0.02, mood.business: 0.03}, text: "The mayor doubled down."}
