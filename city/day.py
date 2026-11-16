@@ -42,6 +42,41 @@ def next_pack(city):
     return default_pack()
 
 
+def feature(city, actions):
+    """Picks 3 residents worth mentioning: the angriest and happiest commenters, new councilors,
+    people who just left or came back. Returns (report lines, short notes the mayor may mention)."""
+    c = city.citizens
+    lines, people, picked = [], [], set()
+
+    def add(i, why):
+        i = int(i)
+        if i in picked or len(picked) >= 3:
+            return
+        picked.add(i)
+        w = city.wards[int(c.ward[i])]
+        lines.append(f"@{c.handles[i]} ({c.names[i]}, {JOB_NAMES[int(c.job[i])]} in {w['name']}) {why} - "
+                     f"now {report.mood_word(float(c.mood[i]))}")
+        people.append(f"@{c.handles[i]}, a {JOB_NAMES[int(c.job[i])]} in {w['name']}, {why}")
+        c.log(i, city.day, why)
+
+    for w in city.wards:   # councilors elected today
+        i = w.get("councilor")
+        if i is not None and c.story.get(int(i)) and c.story[int(i)][-1].startswith(f"day {city.day}: became"):
+            add(i, f"was elected councilor of {w['name']}")
+    commenters = np.array([c.index[u] for u in actions if u in c.index], dtype=np.int64)
+    if len(commenters):
+        m = c.mood[commenters]
+        lo, hi = int(commenters[np.argmin(m)]), int(commenters[np.argmax(m)])
+        if c.mood[lo] < 0.45:
+            add(lo, f"chose {actions[c.handles[lo]]} and is fed up")
+        if c.mood[hi] > 0.6:
+            add(hi, f"chose {actions[c.handles[hi]]} and is thriving")
+        rest = [i for i in commenters.tolist() if i not in picked]
+        for i in city.rng.sample(rest, min(3 - len(picked), len(rest))):
+            add(i, f"chose {actions[c.handles[i]]}")
+    return lines, people
+
+
 def run_day(city, mayor, followers, comments, pack=None):
     city.day += 1
     cfg = city.cfg
@@ -101,29 +136,21 @@ def run_day(city, mayor, followers, comments, pack=None):
     started = storyteller.maybe_start_event(city)
 
     # 8. mayor
+    log_before = len(city.event_log)
     decision = mayor.decide(city)
     from .mayor import apply_decision
     lines, speech = apply_decision(city, decision)
+    # events the mayor settled outright today count as ended today too
+    for e in city.event_log[log_before:]:
+        if e.get("result") == "mayor":
+            e["outcome"] = f'{e["title"]}: {e.get("option_text", "").rstrip(".")}.'
+            ended.append(e)
     if speech:
         city.mayor.setdefault("speeches", []).append({"day": city.day, "text": speech})
         city.mayor["speeches"] = city.mayor["speeches"][-30:]
 
-    # featured residents: a few commenters with something to say about them
-    featured = []
-    rng = city.rng
-    commenters = [c.index[u] for u in actions if u in c.index]
-    for i in rng.sample(commenters, min(3, len(commenters))):
-        w = city.wards[int(c.ward[i])]
-        word = actions[c.handles[i]]
-        line = (f"@{c.handles[i]} ({c.names[i]}, {JOB_NAMES[int(c.job[i])]} in {w['name']}) chose {word} - "
-                f"now {report.mood_word(float(c.mood[i]))}")
-        c.log(i, city.day, f"chose {word} and felt {report.mood_word(float(c.mood[i]))}")
-        featured.append(line)
-    for w in city.wards:
-        if w["protest"]:
-            for i in np.where(c.active() & (c.ward == city.wards.index(w)))[0][:200]:
-                c.log(i, city.day, f"lived through a {'riot' if w['protest'] == 2 else 'protest'} in {w['name']}")
-
+    # featured residents: the most interesting people today, not just random commenters
+    featured, people = feature(city, actions)
     stats = {"population": city.population(), "approval": round(city.approval(), 3),
              "treasury": round(city.treasury, 1), "tax_rate": round(city.tax_rate, 3),
              "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
@@ -131,7 +158,7 @@ def run_day(city, mayor, followers, comments, pack=None):
              "wards": len(city.wards)}
     summary = (lines + [e["outcome"] for e in ended] + ([started["title"]] if started else [])
                + sim_report["notes"] + [f"Approval is {stats['approval']:.0%}."])
-    diary = mayor.diary(city, summary)
+    diary = mayor.diary(city, summary, people)
     city.mayor.setdefault("journal", []).append({"day": city.day, "diary": diary, "approval": stats["approval"]})
     city.mayor["journal"] = city.mayor["journal"][-30:]
     city.history.append({"day": city.day, **{k: stats[k] for k in ("population", "approval", "treasury",

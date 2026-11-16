@@ -184,7 +184,7 @@ class RuleMayor:
                 "budget": budget, "event_choices": choices, "petition_answers": answers, "project": project,
                 "speech": f"We hear you, {FACTION_LABEL[unhappiest]}. More {SERVICE_LABEL[favorite].lower()} is coming."}
 
-    def diary(self, city, day_summary):
+    def diary(self, city, day_summary, people=None):
         return (f"Day {city.day}. Approval {city.approval():.0%}. " + " ".join(day_summary[:3])).strip()
 
 
@@ -274,11 +274,15 @@ Decide today's policy. Reply with JSON only:
             d["_by"] = "rules (fallback)"
             return d
 
-    def diary(self, city, day_summary):
-        system = self._identity(city) + "\n\nIt's late. Write today's diary entry: 4-6 sentences, first person, " \
-                                        "in character, honest about how you feel and what you'll do next. Mention " \
-                                        "specific events and any residents named. No headings."
+    def diary(self, city, day_summary, people=None):
+        system = self._identity(city) + (
+            "\n\nIt's late. Write today's diary entry: 4-6 sentences, first person, in character, honest about how "
+            "you feel and what you'll do next. Mention specific things that happened. The residents are real people: "
+            "if you mention anyone, use only the residents listed below, by their @handle. Never invent names, "
+            "people, groups or organizations. No headings.")
         user = "What happened today:\n" + "\n".join(f"- {s}" for s in day_summary)
+        if people:
+            user += "\n\nResidents you might mention (real people):\n" + "\n".join(f"- {p}" for p in people)
         try:
             return self._chat(system, user, max_tokens=400)
         except Exception as e:  # noqa: BLE001

@@ -100,7 +100,8 @@ def markdown(city, r):
     if r["events_started"] or r["events_ended"] or r["events_active"]:
         out.append("\n## Events")
         out += [f"- NEW: {e['title']}" for e in r["events_started"]]
-        out += [f"- ENDED ({e['result']}): {e['outcome']}" for e in r["events_ended"]]
+        out += [f"- {'SETTLED BY THE MAYOR' if e['result'] == 'mayor' else 'ENDED (' + e['result'] + ')'}: "
+                f"{e['outcome']}" for e in r["events_ended"]]
         out += [f"- ongoing: {e['title']} ({e['days_left']} days left, {e['progress']:.0%} helped)"
                 for e in r["events_active"]]
     if r.get("election"):
