@@ -79,6 +79,7 @@ def cmd_status(args):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # keep the day table readable
     p = argparse.ArgumentParser(prog="city")
     sub = p.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("test", help="run a scenario with a fake audience")
