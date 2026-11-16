@@ -75,6 +75,14 @@ def apply_decision(city, d):
     city.tax_rate = float(np.clip(city.tax_rate, 0.0, city.cfg["max_tax_rate"]))
     if abs(city.tax_rate - old_tax) >= 0.005:
         lines.append(f"Taxes {'raised' if city.tax_rate > old_tax else 'cut'} to {city.tax_rate:.0%}.")
+        # people react to the announcement itself, not just the bill
+        from .model import TAX_PAIN
+        c = city.citizens
+        a = c.active()
+        pain = np.array([TAX_PAIN[f] for f in FACTIONS], np.float32)[c.faction]
+        delta = city.tax_rate - old_tax
+        shock = -pain * delta * city.cfg["tax_shock"] if delta > 0 else -delta * 0.8
+        c.loyalty = np.where(a, np.clip(c.loyalty + shock, 0, 1), c.loyalty).astype(np.float32)
     try:
         city.spend_ratio = float(np.clip(float(d.get("spend_ratio", city.spend_ratio)), 0.6, 1.3))
     except (TypeError, ValueError):

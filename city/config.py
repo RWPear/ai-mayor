@@ -23,7 +23,13 @@ DEFAULTS = {
     "debt_limit_pc": 25.0,        # the city can't spend into debt deeper than this per citizen
     # ---- people
     "mood_drift": 0.25,           # how fast mood moves toward its target each day
+    "service_weight": 0.8,        # how much city services move moods
+    "tax_sensitivity": 2.2,       # how much taxes hurt (business feels it most)
     "loyalty_drift": 0.05,        # how fast approval drifts back toward mood (low = grudges last)
+    "approval_fatigue": 0.004,    # approval quietly erodes each day unless the mayor earns it back
+    "timeout_penalty": 0.04,      # approval lost when an event runs out with nothing fixed
+    "helped_bonus": 0.02,         # approval gained when the city pulls through an event
+    "tax_shock": 1.5,             # approval hit per point of tax rise (x faction tax pain)
     "leave_mood": 0.15,           # below this for leave_days -> they move away
     "leave_days": 3,
     "protest_share": 0.12,        # share of a ward protesting that turns into a street protest
@@ -34,6 +40,8 @@ DEFAULTS = {
     # ---- seasons
     "season_days": 30,
     "recall_threshold": 0.5,      # share voting RECALL needed to remove the mayor
+    "silent_vote_weight": 0.1,    # residents who don't comment still vote, but each counts this much
+                                  # (keeps the comment section in charge, without ignoring everyone else)
     # ---- storyteller
     "tension_target_start": 0.25,
     "tension_target_end": 0.7,    # tension ramps up across a season toward the finale

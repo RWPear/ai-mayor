@@ -83,9 +83,10 @@ def run_day(city, mayor, followers, comments, pack=None):
             if i is not None and pack["commands"].get(w, "").startswith("vote."):
                 silent[i] = False
                 voted += 1
-        silent_recall = int((c.loyalty[silent] < 0.45).sum())
+        w = cfg["silent_vote_weight"]
+        silent_recall = int((c.loyalty[silent] < 0.45).sum()) * w
         recall = ctx.election_votes["recall"] + silent_recall
-        total = max(1, ctx.election_votes["keep"] + ctx.election_votes["recall"] + int(silent.sum()))
+        total = max(1, ctx.election_votes["keep"] + ctx.election_votes["recall"] + int(silent.sum()) * w)
         election = {"keep_votes": ctx.election_votes["keep"], "recall_votes": ctx.election_votes["recall"],
                     "silent": int(silent.sum()), "recall_share": recall / total, "keep_share": 1 - recall / total}
         election["recalled"] = election["recall_share"] > cfg["recall_threshold"]

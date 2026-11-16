@@ -82,18 +82,19 @@ def simulate(city, ctx):
     citizen_q = q[None, :] + ward_mod[c.ward]                         # each citizen's local service levels
     service_term = (wants[c.faction] * citizen_q).sum(axis=1) - 0.9
     pain = np.array([TAX_PAIN[fa] for fa in FACTIONS], np.float32)[c.faction]
-    tax_term = -pain * (city.tax_rate - 0.12) * 1.4
+    tax_term = -pain * (city.tax_rate - 0.12) * cfg["tax_sensitivity"]
     wealth_term = 0.15 * np.tanh((c.wealth - 500) / 1500)
     afford = income * (1 - city.tax_rate) - cost_of_living
     afford_term = 0.08 * np.tanh(afford / 60)
     cmd_term = 0.03 * f["protest"] + 0.04 * f["volunteer"] + 0.02 * f["shop"] - 0.01 * f["work"]
     unrest = np.array([w["unrest"] for w in city.wards], np.float32)[c.ward]
-    target = np.clip(0.55 + 0.4 * service_term + tax_term + wealth_term + afford_term + cmd_term
-                     - 0.15 * unrest + ctx.mood_offset, 0, 1)
+    target = np.clip(0.55 + cfg["service_weight"] * service_term + tax_term + wealth_term + afford_term + cmd_term
+                     - 0.15 * unrest + c.temper + ctx.mood_offset, 0, 1)
     c.mood = np.where(a, c.mood + (target - c.mood) * cfg["mood_drift"], c.mood).astype(np.float32)
 
     # ---------------------------------------------------------------- approval of the mayor
-    nudge = 0.05 * f["support"] - 0.05 * f["oppose"] - 0.03 * (f["protest"] | f["strike"])
+    nudge = (0.05 * f["support"] - 0.05 * f["oppose"] - 0.03 * (f["protest"] | f["strike"])
+             - cfg["approval_fatigue"])
     c.loyalty = np.where(a, np.clip(c.loyalty + (c.mood - c.loyalty) * cfg["loyalty_drift"] + nudge, 0, 1),
                          c.loyalty).astype(np.float32)
 
@@ -116,7 +117,7 @@ def simulate(city, ctx):
             c.loyalty[m] = np.clip(c.loyalty[m] - cfg["protest_contagion"] * (2 if riot else 1), 0, 1)
             city.economy = max(0.4, city.economy - 0.01 * (2 if riot else 1))
             if riot:
-                effects.apply(city, {"wealth_pc.business": -40, "mood": -0.04}, wi)
+                effects.apply(city, {"wealth_pc.business": -40, "mood": -0.04, "loyalty.ward": -0.05}, wi)
                 city.quality["safety"] = max(0, city.quality["safety"] - 0.04)
                 report["notes"].append(f"Riot in {w['name']}! Shop windows smashed.")
             else:

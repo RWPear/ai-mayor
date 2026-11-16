@@ -116,14 +116,19 @@ def tick(city, ctx):
                                       0, 1.5))
         a["days_left"] -= 1
         wname = city.wards[a["ward"]]["name"] if a["ward"] is not None else ""
+        scope = "loyalty.ward" if a["ward"] is not None else "loyalty"
         if a["progress"] >= 1.0:
             out = ev.get("on_help", {})
             effects.apply(city, out, a["ward"])
+            effects.apply(city, {scope: city.cfg["helped_bonus"]}, a["ward"])
             a["outcome"] = (out.get("text") or "The city pulled together.").format(ward=wname)
             a["result"] = "helped"
         elif a["days_left"] <= 0:
             out = ev.get("on_timeout", {})
             effects.apply(city, out, a["ward"])
+            if not a.get("option"):  # nobody fixed it and the mayor never responded
+                effects.apply(city, {scope: -city.cfg["timeout_penalty"] * (2 if a["ward"] is not None else 1)},
+                              a["ward"])
             a["outcome"] = (out.get("text") or "It passed.").format(ward=wname)
             a["result"] = "timed_out"
         else:

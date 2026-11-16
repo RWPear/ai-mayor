@@ -6,7 +6,7 @@ import json
 
 import numpy as np
 
-from .roles import FACTIONS, JOBS, JOB_NAMES, identity, title_for
+from .roles import FACTIONS, JOBS, JOB_NAMES, _h, identity, title_for
 
 COUNTERS = ["work", "protest", "shop", "volunteer", "donate", "support", "oppose", "commands"]
 ACTIVE, LEFT = 0, 1
@@ -20,6 +20,7 @@ class Citizens:
         self.job, self.faction, self.ward = z(np.int16), z(np.int8), z(np.int32)
         self.wealth, self.mood, self.loyalty, self.activism = z(np.float32), z(np.float32), z(np.float32), z(np.float32)
         self.low_days, self.status = z(np.int16), z(np.int8)
+        self.temper = z(np.float32)   # personal outlook: some people are just grumpier (stable per handle)
         self.joined, self.last_cmd = z(np.int32), z(np.int32)
         self.counts = {k: z(np.int32) for k in COUNTERS}
         self.today = {}          # per-day command flags, rebuilt each day
@@ -72,6 +73,8 @@ class Citizens:
         self.loyalty = cat([self.loyalty, np.full(n, 0.55, np.float32)])
         self.activism = cat([self.activism, np.zeros(n, np.float32)])
         self.low_days = cat([self.low_days, np.zeros(n, np.int16)])
+        self.temper = cat([self.temper, np.array([(_h(h, "temper") % 1000) / 1000 * 0.3 - 0.15 for h in new],
+                                                 np.float32)])
         self.status = cat([self.status, np.zeros(n, np.int8)])
         self.joined = cat([self.joined, np.full(n, day, np.int32)])
         self.last_cmd = cat([self.last_cmd, np.full(n, -1, np.int32)])
@@ -101,7 +104,7 @@ class Citizens:
     # ------------------------------------------------------------------ save / load
     def save(self, path):
         arrays = {k: getattr(self, k) for k in ("job", "faction", "ward", "wealth", "mood", "loyalty", "activism",
-                                                "low_days", "status", "joined", "last_cmd")}
+                                                "low_days", "status", "joined", "last_cmd", "temper")}
         arrays.update({f"count_{k}": v for k, v in self.counts.items()})
         np.savez_compressed(path / "citizens.npz", **arrays)
         (path / "citizens.json").write_text(json.dumps({"handles": self.handles, "names": self.names,
@@ -119,4 +122,6 @@ class Citizens:
                   "joined", "last_cmd"):
             setattr(c, k, data[k])
         c.counts = {k: data[f"count_{k}"] for k in COUNTERS}
+        c.temper = data["temper"] if "temper" in data else np.array(
+            [(_h(h, "temper") % 1000) / 1000 * 0.3 - 0.15 for h in c.handles], np.float32)
         return c
