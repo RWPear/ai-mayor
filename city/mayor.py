@@ -72,6 +72,9 @@ def brief(city):
         "season_day": (city.day - 1) % city.cfg["season_days"] + 1, "season_days": city.cfg["season_days"],
         "population": city.population(), "loyalty": round(city.approval(), 3),   # what the Reckoning is decided on
         "treasury": round(city.treasury), "treasury_status": money,
+        # what the king's choices did lately, so he can see consequences (e.g. high taxes drive people away)
+        "last_3_days": [{"day": h["day"], "loyalty": round(h["approval"], 2), "tax": h["tax_rate"],
+                         "joined": h.get("joined", 0), "left": h.get("left", 0)} for h in city.history[-3:]],
         "tax_rate": round(city.tax_rate, 3), "spend_ratio": city.spend_ratio,
         "economy": round(city.economy, 3), "budget": {s: round(v, 2) for s, v in city.budget.items()},
         "services": {s: round(v, 2) for s, v in city.quality.items()},
@@ -245,6 +248,30 @@ DECISION_SCHEMA = {
 }
 
 
+def overused_phrases(entries, top=8):
+    """2-3 word phrases that showed up in at least 3 recent journal entries ('i daresay', 'twice as')."""
+    import re
+    from collections import Counter
+    stop = {"the", "a", "an", "and", "of", "to", "in", "is", "it", "my", "i", "that", "for", "be", "as", "on", "with",
+            "but", "this", "they", "their", "have", "has", "will", "not", "are", "was", "me", "at", "by", "so", "if"}
+    seen = Counter()
+    for e in entries:
+        words = re.findall(r"[a-z']+", e.lower())
+        grams = set()
+        for n in (2, 3):
+            for i in range(len(words) - n + 1):
+                g = words[i:i + n]
+                if (g[0] == "i" or g[0] not in stop) and sum(w not in stop for w in g) >= 1:
+                    grams.add(" ".join(g))
+        seen.update(grams)
+    worn = [g for g, k in seen.most_common() if k >= 3 and not g.startswith("@")]
+    out = []
+    for g in worn:   # keep the longest version of overlapping phrases
+        if not any(g in o for o in out):
+            out = [o for o in out if o not in g] + [g]
+    return out[:top]
+
+
 class LLMMayor:
     name = "llm"
 
@@ -323,10 +350,14 @@ Watch "treasury_status": a king in debt can't pay his guards."""
             "are real people: if you mention anyone, use only the subjects listed below, by their @handle. Never "
             "invent names, people, groups or places. No headings.")
         user = "What happened today:\n" + "\n".join(f"- {s}" for s in day_summary)
-        prev = [j["diary"] for j in city.mayor.get("journal", [])[-2:]]
+        journal = [j["diary"] for j in city.mayor.get("journal", [])]
+        prev = journal[-2:]
         if prev:
             user += ("\n\nYour last entries (don't repeat their phrases, structure or endings - "
                      "every entry should sound fresh):\n" + "\n".join(f"- {p[:400]}" for p in prev))
+        worn = overused_phrases(journal[-6:])
+        if worn:
+            user += "\n\nPhrases you've worn out - do not use them again: " + "; ".join(f'"{w}"' for w in worn)
         if people:
             user += "\n\nSubjects you might mention (real people):\n" + "\n".join(f"- {p}" for p in people)
         try:

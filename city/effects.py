@@ -157,7 +157,10 @@ def apply(city, effects, ward=None, ctx=None, daily=False):
             m = _members(city, target, ward)
             c.wealth[m] += float(val)
         elif head == "depose" and ward is not None and val:
-            city.wards[ward]["councilor"] = None   # the hold's lord loses the title
+            w = city.wards[ward]
+            if w.get("councilor") is not None:     # the hold's lord loses the title, and can't get it back soon
+                w.setdefault("barred", {})[str(w["councilor"])] = city.day + 30
+            w["councilor"] = None
         elif head == "unrest" and ward is not None:
             w = city.wards[ward]
             w["unrest"] = float(np.clip(w["unrest"] + float(val), 0, 1))

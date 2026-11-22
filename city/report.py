@@ -137,14 +137,14 @@ def markdown(city, r):
            f"Economy {s['economy']:.2f} · Tension {s['tension']:.2f}", "",
            "**Services:** " + ", ".join(f"{SERVICE_LABEL[k]} {v:.2f}" for k, v in s["services"].items()),
            "**Factions:** " + ", ".join(f"{FACTION_LABEL[k]} {v:.2f}" for k, v in s["factions"].items() if v is not None),
-           "", "## The people", "Comment tallies: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
+           "", "## The people", "Today's comments: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
     out += [f"- {n}" for n in r["sim"]["notes"]]
     if r["events_started"] or r["events_ended"] or r["events_active"]:
         out.append("\n## Events")
         out += [f"- NEW: {e['title']}" for e in r["events_started"]]
         out += [f"- {_ended_label(e)}: {e['outcome']}" for e in r["events_ended"]]
         out += [f"- ongoing: {e['title']} ({e['days_left']} days left, " +
-                (("vote so far " + ", ".join(f"{w} {n:.0f}" for w, n in e["tally"].items())) if e.get("tally")
+                (("vote so far: " + ", ".join(f"{w} {n:.0f}" for w, n in e["tally"].items())) if e.get("tally")
                  else f"{e['progress']:.0%} helped") + ")" for e in r["events_active"]]
     if r.get("election"):
         e = r["election"]

@@ -229,6 +229,11 @@ def _close(city, a, text, result):
     city.event_log.append(a)
 
 
+def _score(tally):
+    """'WALLS 33 to GRANARY 18' - the whole vote, every day it was open."""
+    return " to ".join(f"{w} {n:.0f}" for w, n in sorted(tally.items(), key=lambda kv: -kv[1]))
+
+
 def _resolve_vote(city, ev, a, ctx):
     """A decree vote closes: the crowd's pick wins unless the king backed the other side."""
     cfg, c = city.cfg, city.citizens
@@ -242,14 +247,16 @@ def _resolve_vote(city, ev, a, ctx):
     text = fmt(out.get("text") or f"{winner} it is.", a)
     if side and crowd and side == crowd:
         effects.apply(city, {scope: cfg["heed_bonus"]}, a["ward"])
-        text += " The king heeded his people."
+        text += f" The king heeded his people ({_score(tally)})."
+    elif not side and crowd:
+        text += f" The people decided ({_score(tally)})."
     elif side and crowd:
         effects.apply(city, {scope: -cfg["overrule_penalty"]}, a["ward"])
         losers = [c.index[u] for u, w in ctx.actions.items() if w == crowd and u in c.index]
         if losers:
             idx = np.array(losers, np.int64)
             c.loyalty[idx] = np.clip(c.loyalty[idx] - cfg["overrule_penalty"], 0, 1)
-        text += f" The people voted {crowd}. The king overruled them."
+        text += f" The people voted {crowd} ({_score(tally)}). The king overruled them."
     a["winner"], a["crowd"] = winner, crowd
     _close(city, a, text, winner)
     return out.get("next")

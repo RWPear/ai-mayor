@@ -150,7 +150,8 @@ def run_day(city, mayor, followers, comments, pack=None):
             city.mayor["recalled_day"] = city.day
             city.mayor["term"] = city.mayor.get("term", 1) + 1
             c.loyalty[a] = 0.55  # fresh start for whoever comes next
-        sim_report["notes"].append("THE RECKONING: " + ("the king has been overthrown!" if election["recalled"]
+        sim_report["notes"].append("THE RECKONING: " + ("the king has been overthrown! Whoever takes the throne "
+                                                         "starts fresh (loyalty resets to 55%)." if election["recalled"]
                                                          else "the king keeps his crown."))
 
     # 7. tomorrow's post: things you scheduled, then the season plan, then (maybe) the storyteller
@@ -190,7 +191,7 @@ def run_day(city, mayor, followers, comments, pack=None):
     city.mayor["journal"] = city.mayor["journal"][-30:]
     city.history.append({"day": city.day, **{k: stats[k] for k in ("population", "approval", "treasury",
                                                                      "tax_rate", "tension")},
-                         "events": len(city.events), "joined": joined})
+                         "events": len(city.events), "joined": joined, "left": sim_report.get("left", 0)})
     city.history = city.history[-400:]
     city.pack = next_pack(city, plan_pack)
 

@@ -172,7 +172,8 @@ def simulate(city, ctx):
     # the king names a lord for each hold every week: its most active, most loyal subject
     if ("court" in city.milestones or "council" in city.milestones) and city.day % 7 == 1:
         for wi, w in enumerate(city.wards):
-            m = np.where(a & (c.ward == wi))[0]
+            barred = {int(i) for i, until in (w.get("barred") or {}).items() if until > city.day}
+            m = np.array([i for i in np.where(a & (c.ward == wi))[0] if int(i) not in barred], np.int64)
             if len(m):
                 score = c.counts["commands"][m] * 0.5 + c.loyalty[m] * 3 + c.counts["volunteer"][m]
                 best = int(m[np.argmax(score)])

@@ -95,7 +95,7 @@ class FakeAudience:
                     eff = self.rng.choices([e for e, _ in options], [w for _, w in options])[0]
                     ws = words_by_effect[eff]
                     if eff == "event.choice":   # each decree has a favourite, so votes aren't a coin flip
-                        bias = [1 + (int(hashlib.md5(f"{day}{w}".encode()).hexdigest(), 16) % 100) / 40 for w in ws]
+                        bias = [1 + (int(hashlib.md5(f"{pack.get('event')}{w}".encode()).hexdigest(), 16) % 100) / 40 for w in ws]
                         word = self.rng.choices(ws, bias)[0]
                     else:
                         word = self.rng.choice(ws)

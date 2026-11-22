@@ -202,3 +202,33 @@ def test_milestone_silent_when_story_already_introduced_it():
     city2 = _city_with(10)
     r2 = run_day(city2, RuleMayor(), [f"x{i}" for i in range(320)], [])
     assert any("Rival Crown" in n for n in r2["sim"]["notes"])      # ...but announced when it didn't
+
+
+def test_deposed_lord_is_not_named_again():
+    from city import effects
+    city = _city_with(30)
+    city.milestones.append("court")
+    city.day = 7
+    run_day(city, RuleMayor(), [], [])                   # day 8? lords are named on days 1, 8, 15...
+    while city.day % 7 != 0:
+        run_day(city, RuleMayor(), [], [])
+    run_day(city, RuleMayor(), [], [])                   # a naming day
+    lord = city.wards[0]["councilor"]
+    assert lord is not None
+    effects.apply(city, {"depose.hold": 1}, 0)
+    for _ in range(7):
+        run_day(city, RuleMayor(), [], [])
+    assert city.wards[0]["councilor"] not in (None, lord)
+
+
+def test_overruled_vote_shows_the_score():
+    from city import storyteller
+    from city.packs import from_event
+    city = _city_with()
+    storyteller.start(city, "first_decree")
+    city.pack = from_event({**storyteller.catalog()["first_decree"], "id": "first_decree"})
+    votes = [{"username": f"u{i}", "text": "GRANARY" if i < 40 else "WALLS", "timestamp": i} for i in range(50)]
+    run_day(city, _Fixed("back_walls"), [], votes)
+    run_day(city, _Fixed("back_walls"), [], votes)
+    done = next(e for e in city.event_log if e["id"] == "first_decree")
+    assert "GRANARY 80 to WALLS 20" in done["outcome"]
