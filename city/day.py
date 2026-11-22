@@ -30,16 +30,19 @@ def election_pack():
 
 
 def next_pack(city, plan_pack=None):
-    if plan_pack:
-        return plan_pack
+    """Tomorrow's words. The plan or the Reckoning can set them; otherwise they come from what's
+    happening (up to two events at once). The warlord's attacks always get words."""
     sd = (city.day) % city.cfg["season_days"] + 1          # tomorrow's season day
-    if sd == city.cfg["season_days"]:
-        return election_pack()
-    if city.events:
-        newest = max(city.events, key=lambda e: e["started"])
-        ev = storyteller.catalog().get(newest["id"])
-        if ev and (ev.get("commands") or ev.get("choices")):
-            return packs.from_event({**ev, "id": newest["id"]})
+    cat = storyteller.catalog()
+    evs = [a for a in city.events if (cat.get(a["id"]) or {}).get("commands") or (cat.get(a["id"]) or {}).get("choices")]
+    evs.sort(key=lambda a: (a.get("source") != "warlord", -a["started"]))
+    base = plan_pack or (election_pack() if sd == city.cfg["season_days"] else None)
+    if base is not None:
+        war = [{**cat[a["id"]], "id": a["id"]} for a in evs if a.get("source") == "warlord"
+               and a["id"] != base.get("event")]
+        return packs.merge(base, war[:1]) if war else base
+    if evs:
+        return packs.from_events([{**cat[a["id"]], "id": a["id"]} for a in evs[:2]])
     return default_pack()
 
 
@@ -91,7 +94,9 @@ def pack_for_today(city):
     return city.pack or default_pack()
 
 
-def run_day(city, mayor, followers, comments, pack=None):
+def run_day(city, mayor, followers, comments, pack=None, world=None):
+    """world: the living world (city/living/world.py), if this kingdom has one - then comments in people's
+    own words get interpreted, and the post comes with a chronicle of the last 24 hours."""
     storyteller.catalog(reload=True)  # pick up edits to content/events.yaml
     pack = pack or pack_for_today(city)
     city.day += 1
@@ -102,8 +107,8 @@ def run_day(city, mayor, followers, comments, pack=None):
     c = city.citizens
 
     # 1-2. people
-    jobs = {}
-    actions, status_users, joins = packs.parse(comments, pack, jobs)
+    jobs, free = {}, ({} if world else None)
+    actions, status_users, joins = packs.parse(comments, pack, jobs, free)
     before = city.population()
     c.add_many(list(followers), city.day, city.ward_for, revive=False)
     c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
@@ -115,8 +120,21 @@ def run_day(city, mayor, followers, comments, pack=None):
     ctx = DayContext(city)
     ctx.actions = actions
 
-    # 3. commands
+    # 3. commands (and, in the living world, people's own words)
     tallies = packs.apply(city, ctx, actions, pack)
+    if world is not None:
+        from .living import intents
+        results = intents.interpret(city, free, world.crowd_llm, pack)
+        tallies.update(intents.apply(city, ctx, results, pack))
+        for r in results:
+            if r["outcome"] and r["drama"] >= 2:
+                i = c.index[r["user"]]
+                world.moment("@" + r["user"], r["outcome"], r["drama"], public=True,
+                             hold=city.wards[int(c.ward[i])]["name"], handles=[r["user"]])
+        # what the king can "read in the comments" tomorrow: a few real lines, with handles
+        loud = [f"@{u}: {t[:120]}" for u, t in list(free.items())[:40]]
+        city.rng.shuffle(loud)
+        city.living["loud_comments"] = loud[:8]
     for u in status_users:
         i = c.index.get(u)
         if i is not None:
@@ -184,7 +202,9 @@ def run_day(city, mayor, followers, comments, pack=None):
              "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
              "services": {k: round(v, 3) for k, v in city.quality.items()}, "factions": city.faction_moods(),
              "wards": len(city.wards)}
+    chron = world.chronicle() if world is not None else None
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
+               + ([m["text"] for m in chron["top"]] if chron else [])
                + sim_report["notes"] + [f"Loyalty to the king is {stats['approval']:.0%}."])
     diary = mayor.diary(city, summary, people)
     city.mayor.setdefault("journal", []).append({"day": city.day, "diary": diary, "approval": stats["approval"]})
@@ -202,6 +222,8 @@ def run_day(city, mayor, followers, comments, pack=None):
               "events_active": list(city.events), "decision_lines": lines, "speech": speech,
               "decided_by": decision.get("_by", mayor.name), "thought": decision.get("thought", ""),
               "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,
+              "chronicle": chron,
+              "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)) if world else [],
               "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}
                                  for i in dict.fromkeys(ctx.status_requests)]}
     return result

@@ -1,0 +1,10 @@
+# The antagonist. He lives in a war camp in the north and decides for himself when and where to strike.
+name: "Skarn the Red"
+title: "warlord"
+camp: "the Frostfang camp"
+personality: >
+  Huge, loud, and much smarter than he lets on. Respects strength, despises soft southern kings,
+  and keeps score of every insult. Loves a good feast almost as much as a good fight.
+ambition: "Burn Emberfall's walls, sit on King Aldric's throne, and make the king pour his wine."
+flaw: "Impatience: he hates waiting, and he takes the bait when he's taunted."
+voice: "blunt and mocking, like a war chant - short sentences, big threats, the occasional terrible joke"

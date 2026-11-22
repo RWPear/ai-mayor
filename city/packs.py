@@ -34,7 +34,7 @@ def load(path):
     cmds = {str(k).upper().strip(): (v if isinstance(v, str) else v.get("effect")) for k, v in
             (p.get("commands") or {}).items()}
     for word, eff in cmds.items():
-        if eff not in COMMAND_EFFECTS:
+        if eff.partition(":")[0] not in COMMAND_EFFECTS:
             raise ValueError(f"pack {path}: {word} uses unknown effect '{eff}'. Known: {sorted(COMMAND_EFFECTS)}")
     return {"post": p.get("post", Path(path).stem), "window_hours": p.get("window_hours", 24),
             "event": p.get("event"), "commands": cmds, "caption": p.get("caption", "")}
@@ -52,10 +52,39 @@ def from_event(event, extra=None):
             "caption": ""}
 
 
-def parse(comments, pack, jobs=None):
+def _event_words(ev, tag):
+    if ev.get("choices"):
+        return {w.upper(): f"event.choice{tag}" for w in ev["choices"]}
+    return {w.upper(): f"event.{v}{tag}" for w, v in (ev.get("commands") or {}).items()}
+
+
+def from_events(events):
+    """One post about two things at once (say, a decree vote AND a raid): each word knows its event."""
+    if len(events) == 1:
+        return from_event(events[0])
+    cmds = {}
+    for ev in events[:2]:
+        for w, eff in _event_words(ev, f":{ev['id']}").items():
+            cmds.setdefault(w, eff)
+    return {"post": "event-" + "+".join(e["id"] for e in events[:2]), "window_hours": 24, "event": events[0]["id"],
+            "commands": cmds, "caption": ""}
+
+
+def merge(pack, events):
+    """Adds events' words to an existing pack (e.g. the barbarians attack on Reckoning day)."""
+    out = dict(pack, commands=dict(pack["commands"]))
+    for ev in events:
+        for w, eff in _event_words(ev, f":{ev['id']}").items():
+            out["commands"].setdefault(w, eff)
+    return out
+
+
+def parse(comments, pack, jobs=None, free=None):
     """comments: [{username, text, timestamp}] -> ({username: word}, {status users}, {join users}).
     Latest valid action per user wins. Unknown words are ignored.
-    If `jobs` is a dict, BECOME <JOB> requests are written into it ({username: job})."""
+    If `jobs` is a dict, BECOME <JOB> requests are written into it ({username: job}).
+    If `free` is a dict, comments in people's own words ("I sneak into the kitchens...") go into it
+    ({username: text}) - the living world gives those characters a mind for the day."""
     words = dict(pack["commands"])
     actions, status, joins = {}, set(), set()
     for cm in sorted(comments, key=lambda c: c.get("timestamp", 0)):
@@ -72,11 +101,16 @@ def parse(comments, pack, jobs=None):
             if jobs is not None:
                 jobs[user] = job_from_word(m.group(1))
             joins.add(user)
-        for w in words:
-            if f" {w} " in text:
-                actions[user] = w
-                joins.add(user)  # any command moves you in
-                break
+        hit = next((w for w in words if f" {w} " in text), None)
+        if hit:
+            actions[user] = hit
+            joins.add(user)  # any command moves you in
+            if free is not None:
+                free.pop(user, None)
+        elif free is not None and len(text.split()) >= 3 and " STATUS " not in text and not m:
+            free[user] = str(cm.get("text", ""))[:300]
+            actions.pop(user, None)
+            joins.add(user)
     return actions, status, joins
 
 
@@ -91,9 +125,9 @@ def apply(city, ctx, actions, pack):
     tallies = {}
     for word, idx in by_word.items():
         idx = np.array(idx, dtype=np.int64)
-        eff = pack["commands"][word]
+        eff, _, target = pack["commands"][word].partition(":")   # "event.help:warlord_raid" = help that event
         ctx.word = word
-        COMMAND_EFFECTS[eff](city, idx, ctx, pack.get("event"))
+        COMMAND_EFFECTS[eff](city, idx, ctx, target or pack.get("event"))
         c.counts["commands"][idx] += 1
         c.last_cmd[idx] = city.day
         tallies[word] = len(idx)

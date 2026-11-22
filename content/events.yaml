@@ -463,3 +463,42 @@
   options:
     - {id: slay, label: "The crown will slay the beast", side: SLAY, cost_pc: 0, text: "The king swears the dragon dies."}
     - {id: pay, label: "Pay the dragon", side: PAY, cost_pc: 0, text: "The king would rather pay than burn."}
+
+# =========================================================================== the living war (started by the warlord's own decisions)
+# These have no `next`: in the living world the warlord decides what happens after.
+- id: warlord_raid
+  title: "{warlord}'s raiders are attacking {hold}!"
+  scope: hold
+  planned_only: true
+  days: 2
+  champions: army
+  on_start: {mood.hold: -0.08, wealth_pc.hold: -30}
+  while: {mood.hold: -0.03}
+  commands: {FIGHT: help, FORTIFY: help, FLEE: hinder}
+  help_needed: 0.45
+  on_help: {text: "{hold} held! {resident} was first over the barricade. {warlord}'s raiders ran for the hills.",
+            loyalty.hold: 0.06, mood.army: 0.06}
+  on_timeout: {text: "{warlord}'s raiders burned the outskirts of {hold} and rode north with the grain.",
+               mood.hold: -0.12, service.food: -0.06, loyalty.hold: -0.06}
+  options:
+    - {id: royal_guard, label: "Send the royal guard", cost_pc: 3, effects: {progress: 0.35, loyalty.hold: 0.03}, text: "The king sent the royal guard to {hold}."}
+    - {id: abandon, label: "Pull back and protect the capital", cost_pc: 0, effects: {loyalty.hold: -0.1}, text: "The king pulled his soldiers back to the capital. {hold} is on its own."}
+
+- id: warlord_horde
+  title: "{warlord} AND THE WHOLE HORDE ARE AT THE GATES"
+  scope: city
+  planned_only: true
+  days: 3
+  champions: army
+  help_needed: 0.55
+  on_start: {mood: -0.06, economy: -0.04}
+  while: {mood: -0.03, economy: -0.03}
+  commands: {FIGHT: help, FORTIFY: help, FLEE: hinder, SURRENDER: hinder}
+  on_help: {text: "VICTORY! {warlord}'s horde broke against Emberfall's walls. Songs will be sung about this day.",
+            loyalty: 0.12, mood: 0.1, service.festivals: 0.08, mood.army: 0.08}
+  on_timeout: {text: "{warlord}'s horde sacked the outer holds and rode off with the harvest. Emberfall survives, barely.",
+               loyalty: -0.12, mood: -0.08, treasury_pc: -8, service.food: -0.1}
+  options:
+    - {id: mercenaries, label: "Hire mercenaries", cost_pc: 6, effects: {progress: 0.3}, text: "The king emptied the treasury for sellswords."}
+    - {id: lead_charge, label: "The king leads the charge himself", cost_pc: 0, effects: {progress: 0.15, loyalty.army: 0.05}, text: "The king put on his armor and rode out at the head of the army."}
+    - {id: tribute, label: "Pay the horde to leave", cost_pc: 10, ends: true, effects: {loyalty.army: -0.12, loyalty: -0.06}, text: "The king paid {warlord} to go away. The army will never forgive him."}

@@ -11,6 +11,29 @@ import random
 
 from ..roles import JOB_NAMES
 
+FREE_TEXT = [
+    "I sneak into the castle kitchens to steal bread for my kids",
+    "I sharpen my sword and stand guard on the walls all night",
+    "I open my tavern and give the soldiers free ale",
+    "I write a rude song about the king and sing it in the square",
+    "I gather the farmers and march to the castle to demand lower taxes",
+    "I offer to teach the king how to actually ride a horse",
+    "I go into the forest to hunt for the hungry families in my hold",
+    "I forge arrowheads all day for the army",
+    "I try to sell fake dragon eggs at the market",
+    "I volunteer to scout the northern pass",
+    "I kneel before the king and swear my loyalty",
+    "I hide my gold under the floorboards before the tax collector comes",
+    "I start a betting pool on whether the king survives the Reckoning",
+    "I bake a cake shaped like the king's statue and sell slices",
+    "I spread a rumor that the warlord is actually afraid of geese",
+    "I fix the broken bridge in my hold with my neighbors",
+    "I challenge the strongest guard to an arm wrestling match",
+    "I paint WALLS NOT STATUES on the castle gate at night",
+    "I train the village kids to throw rocks at barbarians",
+    "I ask the king for a job as his royal food taster",
+]
+
 ARCHETYPES = {
     # effect -> weight. Only effects the current pack offers are used.
     "loyal":    {"support": 4, "work": 3, "volunteer": 3, "train": 3, "event.help": 5, "event.choice": 5,
@@ -68,7 +91,8 @@ class FakeAudience:
         eng = float(self.s.get("engagement", 0.12))
         words_by_effect = {}
         for w, eff in pack["commands"].items():
-            words_by_effect.setdefault(eff, []).append(w)
+            words_by_effect.setdefault(eff.partition(":")[0], []).append(w)
+        free_share = float(self.s.get("free_text", 0.12)) if getattr(city, "living", None) else 0.0
         forced = {}
         for o in self.s.get("overrides") or []:
             lo, hi = o.get("days", [0, 0])
@@ -82,6 +106,9 @@ class FakeAudience:
                 continue
             ts += 1
             word = None
+            if free_share and self.rng.random() < free_share:   # living world: some people write their own move
+                out.append({"username": h, "text": self.rng.choice(FREE_TEXT), "timestamp": ts})
+                continue
             if forced and self.rng.random() < sum(forced.values()):
                 word = self.rng.choices(list(forced), list(forced.values()))[0]
             else:

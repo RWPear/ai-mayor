@@ -20,6 +20,7 @@ EVENTS BY HAND (test or live state):
     ./kingdom event cancel   --state runs/latest/state barbarian_scouts
 """
 import argparse
+import json
 import logging
 import time
 from pathlib import Path
@@ -47,6 +48,7 @@ def cmd_test(args):
         storyteller.schedule(city, e["event"], e["day"], e.get("hold", e.get("ward")), source="scenario")
     audience = FakeAudience(scen, seed=args.seed)
     mayor = make(args.mayor)
+    world = make_world(city, args.mayor) if (args.living or scen.get("living")) else None
     out = Path(args.out or f"runs/{Path(args.scenario).stem}-{int(time.time())}")
     forced = {int(d): load_pack(p) for d, p in (scen.get("packs") or {}).items()}
     print(f"{'day':>4} {'pop':>7} {'joined':>6} {'loyal':>6} {'gold':>12} {'tax':>5} {'tension':>7}  happenings")
@@ -55,10 +57,14 @@ def cmd_test(args):
         d = city.day + 1
         pack = forced.get(d) or pack_for_today(city)
         followers = audience.followers_on(d)
+        if world:
+            world.live_until_post()          # a full day of the king and the warlord living their lives
         comments = audience.comments_on(d, pack, city)
-        r = run_day(city, mayor, followers, comments, pack)
+        r = world.post(mayor, followers, comments, pack) if world else run_day(city, mayor, followers, comments, pack)
         s = r["stats"]
         first = [report.headline(r)] if r.get("election") else []
+        if world and r.get("chronicle"):
+            first += [m["text"] for m in r["chronicle"]["top"] if m["drama"] >= 2][:2]
         what = "; ".join((first + [f"NEW {e['title']}" for e in r["events_started"]] +
                           [f"END {e['outcome'][:60]}" for e in r["events_ended"]] + r["sim"]["notes"])[:3])
         print(f"{r['day']:>4} {s['population']:>7} {r['joined']:>6} {s['approval']:>6.0%} {s['treasury']:>12,.0f} "
@@ -78,6 +84,65 @@ def cmd_test(args):
     print(f"final loyalty {final['approval']:.0%}, treasury {final['treasury']:,.0f} gold, "
           f"events run: {len(city.event_log)}, projects: {[p['name'] for p in city.projects]}")
     print(f"saved to {out}  (also {latest})  try: ./kingdom event list --state {latest}/state")
+    if world:
+        camp = city.living["warcamp"]
+        print(f"war camp: {camp['warriors']} warriors, {camp['food']:.0f} food, morale {camp['morale']:.2f}, "
+              f"raids won {camp['raids_won']} / lost {camp['raids_lost']}")
+        print("tools unlocked: king " + ", ".join(city.living["unlocked"]["king"]) +
+              " | warlord " + ", ".join(city.living["unlocked"]["warlord"]))
+        print("actions: " + ", ".join(f"{k} {v}" for k, v in sorted(world.stats.items()) if not k.startswith("last_")))
+        for k in ("last_error", "last_fallback"):
+            if world.stats.get(k):
+                print(f"{k.replace('_', ' ')}: {world.stats[k]}")
+        inv = [e for e in city.living["custom_events"].values()]
+        if inv:
+            print(f"decrees the king invented ({len(inv)}): " + " | ".join(e["title"] for e in inv[:6]))
+
+
+def make_world(city, kind):
+    from .living.agents import LLMBrain
+    from .living.world import World
+    if kind == "llm":
+        from .llm import LLM
+        main, crowd = LLM(), LLM(crowd=True)
+        return World(city, LLMBrain(main), LLMBrain(main), crowd_llm=crowd, voice_llm=crowd)
+    return World(city)
+
+
+def cmd_live(args):
+    """The live kingdom, in real time: ticks forever, closes a post every day at 19:00."""
+    from .living import world as W
+    from .sources.instagram_export import read_followers
+    cfg = config.load()
+    state = Path(args.state)
+    city = City.load(state, cfg) if (state / "city.json").exists() else City(cfg, args.name)
+    if args.plan:
+        plan.attach(city, args.plan)
+    world = make_world(city, args.mayor)
+    mayor = make(args.mayor)
+    inbox = Path(args.inbox)
+    inbox.mkdir(parents=True, exist_ok=True)
+    print(f"{city.name} is alive. {world.now_str()}. Next post closes at {world.now_str(world.next_post_clock())}.")
+    print(f"Drop each post's comments in {inbox}/comments-dayN.json (and a follower export in {inbox}/followers).")
+    while True:
+        if world.clock + W.TICK > world.next_post_clock():
+            d = city.day + 1
+            f = inbox / f"comments-day{d}.json"
+            comments = json.loads(f.read_text()) if f.exists() else []
+            fol = inbox / "followers"
+            followers = read_followers(fol) if fol.exists() else []
+            r = world.post(mayor, followers, comments, None)
+            report.save(city, r, state / "days")
+            print(f"\n=== POST {d} closed: {report.headline(r)}  ->  next words: "
+                  f"{', '.join(r['next_pack']['commands'])}\n")
+        else:
+            seen = len(city.living["moments"])
+            world.tick()
+            for m in city.living["moments"][seen:]:
+                print(f"{m['time']}  {'' if m['public'] else '(secret) '}[{m['who']}] {m['text']}")
+        city.save(state)
+        if args.speed > 0:
+            time.sleep(W.TICK * 60 / args.speed)
 
 
 def cmd_day(args):
@@ -203,6 +268,14 @@ def main():
     t.add_argument("--seed", type=int, default=1)
     t.add_argument("--out")
     t.add_argument("--reports", action="store_true", help="write a report + episode script for every day")
+    t.add_argument("--living", action="store_true", help="run the living world between posts (king + warlord)")
+    lv = sub.add_parser("live", help="the live kingdom in real time (ticks forever)")
+    lv.add_argument("--state", required=True)
+    lv.add_argument("--name", default="Emberfall")
+    lv.add_argument("--plan", help="attach a season plan (only needed once)")
+    lv.add_argument("--inbox", default="inbox", help="where each day's comments (and follower export) are dropped")
+    lv.add_argument("--king", "--mayor", dest="mayor", default="llm", choices=["rules", "llm"])
+    lv.add_argument("--speed", type=float, default=1.0, help="1 = real time, 60 = an hour a minute, 0 = no waiting")
     d = sub.add_parser("day", help="run one real day")
     d.add_argument("--state", required=True)
     d.add_argument("--name", default="Emberfall")
@@ -228,7 +301,7 @@ def main():
     c.add_argument("--plan", default="seasons")
     args = p.parse_args()
     {"test": cmd_test, "day": cmd_day, "status": cmd_status, "plan": cmd_plan, "event": cmd_event,
-     "check": cmd_check}[args.cmd](args)
+     "check": cmd_check, "live": cmd_live}[args.cmd](args)
 
 
 if __name__ == "__main__":

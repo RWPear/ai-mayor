@@ -64,6 +64,7 @@ class City:
         self.pack = None
         self.scheduled = []       # events queued by you, the season plan, or follow-ups
         self.plan = None          # season plan settings + progress (see city/plan.py)
+        self.living = None        # the living world (clock, minds, war camp, moments) - see city/living/
         self.citizens = Citizens()
         for _ in range(cfg["first_wards"]):
             self.add_ward()
@@ -130,7 +131,7 @@ class City:
     # ------------------------------------------------------------------ save / load
     STATE_KEYS = ["name", "day", "season", "treasury", "tax_rate", "spend_ratio", "budget", "quality", "economy",
                   "wards", "events", "event_log", "projects", "milestones", "petitions", "history", "mayor", "pack",
-                  "scheduled", "plan"]
+                  "scheduled", "plan", "living"]
 
     def save(self, path):
         path = Path(path)

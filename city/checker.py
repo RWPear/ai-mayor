@@ -17,10 +17,11 @@ from .roles import FACTIONS
 
 EFFECT_HEADS = {"treasury", "treasury_pc", "economy", "service", "mood", "loyalty", "wealth_pc", "unrest", "depose"}
 TARGETS = {"", "all", "ward", "hold", *FACTIONS}
-PLACEHOLDERS = {"ward", "councilor", "resident", "hold", "lord"}
+PLACEHOLDERS = {"ward", "councilor", "resident", "hold", "lord", "warlord"}
 STAT_NAMES = {"pop", "approval", "treasury", "tax", "economy", "day", "season", "season_day", "unrest", "has",
               "happened", "result", "active", "built", "min", "max", "and", "or", "not", "None", "True", "False",
-              "helped", "timed_out", "mayor"} | {f"q_{s}" for s in SERVICES} | {f"faction_{f}" for f in FACTIONS}
+              "helped", "timed_out", "mayor"} | {f"q_{s}" for s in SERVICES} | {f"faction_{f}" for f in FACTIONS} \
+    | {f"camp_{k}" for k in ("warriors", "food", "morale", "raids_won", "raids_lost")}
 
 
 def _yaml(path, problems):
@@ -173,7 +174,7 @@ def check_all(plan_path="seasons"):
         data = _yaml(f, problems) or {}
         for word, eff in (data.get("commands") or {}).items():
             eff = eff if isinstance(eff, str) else (eff or {}).get("effect")
-            if eff not in COMMAND_EFFECTS:
+            if str(eff).partition(":")[0] not in COMMAND_EFFECTS:
                 problems.append(f"packs/{f.name}: {word} -> unknown effect '{eff}' "
                                 f"(known: {', '.join(sorted(COMMAND_EFFECTS))})")
         if data.get("event") and data["event"] not in event_ids:

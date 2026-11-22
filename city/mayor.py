@@ -51,6 +51,7 @@ def brief(city):
         e = {"event_id": a["id"], "title": a["title"], "days_left": a["days_left"],
              "options": [{"option_id": o["id"], "label": o["label"],
                           "cost": round(o.get("cost_pc", 0) * city.population()),
+                          **({"pushes_toward_success": True} if (o.get("effects") or {}).get("progress") else {}),
                           **({"backs": o["side"]} if o.get("side") else {})}
                          for o in ev.get("options", [])]}
         if ev.get("choices"):
@@ -82,6 +83,11 @@ def brief(city):
         "holds_most_unrest": [{k: w[k] for k in ("name", "pop", "mood", "unrest", "protest")} for w in wards],
         "petitions": city.petitions, "events": events,
         "just_announced": brand_new,   # too new to answer: the people get the first say
+        **({"what_you_did_today": [m["text"] for m in (city.living or {}).get("moments", [])
+                                   if m["who"] == "king" and m["day"] == city.day][-6:],
+            "what_you_heard_today": [m["text"] for m in (city.living or {}).get("moments", [])
+                                     if m["who"] != "king" and m["public"] and m["day"] == city.day][-6:]}
+           if city.living else {}),
         "projects_available": projects,
         "projects_building": building, "milestones": city.milestones,
         "recent": city.history[-5:],
@@ -202,7 +208,8 @@ class RuleMayor:
                 affordable = [o for o in e["options"] if o["cost"] <= 0]
             if not affordable:
                 continue
-            pick = min(affordable, key=lambda o: abs(o["cost"]))
+            helping = [o for o in affordable if o.get("pushes_toward_success")]
+            pick = min(helping or affordable, key=lambda o: abs(o["cost"]))
             choices.append({"event_id": e["event_id"], "option_id": pick["option_id"], "why": "rules"})
         answers = []
         for p in b["petitions"]:

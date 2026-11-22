@@ -1,0 +1,34 @@
+# LIVING SEASON 1 - story seeds, not a script.
+# In the living world the war isn't planned: Skarn the Red decides when to raid, and the king
+# invents his own decrees. These beats are just the bones every season keeps (opening, a first
+# decree, the pressure before the finale, the Reckoning). Everything else is up to the minds and the crowd.
+
+title: "The Crowning (living)"
+theme: "A vain king. A hungry warlord. You."
+storyteller: fill          # random everyday events only fill quiet stretches
+
+beats:
+  - day: 1
+    event: coronation
+    announce: "Emberfall's gates are open. Follow to be born here. Comment a word, or tell your character what to do."
+    note: "LAUNCH. Explain: follow = you live here; comment the words, or write what your character does."
+
+  - day: 5
+    event: first_decree
+    agenda: "Your first decree: the people are voting WALLS or GRANARY."
+
+  - day: 14
+    if: "has('court')"
+    event: court_treason
+
+  - day: 26
+    event: pretender
+    agenda: "A stranger claims to be the true heir."
+
+  - day: 28
+    event: royal_audience
+    announce: "The Reckoning is in 2 days."
+
+  - day: 30
+    pack: packs/reckoning.yaml
+    announce: "THE RECKONING: KNEEL or REVOLT."

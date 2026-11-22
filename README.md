@@ -24,6 +24,19 @@ Reckoning: the people KNEEL or REVOLT.
 - **STATUS** - comment STATUS and get a card unique to you: name, rank, trade, hold, deeds, battles,
   how the king sees you, and how close you are to the next rank.
 
+## The living world (new)
+
+Between posts the kingdom keeps living: **King Aldric** (protagonist) and **Skarn the Red** (the barbarian
+warlord, antagonist) act on their own every hour or so with a small set of tools that unlock over time.
+The warlord decides when to raid. The king invents his own decrees. Comments in people's own words give
+their character a turn. Each post is a 3-moment summary of the last 24 hours. Full guide: `docs/LIVING.md`.
+
+```bash
+./kingdom test --scenario scenarios/living.yaml                 # a living month in seconds (rule-based minds)
+./kingdom test --scenario scenarios/living.yaml --king llm --days 7 --reports
+./kingdom live --state data/live --plan seeds --king llm         # real time
+```
+
 ## Layout
 
 ```
@@ -41,8 +54,12 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
   mayor.py       the AI king (Ollama) and the rule-based test king
   report.py      daily report, episode script for the video, STATUS cards
   sources/       fake audience (test) and Instagram follower export reader (live)
+  llm.py         the shared Ollama client
+  living/        the living world: world.py (clock + loop), agents.py (the minds), tools.py,
+                 warcamp.py (the warlord's economy), intents.py (own-words comments), chronicle.py
 content/         events, projects, milestones, ruler persona, balance overrides (all YAML)
 seasons/         season plans: season1.yaml (written), season2.yaml (outline)
+seeds/           season plans for the living world (only the bones - the minds do the rest)
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going)
 packs/           command packs for posts
 scenarios/       test scenarios

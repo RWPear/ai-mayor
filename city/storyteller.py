@@ -40,11 +40,22 @@ def _normalise(e):
     return e
 
 
+CUSTOM = {}   # events the minds invented (decrees written by the king) - stored in the save, merged in here
+
+
 def catalog(reload=False):
     global EVENTS
     if EVENTS is None or reload:
         EVENTS = {e["id"]: _normalise(e) for e in load_yaml("events.yaml")}
+    EVENTS.update(CUSTOM)
     return EVENTS
+
+
+def register(ev):
+    """Adds an invented event to the catalog (it must already be validated)."""
+    CUSTOM[ev["id"]] = _normalise(ev)
+    catalog()[ev["id"]] = CUSTOM[ev["id"]]
+    return CUSTOM[ev["id"]]
 
 
 # ---------------------------------------------------------------------------- conditions
@@ -64,6 +75,8 @@ def stats_ns(city):
           "built": lambda pid: any(p["id"] == pid and p["status"] == "done" for p in city.projects)}
     ns.update({f"q_{s}": city.quality[s] for s in SERVICES})
     ns.update({f"faction_{f}": (fm.get(f) if fm.get(f) is not None else 0.5) for f in FACTIONS})
+    camp = (getattr(city, "living", None) or {}).get("warcamp") or {}
+    ns.update({f"camp_{k}": camp.get(k, 0) for k in ("warriors", "food", "morale", "raids_won", "raids_lost")})
     return ns
 
 
@@ -143,6 +156,8 @@ def _names(city, ward):
     pool = np.where(mask)[0]
     names["resident"] = "@" + c.handles[int(city.rng.choice(pool.tolist()))] if len(pool) else "a subject"
     names["hold"], names["lord"] = names["ward"], names["councilor"]
+    living = getattr(city, "living", None) or {}
+    names["warlord"] = (living.get("agents", {}).get("warlord") or {}).get("name", "the warlord")
     return names
 
 
@@ -153,8 +168,9 @@ def fmt(text, active):
         return str(text)
 
 
-def start(city, ev, ward=None, source="storyteller"):
-    """Starts an event now. ev is an event dict or id. ward: index or name (else picked)."""
+def start(city, ev, ward=None, source="storyteller", strength=1.0, extra=None):
+    """Starts an event now. ev is an event dict or id. ward: index or name (else picked).
+    strength scales how much help it needs (a raid with more warriors is harder to beat)."""
     if isinstance(ev, str):
         ev = catalog().get(ev)
         if not ev:
@@ -171,7 +187,9 @@ def start(city, ev, ward=None, source="storyteller"):
             prefer = [i for i, w in enumerate(city.wards) if w.get("councilor") is not None] or prefer
         ward = city.rng.choice(prefer or list(range(len(city.wards))))
     active = {"id": ev["id"], "ward": ward, "started": city.day, "source": source,
-              "days_left": ev.get("days", 3), "progress": 0.0, "option": None, "outcome": None}
+              "days_left": ev.get("days", 3), "progress": 0.0, "option": None, "outcome": None,
+              "uid": f"{ev['id']}-{city.day}-{len(city.event_log) + len(city.events)}", "strength": float(strength)}
+    active.update(extra or {})
     active["names"] = _names(city, ward)
     active["title"] = fmt(ev["title"], active)
     effects.apply(city, ev.get("on_start"), ward)
@@ -272,6 +290,8 @@ def tick(city, ctx):
         if not ev:
             city.events.remove(a)
             continue
+        if a["started"] >= city.day:   # began after today's post went up: its first post is tomorrow
+            continue
         effects.apply(city, ev.get("while"), a["ward"], ctx, daily=True)
         votes = dict(ctx.event_votes.get(a["id"], {"help": 0, "hinder": 0, "choices": {}}))
         if "*" in ctx.event_votes:  # pack without a named event: help counts for every active event
@@ -296,7 +316,7 @@ def tick(city, ctx):
             if helped:
                 idx = np.array(helped, np.int64)
                 c.counts["battles"][idx] += 1
-        need = ev.get("help_needed", 0.5)
+        need = ev.get("help_needed", 0.5) * a.get("strength", 1.0)
         # progress: share of the whole kingdom helping, minus hinderers, measured against what's needed
         a["progress"] = float(np.clip(a["progress"] + (votes["help"] - 0.7 * votes["hinder"])
                                       / (pop * need * city.cfg["event_effort"]), 0, 1.5))

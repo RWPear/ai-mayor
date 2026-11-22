@@ -74,6 +74,9 @@ def headline(day_result):
         e = r["election"]
         return (f"OVERTHROWN! {e['recall_share']:.0%} of the kingdom chose REVOLT." if e["recalled"]
                 else f"The king keeps his crown ({e['keep_share']:.0%} knelt, {e['recall_share']:.0%} revolted).")
+    biggest = [m for m in ((r.get("chronicle") or {}).get("top") or []) if m.get("drama", 0) >= 3]
+    if biggest:
+        return biggest[-1]["text"]
     for n in r["sim"]["notes"]:
         if n.startswith("MILESTONE") or n.startswith("Riot"):
             return n.replace("MILESTONE: ", "Unlocked: ")
@@ -112,6 +115,8 @@ def episode_script(city, r):
         "highlights": (r["decision_lines"] + [e["outcome"] for e in r["events_ended"]]
                        + [e["title"] for e in r["events_started"]] + r["sim"]["notes"])[:6],
         "featured": r["featured"][:3],
+        "last_24_hours": (r.get("chronicle") or {}).get("top", []),
+        "meanwhile_in_the_north": (r.get("chronicle") or {}).get("meanwhile"),
         "tallies": r["tallies"],
         "stats": {k: r["stats"][k] for k in ("population", "approval", "treasury", "tax_rate")},
         "next_pack": r["next_pack"],
@@ -137,7 +142,15 @@ def markdown(city, r):
            f"Economy {s['economy']:.2f} · Tension {s['tension']:.2f}", "",
            "**Services:** " + ", ".join(f"{SERVICE_LABEL[k]} {v:.2f}" for k, v in s["services"].items()),
            "**Factions:** " + ", ".join(f"{FACTION_LABEL[k]} {v:.2f}" for k, v in s["factions"].items() if v is not None),
-           "", "## The people", "Today's comments: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
+           ""]
+    ch = r.get("chronicle")
+    if ch and (ch["top"] or ch["meanwhile"]):
+        out.append("## The last 24 hours")
+        out += [f"- **{m['time'].split(', ')[1]}** {m['text']}" for m in ch["top"]]
+        if ch["meanwhile"]:
+            out.append(f"- *Meanwhile in the north:* {ch['meanwhile']}")
+        out.append("")
+    out += ["## The people", "Today's comments: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
     out += [f"- {n}" for n in r["sim"]["notes"]]
     if r["events_started"] or r["events_ended"] or r["events_active"]:
         out.append("\n## Events")
@@ -183,3 +196,7 @@ def save(city, r, outdir):
     (outdir / f"day{r['day']:03d}.episode.json").write_text(json.dumps(episode_script(city, r), indent=1))
     if r["status_replies"]:
         (outdir / f"day{r['day']:03d}.replies.json").write_text(json.dumps(r["status_replies"], indent=1))
+    if r.get("moments"):   # the full log of the living world, for you - the post only gets the chronicle
+        (outdir / f"day{r['day']:03d}.log.txt").write_text(
+            "\n".join(f"{m['time']}  {'' if m['public'] else '(secret) '}[{m['who']}] {m['text']}"
+                      for m in r["moments"]) + "\n")
