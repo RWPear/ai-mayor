@@ -1,10 +1,13 @@
-"""The mayor: the only part that uses a language model.
+"""The king: the only part that uses a language model. (The code still calls
+the ruler "mayor" - the engine is theme-neutral; the persona lives in
+content/ruler.yaml.)
 
-Each day the mayor reads a short brief (city numbers, faction moods, the
-loudest petitions, active events and their options, what's buildable, and its
-own recent journal) and returns one decision: taxes, budget, event responses,
-petition answers, maybe a project, a public statement. At night it writes a
-diary entry, which becomes the narration for the day's video.
+Each day the king reads a short brief (kingdom numbers, faction moods, the
+loudest petitions, events the crowd has already weighed in on and their
+options, what's buildable, and his own recent journal) and returns one
+decision: taxes, budget, event responses, petition answers, maybe a project, a
+royal proclamation. At night he writes a journal entry, which becomes the
+narration for the day's video.
 
 RuleMayor makes the same kind of decisions with simple rules - instant, free,
 and good for running hundreds of test days. LLMMayor falls back to it if the
@@ -22,41 +25,61 @@ import yaml
 from . import storyteller
 from .config import CONTENT
 from .model import SERVICE_LABEL, SERVICES
-from .roles import FACTION_LABEL, FACTIONS
+from .roles import FACTION_LABEL, FACTIONS, the
 from .sim import available_projects
 
 log = logging.getLogger("mayor")
 
 
 def persona():
-    f = CONTENT / "mayor.yaml"
-    return yaml.safe_load(f.read_text()) if f.exists() else {"name": "Mayor Vale"}
+    for name in ("ruler.yaml", "mayor.yaml"):
+        f = CONTENT / name
+        if f.exists():
+            return yaml.safe_load(f.read_text())
+    return {"name": "King Aldric", "title": "king"}
 
 
 # ---------------------------------------------------------------------------- the brief
 def brief(city):
-    events = []
+    events, brand_new = [], []
     for a in city.events:
         ev = storyteller.catalog().get(a["id"], {})
-        events.append({"event_id": a["id"], "title": a["title"], "days_left": a["days_left"],
-                       "progress": round(a["progress"], 2), "already_chose": a.get("option"),
-                       "options": [{"option_id": o["id"], "label": o["label"],
-                                    "cost": round(o.get("cost_pc", 0) * city.population())}
-                                   for o in ev.get("options", [])]})
+        if not storyteller.can_respond(city, a):
+            if not a.get("option"):
+                brand_new.append(a["title"])   # the crowd hasn't had its say yet - the king waits
+            continue
+        e = {"event_id": a["id"], "title": a["title"], "days_left": a["days_left"],
+             "options": [{"option_id": o["id"], "label": o["label"],
+                          "cost": round(o.get("cost_pc", 0) * city.population()),
+                          **({"backs": o["side"]} if o.get("side") else {})}
+                         for o in ev.get("options", [])]}
+        if ev.get("choices"):
+            e["kind"] = "decree vote"
+            e["people_voting"] = a.get("tally", {})
+        else:
+            e["progress"] = round(a["progress"], 2)
+            e["yesterday_comments"] = a.get("last_votes", {})
+        events.append(e)
     projects = [{"id": p["id"], "name": p["name"], "cost": round(p["cost_pc"] * city.population()),
                  "days": p["days"]} for p in available_projects(city)]
     building = [f'{p["name"]} ({p["days_left"]} days left)' for p in city.projects if p["status"] == "building"]
     wards = sorted(city.ward_stats(), key=lambda w: -(w["unrest"] or 0))[:5]
+    pop = max(1, city.population())
+    money = ("IN DEBT - stop building and spending until the treasury recovers" if city.treasury < 0 else
+             "low - be careful" if city.treasury < 10 * pop else "healthy")
     return {
         "day": city.day, "season": city.season,
         "season_day": (city.day - 1) % city.cfg["season_days"] + 1, "season_days": city.cfg["season_days"],
-        "population": city.population(), "approval": round(city.approval(), 3),
-        "treasury": round(city.treasury), "tax_rate": round(city.tax_rate, 3), "spend_ratio": city.spend_ratio,
+        "population": city.population(), "loyalty": round(city.approval(), 3),   # what the Reckoning is decided on
+        "treasury": round(city.treasury), "treasury_status": money,
+        "tax_rate": round(city.tax_rate, 3), "spend_ratio": city.spend_ratio,
         "economy": round(city.economy, 3), "budget": {s: round(v, 2) for s, v in city.budget.items()},
         "services": {s: round(v, 2) for s, v in city.quality.items()},
         "faction_moods": city.faction_moods(),
-        "wards_most_unrest": [{k: w[k] for k in ("name", "pop", "mood", "unrest", "protest")} for w in wards],
-        "petitions": city.petitions, "events": events, "projects_available": projects,
+        "holds_most_unrest": [{k: w[k] for k in ("name", "pop", "mood", "unrest", "protest")} for w in wards],
+        "petitions": city.petitions, "events": events,
+        "just_announced": brand_new,   # too new to answer: the people get the first say
+        "projects_available": projects,
         "projects_building": building, "milestones": city.milestones,
         "recent": city.history[-5:],
         "agenda": list((city.plan or {}).get("agenda", [])),
@@ -99,7 +122,7 @@ def apply_decision(city, d):
 
     for ch in d.get("event_choices") or []:
         a = next((e for e in city.events if e["id"] == ch.get("event_id")), None)
-        if a and not a.get("option"):
+        if a and storyteller.can_respond(city, a):
             r = storyteller.choose_option(city, a, ch.get("option_id"))
             if r:
                 lines.append(r["option_text"])
@@ -132,11 +155,11 @@ def apply_decision(city, d):
     proj = next((p for p in available_projects(city) if p["id"] == pid), None)
     if proj:
         cost = proj["cost_pc"] * city.population()
-        if city.treasury - cost > -0.5 * cost:
+        if city.treasury - cost >= 0:   # no building on credit
             city.treasury -= cost
             city.projects.append({"id": proj["id"], "name": proj["name"], "status": "building",
                                   "days_left": proj["days"], "started": city.day})
-            lines.append(f'Construction started on the {proj["name"]} (${cost:,.0f}).')
+            lines.append(f'Work began on {the(proj["name"])} ({cost:,.0f} gold).')
     speech = str(d.get("speech", "")).strip()[:400]
     return lines, speech
 
@@ -151,7 +174,7 @@ class RuleMayor:
         tax = city.tax_rate
         if city.treasury < 0:
             tax += 0.02
-        elif b["approval"] < 0.45 or fm.get("business", 0.5) < 0.4:
+        elif b["loyalty"] < 0.45 or fm.get("guilds", 0.5) < 0.4:
             tax -= 0.02
         elif city.treasury > 30 * max(1, b["population"]) * 10:
             tax -= 0.01
@@ -162,7 +185,14 @@ class RuleMayor:
         budget[favorite] += 0.05
         choices = []
         for e in b["events"]:
-            if e["already_chose"] or not e["options"]:
+            if not e["options"]:
+                continue
+            if e.get("kind") == "decree vote":   # back whatever the people are voting for
+                tally = e.get("people_voting") or {}
+                lead = max(tally, key=tally.get) if tally else None
+                pick = next((o for o in e["options"] if o.get("backs") == lead), None)
+                if pick:
+                    choices.append({"event_id": e["event_id"], "option_id": pick["option_id"], "why": "rules"})
                 continue
             affordable = [o for o in e["options"] if o["cost"] <= max(0, city.treasury) * 0.3]
             if not affordable:
@@ -178,15 +208,18 @@ class RuleMayor:
         project = ""
         if b["projects_available"] and not b["projects_building"]:
             cheap = sorted(b["projects_available"], key=lambda p: p["cost"])
-            if cheap and city.treasury > cheap[0]["cost"] * 1.5:
+            if cheap and city.treasury > cheap[0]["cost"] * 2.5:
                 project = cheap[0]["id"]
-        spend = 0.85 if city.treasury < 0 else (1.1 if city.treasury > 40 * max(1, b["population"]) else 1.0)
+        pop = max(1, b["population"])
+        spend = (0.85 if city.treasury < 0 else 0.92 if city.treasury < 15 * pop
+                 else 1.1 if city.treasury > 40 * pop else 1.0)   # save up, then spend
         return {"thought": f"Focus on {FACTION_LABEL[unhappiest]}.", "tax_rate": tax, "spend_ratio": spend,
                 "budget": budget, "event_choices": choices, "petition_answers": answers, "project": project,
-                "speech": f"We hear you, {FACTION_LABEL[unhappiest]}. More {SERVICE_LABEL[favorite].lower()} is coming."}
+                "speech": f"The crown hears you, {FACTION_LABEL[unhappiest]}. Better "
+                          f"{SERVICE_LABEL[favorite].lower()} are coming."}
 
     def diary(self, city, day_summary, people=None):
-        return (f"Day {city.day}. Approval {city.approval():.0%}. " + " ".join(day_summary[:3])).strip()
+        return (f"Day {city.day}. Loyalty {city.approval():.0%}. " + " ".join(day_summary[:3])).strip()
 
 
 # ---------------------------------------------------------------------------- language-model mayor
@@ -240,10 +273,13 @@ class LLMMayor:
     def _identity(self, city):
         p = self.p
         journal = city.mayor.get("journal", [])[-5:]
-        lines = [f"You are {p.get('name')}, the mayor of {city.name}. {p.get('personality', '')}",
+        title = p.get("title", "king")
+        lines = [f"You are {p.get('name')}, the {title} of {city.name}. {p.get('personality', '')}",
                  f"Your ambition: {p.get('ambition', '')} Your flaw: {p.get('flaw', '')}",
-                 "The citizens are real people who follow the city online. They comment to work, protest, shop "
-                 "and vote. At the end of each 30-day season they vote on whether to recall you."]
+                 f"Voice: {p.get('voice', 'theatrical and royal, with a sharp, snarky wit')}.",
+                 "Your subjects are real people who follow the kingdom online. They comment to work, trade, train, "
+                 "grumble and vote on decrees. At the end of each 30-day season comes the Reckoning: they vote to "
+                 "KNEEL (you keep the crown) or REVOLT (you are overthrown)."]
         if journal:
             lines.append("Your recent journal:")
             lines += [f"- Day {j['day']}: {j['diary'][:300]}" for j in journal]
@@ -254,18 +290,22 @@ class LLMMayor:
 
     def decide(self, city):
         b = brief(city)
-        system = self._identity(city) + """
+        system = self._identity(city) + f"""
 
-Decide today's policy. Reply with JSON only:
+Decide today's royal policy. Reply with JSON only:
 - "thought": your private reasoning in one or two sentences.
 - "tax_rate": 0.0-0.45 (it can only move 5 points a day).
 - "spend_ratio": 0.6-1.3 (spending as a share of today's tax revenue; above 1 drains the treasury).
-- "budget": shares for safety, housing, transit, culture (they get normalised).
-- "event_choices": for active events you haven't responded to, pick one option_id (or leave the event out to wait).
+- "budget": shares for {", ".join(SERVICES)} (they get normalised).
+- "event_choices": for events in the brief, pick one option_id (or leave the event out to wait). For a
+  "decree vote", an option that "backs" a side puts your crown behind it: if the people are voting the
+  other way you overrule them - you win, but they will remember. "just_announced" events are too new: the
+  people get the first say, you can't answer those yet.
 - "petition_answers": accept, reject or defer each petition, with a few words in your voice.
-- "project": an id from projects_available to start building, or "".
-- "speech": one or two sentences you say publicly today, in character.
-If the brief has an "agenda", those are pressing matters you're expected to address today."""
+- "project": an id from projects_available to start building, or "". You can't build on credit.
+- "speech": one or two sentences you proclaim publicly today, in character.
+If the brief has an "agenda", those are pressing matters you're expected to address today.
+Watch "treasury_status": a king in debt can't pay his guards."""
         try:
             d = json.loads(self._chat(system, json.dumps(b, indent=1), DECISION_SCHEMA))
             d["_by"] = "llm"
@@ -278,17 +318,17 @@ If the brief has an "agenda", those are pressing matters you're expected to addr
 
     def diary(self, city, day_summary, people=None):
         system = self._identity(city) + (
-            "\n\nIt's late. Write today's diary entry: 4-6 sentences, first person, in character, honest about how "
-            "you feel and what you'll do next. Mention specific things that happened. The residents are real people: "
-            "if you mention anyone, use only the residents listed below, by their @handle. Never invent names, "
-            "people, groups or organizations. No headings.")
+            "\n\nIt's late. Write tonight's entry in your royal journal: 4-6 sentences, first person, in character, "
+            "honest about how you feel and what you'll do next. Mention specific things that happened. Your subjects "
+            "are real people: if you mention anyone, use only the subjects listed below, by their @handle. Never "
+            "invent names, people, groups or places. No headings.")
         user = "What happened today:\n" + "\n".join(f"- {s}" for s in day_summary)
         prev = [j["diary"] for j in city.mayor.get("journal", [])[-2:]]
         if prev:
             user += ("\n\nYour last entries (don't repeat their phrases, structure or endings - "
                      "every entry should sound fresh):\n" + "\n".join(f"- {p[:400]}" for p in prev))
         if people:
-            user += "\n\nResidents you might mention (real people):\n" + "\n".join(f"- {p}" for p in people)
+            user += "\n\nSubjects you might mention (real people):\n" + "\n".join(f"- {p}" for p in people)
         try:
             return self._chat(system, user, max_tokens=400)
         except Exception as e:  # noqa: BLE001

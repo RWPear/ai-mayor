@@ -1,0 +1,6 @@
+# Season finale: the Reckoning. KNEEL keeps the king, REVOLT overthrows him.
+post: the-reckoning
+window_hours: 24
+commands:
+  KNEEL: vote.keep
+  REVOLT: vote.recall

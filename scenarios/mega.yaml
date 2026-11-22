@@ -1,5 +1,5 @@
 # Scale test: 100,000 citizens.
-city: New Harbor
+kingdom: Emberfall
 days: 10
 start_followers: 100000
 growth: {daily: 500}

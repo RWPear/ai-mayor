@@ -1,5 +1,5 @@
 """Turning a day into things people see: the daily report, the episode script
-for the video, and STATUS citizen cards (replies to comments).
+for the video, and STATUS subject cards (replies to comments, or private DMs).
 """
 import json
 
@@ -16,25 +16,55 @@ def mood_word(m):
     return "thriving 🤩"
 
 
+def loyalty_word(v):
+    if v < 0.25: return "plotting against the crown"
+    if v < 0.4: return "disloyal"
+    if v < 0.55: return "wavering"
+    if v < 0.7: return "loyal"
+    return "devoted"
+
+
 def status_card(city, i):
-    """A short reply to a STATUS comment. Fits easily in an Instagram comment reply."""
+    """A short, personal reply to a STATUS comment (fits a comment reply or a private-reply DM)."""
     c = city.citizens
     w = city.wards[int(c.ward[i])]
     job = JOB_NAMES[int(c.job[i])]
+    lord = w.get("councilor") == i
+    rank = "Lord" if lord else c.rank(i)
     title = c.title(i)
-    lines = [f"🏙️ @{c.handles[i]} - {c.names[i]}, {job}" + (f" · {title}" if title else ""),
-             f"📍 {w['name']} ({w['trait']}) · {FACTION_LABEL[FACTIONS[int(c.faction[i])]]}",
-             f"Mood: {mood_word(float(c.mood[i]))} · Savings: ${c.wealth[i]:,.0f} · "
-             f"Trusts the mayor: {c.loyalty[i]:.0%}",
-             f"Resident since day {int(c.joined[i])} · {int(c.counts['commands'][i])} actions"]
-    if w.get("councilor") == i:
-        lines.append(f"⭐ Councilor for {w['name']}")
+    honorific = {"Knight": "Sir ", "Lord": "Lord "}.get(rank, "")
+    battles = int(c.counts["battles"][i])
+    lines = [f"🏰 @{c.handles[i]} - {honorific}{c.names[i]}" + (f" {title}" if title else ""),
+             f"⚒️ {rank} · {job} of {w['name']} ({w['trait']}) · {FACTION_LABEL[FACTIONS[int(c.faction[i])]]}",
+             f"Mood: {mood_word(float(c.mood[i]))} · Purse: {c.wealth[i]:,.0f} gold · "
+             f"Toward the king: {loyalty_word(float(c.loyalty[i]))}",
+             f"Subject since day {int(c.joined[i])} · {int(c.counts['commands'][i])} deeds"
+             + (f" · {battles} battles" if battles else "")]
+    if lord:
+        lines.append(f"👑 Lord of {w['name']}, named by the king")
+    nxt = _next_rank(c, i)
+    if nxt and not lord:
+        lines.append(nxt)
     story = c.story.get(int(i))
     if story:
         lines.append("Latest: " + story[-1])
     if c.status[i] == 1:
-        lines.insert(1, "(moved away - comment JOIN to come back)")
+        lines.insert(1, "(left the kingdom - comment JOIN to come back)")
     return "\n".join(lines)
+
+
+def _next_rank(c, i):
+    from .roles import RANKS
+    counts = c.counts_of(i)
+    for rank, actions, battles in reversed(RANKS):
+        if counts["commands"] < actions or counts["battles"] < battles:
+            need = []
+            if counts["commands"] < actions:
+                need.append(f"{actions - counts['commands']} more deeds")
+            if counts["battles"] < battles:
+                need.append(f"{battles - counts['battles']} more battles")
+            return f"Next rank: {rank} ({' and '.join(need)})"
+    return None
 
 
 def headline(day_result):
@@ -42,14 +72,17 @@ def headline(day_result):
     r = day_result
     if r.get("election"):
         e = r["election"]
-        return (f"RECALLED! {e['recall_share']:.0%} voted to remove the mayor." if e["recalled"]
-                else f"The mayor survives the recall vote ({e['keep_share']:.0%} to {e['recall_share']:.0%}).")
+        return (f"OVERTHROWN! {e['recall_share']:.0%} of the kingdom chose REVOLT." if e["recalled"]
+                else f"The king keeps his crown ({e['keep_share']:.0%} knelt, {e['recall_share']:.0%} revolted).")
     for n in r["sim"]["notes"]:
         if n.startswith("MILESTONE") or n.startswith("Riot"):
             return n.replace("MILESTONE: ", "Unlocked: ")
-    helped = [e for e in r["events_ended"] if e.get("result") in ("helped", "mayor")]
+    helped = [e for e in r["events_ended"] if e.get("result") not in ("timed_out", "ended")]
     if helped:
         return helped[0]["outcome"]
+    big_loss = [e for e in r["events_ended"] if e.get("result") == "timed_out" and _big(e)]
+    if big_loss:
+        return big_loss[0]["outcome"]
     if r["events_started"]:
         return r["events_started"][0]["title"]
     for n in r["sim"]["notes"]:
@@ -61,8 +94,15 @@ def headline(day_result):
         return r["events_ended"][0]["outcome"]
     if r["tallies"]:
         word, n = max(r["tallies"].items(), key=lambda kv: kv[1])
-        return f"{n} residents chose {word} today"
+        return f"{n} subjects chose {word} today"
     return f"Day {r['day']} in {r['city']}"
+
+
+def _big(e):
+    """A timeout worth leading with: its outcome hits hard (e.g. the horde sacked the kingdom)."""
+    from .storyteller import catalog
+    out = (catalog().get(e["id"]) or {}).get("on_timeout") or {}
+    return any(isinstance(v, (int, float)) and abs(v) >= 0.08 for k, v in out.items() if not k.startswith("treasury"))
 
 
 def episode_script(city, r):
@@ -84,16 +124,16 @@ def caption(r):
     words = " · ".join(r["next_pack"]["commands"]) if r.get("next_pack") else ""
     return (f"Day {r['day']}: {headline(r)}\n\n"
             f"Comment to act (one per post, latest counts): {words}\n"
-            f"Comment STATUS to see your citizen. Follow to move in. 🏙️\n"
-            f"An AI runs this city. You live in it.")
+            f"Comment STATUS to see your subject. BECOME <JOB> to change trade. Follow to move in. 🏰\n"
+            f"An AI rules this kingdom. You live in it.")
 
 
 def markdown(city, r):
     s = r["stats"]
     out = [f"# {r['city']} - Day {r['day']} (season {r['season']}, day {r['season_day']})",
            f"**Hook:** {headline(r)}", "",
-           f"Population **{s['population']}** (+{r['joined']} joined, -{r['sim'].get('left', 0)} left) · "
-           f"Approval **{s['approval']:.0%}** · Treasury **${s['treasury']:,.0f}** · Tax **{s['tax_rate']:.0%}** · "
+           f"Subjects **{s['population']}** (+{r['joined']} joined, -{r['sim'].get('left', 0)} left) · "
+           f"Loyalty **{s['approval']:.0%}** · Treasury **{s['treasury']:,.0f} gold** · Tax **{s['tax_rate']:.0%}** · "
            f"Economy {s['economy']:.2f} · Tension {s['tension']:.2f}", "",
            "**Services:** " + ", ".join(f"{SERVICE_LABEL[k]} {v:.2f}" for k, v in s["services"].items()),
            "**Factions:** " + ", ".join(f"{FACTION_LABEL[k]} {v:.2f}" for k, v in s["factions"].items() if v is not None),
@@ -102,21 +142,22 @@ def markdown(city, r):
     if r["events_started"] or r["events_ended"] or r["events_active"]:
         out.append("\n## Events")
         out += [f"- NEW: {e['title']}" for e in r["events_started"]]
-        out += [f"- {'SETTLED BY THE MAYOR' if e['result'] == 'mayor' else 'ENDED (' + e['result'] + ')'}: "
-                f"{e['outcome']}" for e in r["events_ended"]]
-        out += [f"- ongoing: {e['title']} ({e['days_left']} days left, {e['progress']:.0%} helped)"
-                for e in r["events_active"]]
+        out += [f"- {_ended_label(e)}: {e['outcome']}" for e in r["events_ended"]]
+        out += [f"- ongoing: {e['title']} ({e['days_left']} days left, " +
+                (("vote so far " + ", ".join(f"{w} {n:.0f}" for w, n in e["tally"].items())) if e.get("tally")
+                 else f"{e['progress']:.0%} helped") + ")" for e in r["events_active"]]
     if r.get("election"):
         e = r["election"]
-        out.append(f"\n## Recall vote\nKeep {e['keep_share']:.0%} / Recall {e['recall_share']:.0%} -> "
-                   f"{'RECALLED' if e['recalled'] else 'survives'}")
-    out.append(f"\n## The mayor ({r['decided_by']})")
+        out.append(f"\n## The Reckoning\nKneel {e['keep_share']:.0%} / Revolt {e['recall_share']:.0%} -> "
+                   f"{'OVERTHROWN' if e['recalled'] else 'keeps the crown'} "
+                   f"({e['keep_votes']} knelt and {e['recall_votes']} revolted in the comments)")
+    out.append(f"\n## The king ({r['decided_by']})")
     out += [f"- {line}" for line in r["decision_lines"]] or ["- no changes"]
     if r["speech"]:
         out.append(f"> \"{r['speech']}\"")
-    out.append(f"\n**Diary:** {r['diary']}")
+    out.append(f"\n**Royal journal:** {r['diary']}")
     if r["featured"]:
-        out.append("\n## Featured residents")
+        out.append("\n## Featured subjects")
         out += [f"- {f}" for f in r["featured"]]
     out.append(f"\n## Next post's commands\n{', '.join(r['next_pack']['commands'])}")
     if r.get("announce"):
@@ -125,6 +166,15 @@ def markdown(city, r):
         out.append("**Coming up:** " + ", ".join(f"{s['event']} (day {s['day']}, {s['source']})"
                                                for s in r["scheduled"][:5]))
     return "\n".join(out)
+
+
+def _ended_label(e):
+    res = e.get("result")
+    if res == "mayor":
+        return "SETTLED BY THE KING"
+    if res in ("helped", "timed_out", "ended"):
+        return f"ENDED ({res})"
+    return f"DECREED: {res}"     # a decree vote: the winning choice
 
 
 def save(city, r, outdir):

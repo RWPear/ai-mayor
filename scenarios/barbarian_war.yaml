@@ -1,0 +1,12 @@
+# Tests a war: the horde arrives on day 5, with the hand-written war pack on days 5-7.
+kingdom: Emberfall
+days: 12
+start_followers: 400
+growth: {daily: 15}
+engagement: 0.2
+events:
+  - {day: 5, event: barbarian_horde}
+packs:
+  5: packs/barbarian_war.yaml
+  6: packs/barbarian_war.yaml
+  7: packs/barbarian_war.yaml

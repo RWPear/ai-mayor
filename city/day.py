@@ -1,23 +1,23 @@
-"""One day of the city, start to finish. Used by both the test runner and the
-live city, so what you test is exactly what runs.
+"""One day of the kingdom, start to finish. Used by both the test runner and the
+live kingdom, so what you test is exactly what runs.
 
   1. new followers move in (from an export, or the fake audience)
-  2. the post's comments are read: actions, STATUS requests, JOINs
-  3. command effects hit the citizens who commented
-  4. events tick (help/hinder from comments counts here)
-  5. the whole city simulates a day
-  6. season finale: recall vote
+  2. the post's comments are read: actions, STATUS requests, JOINs, BECOME <JOB>
+  3. command effects hit the subjects who commented
+  4. events tick (help/hinder and decree votes from comments count here)
+  5. the whole kingdom simulates a day
+  6. season finale: the Reckoning (KNEEL or REVOLT)
   7. tomorrow's post is set up: scheduled events, season-plan beats, or a storyteller event
-  8. the mayor decides tomorrow's policy and writes a diary
+  8. the king decides policy (only on events the crowd has already weighed in on) and writes his journal
   9. reports: daily markdown, episode script, STATUS replies, next post's commands
 """
 import numpy as np
 
 from . import packs, plan, report, sim, storyteller
 from .effects import DayContext
-from .roles import JOB_NAMES
+from .roles import JOB_NAMES, a_job
 
-BASICS = {"WORK": "work", "PROTEST": "protest", "SHOP": "shop", "VOLUNTEER": "volunteer"}
+BASICS = {"WORK": "work", "TRADE": "shop", "TRAIN": "train", "GRUMBLE": "protest"}
 
 
 def default_pack():
@@ -25,8 +25,8 @@ def default_pack():
 
 
 def election_pack():
-    return {"post": "recall-vote", "window_hours": 24, "event": None,
-            "commands": {"KEEP": "vote.keep", "RECALL": "vote.recall"}, "caption": ""}
+    return {"post": "the-reckoning", "window_hours": 24, "event": None,
+            "commands": {"KNEEL": "vote.keep", "REVOLT": "vote.recall"}, "caption": ""}
 
 
 def next_pack(city, plan_pack=None):
@@ -38,15 +38,14 @@ def next_pack(city, plan_pack=None):
     if city.events:
         newest = max(city.events, key=lambda e: e["started"])
         ev = storyteller.catalog().get(newest["id"])
-        if ev and ev.get("commands"):
-            extra = {"WORK": "work", "PROTEST": "protest"}
-            return packs.from_event({**ev, "id": newest["id"]}, extra)
+        if ev and (ev.get("commands") or ev.get("choices")):
+            return packs.from_event({**ev, "id": newest["id"]})
     return default_pack()
 
 
-def feature(city, actions):
-    """Picks 3 residents worth mentioning: the angriest and happiest commenters, new councilors,
-    people who just left or came back. Returns (report lines, short notes the mayor may mention)."""
+def feature(city, actions, jobs=None):
+    """Picks 3 subjects worth mentioning: new lords, the angriest and happiest commenters, then
+    anyone. Returns (report lines, short notes the king may mention)."""
     c = city.citizens
     lines, people, picked = [], [], set()
 
@@ -56,15 +55,19 @@ def feature(city, actions):
             return
         picked.add(i)
         w = city.wards[int(c.ward[i])]
-        lines.append(f"@{c.handles[i]} ({c.names[i]}, {JOB_NAMES[int(c.job[i])]} in {w['name']}) {why} - "
+        job, rank = JOB_NAMES[int(c.job[i])], c.rank(i)
+        lines.append(f"@{c.handles[i]} ({c.names[i]}, {rank} {job} of {w['name']}) {why} - "
                      f"now {report.mood_word(float(c.mood[i]))}")
-        people.append(f"@{c.handles[i]}, a {JOB_NAMES[int(c.job[i])]} in {w['name']}, {why}")
+        people.append(f"@{c.handles[i]}, {a_job(job)} ({rank.lower()}) of {w['name']}, {why}")
         c.log(i, city.day, why)
 
-    for w in city.wards:   # councilors elected today
+    for w in city.wards:   # lords named today
         i = w.get("councilor")
-        if i is not None and c.story.get(int(i)) and c.story[int(i)][-1].startswith(f"day {city.day}: became"):
-            add(i, f"was elected councilor of {w['name']}")
+        if i is not None and c.story.get(int(i)) and c.story[int(i)][-1].startswith(f"day {city.day}: was named"):
+            add(i, f"was named Lord of {w['name']}")
+    for u, job in list((jobs or {}).items())[:1]:   # someone who changed trade today
+        if u in c.index:
+            add(c.index[u], f"became {a_job(job)}")
     commenters = np.array([c.index[u] for u in actions if u in c.index], dtype=np.int64)
     if len(commenters):
         m = c.mood[commenters]
@@ -99,12 +102,18 @@ def run_day(city, mayor, followers, comments, pack=None):
     c = city.citizens
 
     # 1-2. people
-    actions, status_users, joins = packs.parse(comments, pack)
+    jobs = {}
+    actions, status_users, joins = packs.parse(comments, pack, jobs)
     before = city.population()
     c.add_many(list(followers), city.day, city.ward_for, revive=False)
     c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
     joined = city.population() - before
+    for u, job in jobs.items():      # BECOME <JOB>
+        i = c.index.get(u)
+        if i is not None:
+            c.set_job(i, job, city.day)
     ctx = DayContext(city)
+    ctx.actions = actions
 
     # 3. commands
     tallies = packs.apply(city, ctx, actions, pack)
@@ -141,8 +150,8 @@ def run_day(city, mayor, followers, comments, pack=None):
             city.mayor["recalled_day"] = city.day
             city.mayor["term"] = city.mayor.get("term", 1) + 1
             c.loyalty[a] = 0.55  # fresh start for whoever comes next
-        sim_report["notes"].append("RECALL VOTE: " + ("the mayor was removed!" if election["recalled"]
-                                                      else "the mayor survives."))
+        sim_report["notes"].append("THE RECKONING: " + ("the king has been overthrown!" if election["recalled"]
+                                                         else "the king keeps his crown."))
 
     # 7. tomorrow's post: things you scheduled, then the season plan, then (maybe) the storyteller
     started = storyteller.start_due(city)
@@ -168,14 +177,14 @@ def run_day(city, mayor, followers, comments, pack=None):
         city.mayor["speeches"] = city.mayor["speeches"][-30:]
 
     # featured residents: the most interesting people today, not just random commenters
-    featured, people = feature(city, actions)
+    featured, people = feature(city, actions, jobs)
     stats = {"population": city.population(), "approval": round(city.approval(), 3),
              "treasury": round(city.treasury, 1), "tax_rate": round(city.tax_rate, 3),
              "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
              "services": {k: round(v, 3) for k, v in city.quality.items()}, "factions": city.faction_moods(),
              "wards": len(city.wards)}
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
-               + sim_report["notes"] + [f"Approval is {stats['approval']:.0%}."])
+               + sim_report["notes"] + [f"Loyalty to the king is {stats['approval']:.0%}."])
     diary = mayor.diary(city, summary, people)
     city.mayor.setdefault("journal", []).append({"day": city.day, "diary": diary, "approval": stats["approval"]})
     city.mayor["journal"] = city.mayor["journal"][-30:]

@@ -1,22 +1,22 @@
 """Season plans: the path through a season, so every post isn't a guess.
 
 A plan is a list of beats keyed by season day. Each beat can:
-  event:    start an event so it's the subject of that day's post (optionally `ward:`)
+  event:    start an event so it's the subject of that day's post (optionally `hold:`)
   pack:     the post's commands: a pack file, inline {WORD: effect}, or "auto" (the event's own words)
   if/else:  only happen if a condition holds, otherwise do the `else:` beat instead
-  agenda:   a note put in front of the mayor that day ("The state wants an answer on the stadium")
+  agenda:   a note put in front of the king that day ("The guilds want an answer on the caravan")
   announce: a line that goes into the day's report and video script
   note:     prep notes for YOU (what to film, what to say) - shown in the calendar, never in the city
 
 Between beats the storyteller fills gaps with random events (storyteller: fill), runs freely (on),
 or stays quiet (off). Follow-up events from outcomes still happen either way.
 
-    title: "Founding Days"
+    title: "The Crowning"
     storyteller: fill
     beats:
-      - {day: 1, pack: packs/welcome.yaml, announce: "The city is open!", note: "Launch post"}
-      - {day: 8, event: tech_hq, pack: auto}
-      - {day: 15, if: "faction_labor < 0.5", event: union_demands, else: {event: food_festival}}
+      - {day: 1, event: coronation, announce: "The gates are open!", note: "Launch post"}
+      - {day: 5, event: first_decree, pack: auto}
+      - {day: 12, if: "faction_commoners < 0.5", event: miners_strike, else: {event: tournament}}
 
 A plan path can be one file (used every season) or a folder with season1.yaml, season2.yaml, ...
 Plans are re-read every day, so you can edit the live plan and it takes effect tomorrow.
@@ -102,14 +102,14 @@ def prepare(city, absolute_day):
         city.plan["done"].append(key)
         ev_active = None
         if b.get("event"):
-            ev_active = storyteller.start(city, b["event"], b.get("ward"), source="plan")
+            ev_active = storyteller.start(city, b["event"], b.get("hold", b.get("ward")), source="plan")
             if ev_active:
                 started.append(ev_active)
         p = b.get("pack")
         if p == "auto" or (p is None and ev_active):
             ev = storyteller.catalog().get(b.get("event", ""))
-            if ev and ev.get("commands"):
-                pack = packs.from_event(ev, {"WORK": "work", "PROTEST": "protest"})
+            if ev and (ev.get("commands") or ev.get("choices")):
+                pack = packs.from_event(ev)
         elif isinstance(p, dict):
             pack = {"post": f"plan-day{absolute_day}", "window_hours": 24, "event": b.get("event"),
                     "commands": {str(k).upper(): v for k, v in p.items()}, "caption": b.get("caption", "")}

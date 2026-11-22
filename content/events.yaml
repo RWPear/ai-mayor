@@ -1,371 +1,465 @@
-# The storyteller picks from these when the city gets too calm (or too wild).
-#   when:     condition on city stats (pop, approval, treasury, tax, unrest, economy, season_day, has('id'))
-#   scope:    city or ward (ward events pick a ward, prefer ward_trait if given)
-#   on_start / while (daily) / on_help / on_timeout: effects
-#   commands: comment words that fit this event -> help or hinder (use them in that day's pack)
-#   options:  what the mayor can do about it
-# Effect keys: treasury_pc, economy, service.<s>, mood, mood.<faction>, mood.ward, loyalty, loyalty.<faction>,
-#              wealth_pc, wealth_pc.<faction>, wealth_pc.ward, unrest.ward
-- id: water_main
-  title: "Water main bursts in {ward}"
-  scope: ward
+# Everything that can happen in Emberfall. See docs/EVENTS.md for the full guide.
+#
+#   when:      condition on kingdom stats (pop, approval, treasury, tax, unrest, economy, season_day, has('id'),
+#              happened('id'), result('id'), active('id'), built('id'), q_<service>, faction_<faction>)
+#   scope:     city (the whole kingdom) or hold (picks a hold; prefers hold_trait if given)
+#   planned_only: true -> only season plans / you / follow-ups start it, never the storyteller
+#   champions: army -> that faction's help counts double (soldiers FIGHTing) and helpers earn battle deeds
+#
+# Two kinds of event:
+#   help/hinder: `commands: {FIGHT: help, FLEE: hinder}` + on_help / on_timeout outcomes
+#   decree vote: `choices: {WALLS: {...}, GRANARY: {...}}` - the words are the vote. Options with
+#                `side: WALLS` let the king back a side (and overrule the people if they voted the other way)
+#
+# Effects: treasury_pc, economy, service.<defense|food|roads|festivals>, mood, mood.<commoners|guilds|army|hold>,
+#          loyalty, loyalty.<...>, wealth_pc, wealth_pc.<...>, unrest.hold, depose.hold (the hold loses its lord)
+#          options only: progress (pushes a help/hinder event toward done)
+# Text placeholders: {hold}, {lord} (that hold's lord, a real @handle), {resident} (a real @handle)
+
+# =========================================================================== everyday trouble (storyteller)
+- id: bandits
+  title: "Bandits are robbing travelers on the road to {hold}"
+  scope: hold
   weight: 3
   days: 3
-  on_start: {mood.ward: -0.08, service.housing: -0.03}
-  while: {mood.ward: -0.03}
-  commands: {FIX: help, COMPLAIN: hinder}
-  help_needed: 0.6
-  on_help: {text: "Neighbors and city crews got the water back on in {ward}.", mood.ward: 0.06, loyalty: 0.02}
-  on_timeout: {text: "{ward} went days without water. People haven't forgotten.", loyalty: -0.03, mood.ward: -0.05}
+  champions: army
+  on_start: {mood.hold: -0.06, economy: -0.02}
+  while: {mood.hold: -0.03}
+  commands: {HUNT: help, PATROL: help, PAY: hinder}
+  help_needed: 0.5
+  on_help: {text: "{resident} led the hunt. The bandits of {hold} are in chains.", mood.hold: 0.08, loyalty.hold: 0.03}
+  on_timeout: {text: "The bandits got away with half of {hold}'s gold.", wealth_pc.hold: -60, loyalty.hold: -0.05}
   options:
-    - {id: emergency_crew, label: "Pay for emergency crews", cost_pc: 4, ends: true, effects: {mood.ward: 0.05, loyalty: 0.02}, text: "Emergency crews fixed it overnight."}
-    - {id: wait, label: "Let the utility handle it", cost_pc: 0, effects: {}, text: "The mayor said the utility would handle it."}
+    - {id: send_guards, label: "Send the royal guard", cost_pc: 3, effects: {progress: 0.5, loyalty.army: 0.02}, text: "The king sent the royal guard after the bandits."}
+    - {id: bounty, label: "Post a bounty", cost_pc: 1, effects: {progress: 0.2}, text: "The king posted a bounty: 50 gold a head."}
+    - {id: ignore, label: "It's not the crown's problem", cost_pc: 0, effects: {loyalty.hold: -0.04}, text: "The king said travelers should simply be braver."}
 
-- id: heatwave
-  title: "Heatwave hits the city"
+- id: rats
+  title: "Rats got into the granary in {hold}"
+  scope: hold
+  weight: 3
+  days: 3
+  on_start: {service.food: -0.06, mood.hold: -0.05}
+  while: {mood.hold: -0.02}
+  commands: {CATCH: help, SCREAM: hinder}
+  help_needed: 0.45
+  on_help: {text: "{hold} declared war on the rats and won. {resident} caught forty by themselves.", service.food: 0.04, mood.hold: 0.06}
+  on_timeout: {text: "The rats ate well. {hold} did not.", service.food: -0.05, mood.hold: -0.05}
+  options:
+    - {id: cats, label: "Import 200 cats", cost_pc: 2, ends: true, effects: {service.food: 0.04, mood.hold: 0.05, service.festivals: 0.02}, text: "The king imported 200 cats. {hold} has never been happier."}
+    - {id: burn, label: "Burn the granary and start over", cost_pc: 0, ends: true, effects: {service.food: -0.08, loyalty.commoners: -0.05}, text: "The king burned the granary. The rats are gone. So is the grain."}
+
+- id: bad_harvest
+  title: "Blight hits the crops across the kingdom"
   scope: city
   weight: 2
   days: 4
-  while: {mood: -0.03, economy: -0.03}
-  commands: {COOL: help, CHILL: help}
+  when: "season_day >= 6"
+  on_start: {service.food: -0.1}
+  while: {mood.commoners: -0.03, mood: -0.01}
+  commands: {FARM: help, HOARD: hinder}
   help_needed: 0.5
-  on_help: {text: "Neighbors opened cooling centers and checked on each other.", mood: 0.04, loyalty: 0.01}
-  on_timeout: {text: "The heatwave finally broke.", mood: 0.02}
+  on_help: {text: "The farmers worked through the blight and saved most of the harvest.", service.food: 0.08, mood.commoners: 0.06, loyalty.commoners: 0.03}
+  on_timeout: {text: "Half the harvest rotted in the fields. Bread prices doubled.", service.food: -0.06, mood: -0.05}
   options:
-    - {id: cooling, label: "Open city cooling centers", cost_pc: 3, effects: {mood: 0.03, loyalty.residents: 0.03}, text: "Cooling centers opened in every ward."}
-    - {id: nothing, label: "Do nothing", cost_pc: 0, effects: {loyalty.residents: -0.02}, text: "City Hall stayed quiet during the heatwave."}
+    - {id: buy_grain, label: "Buy grain from the coast", cost_pc: 6, ends: true, effects: {service.food: 0.1, loyalty.commoners: 0.04}, text: "The king bought grain from the coast. Nobody starved."}
+    - {id: ration, label: "Ration the bread", cost_pc: 0, effects: {service.food: 0.04, mood: -0.04}, text: "The king ordered bread rationed. One loaf per family."}
 
-- id: tech_hq
-  title: "A tech giant wants to build its HQ here"
+- id: fire
+  title: "Fire in {hold}!"
+  scope: hold
+  weight: 2
+  days: 2
+  on_start: {mood.hold: -0.1, wealth_pc.hold: -40}
+  commands: {BUCKET: help, LOOT: hinder}
+  help_needed: 0.5
+  on_help: {text: "A bucket line two streets long saved {hold}. {resident} didn't stop for a second.", mood.hold: 0.1, loyalty.hold: 0.04}
+  on_timeout: {text: "Half of {hold} burned before the rain came.", mood.hold: -0.1, wealth_pc.hold: -80, loyalty.hold: -0.06}
+  options:
+    - {id: rebuild, label: "Pay to rebuild", cost_pc: 4, effects: {progress: 0.4, mood.hold: 0.05}, text: "The king promised to rebuild every house in {hold}."}
+
+- id: wolves
+  title: "Wolves are stalking the edge of {hold}"
+  scope: hold
+  hold_trait: forest
+  weight: 2
+  days: 3
+  champions: army
+  while: {mood.hold: -0.03}
+  commands: {HUNT: help, HIDE: hinder}
+  help_needed: 0.45
+  on_help: {text: "The wolf pack was driven back into the forest. {resident} kept a pelt.", mood.hold: 0.07}
+  on_timeout: {text: "The wolves took half the sheep in {hold}.", wealth_pc.commoners: -30, mood.hold: -0.05}
+  options:
+    - {id: hunters, label: "Hire royal huntsmen", cost_pc: 2, effects: {progress: 0.5}, text: "The king sent his huntsmen."}
+
+- id: sickness
+  title: "A strange fever spreads through {hold}"
+  scope: hold
+  weight: 1
+  days: 4
+  when: "pop >= 50"
+  on_start: {mood.hold: -0.07}
+  while: {mood.hold: -0.03, economy: -0.02}
+  commands: {TEND: help, PANIC: hinder}
+  help_needed: 0.5
+  on_help: {text: "Healers and neighbors nursed {hold} back to health.", mood.hold: 0.07, loyalty.hold: 0.03}
+  on_timeout: {text: "The fever passed, but {hold} blames the crown for doing nothing.", loyalty.hold: -0.06}
+  options:
+    - {id: healers, label: "Send the royal healers", cost_pc: 3, effects: {progress: 0.5, loyalty.hold: 0.03}, text: "The royal healers rode for {hold}."}
+    - {id: quarantine, label: "Seal off the hold", cost_pc: 0, ends: true, effects: {mood.hold: -0.1, loyalty.hold: -0.06, economy: -0.03}, text: "The king sealed off {hold}. Nobody in, nobody out."}
+
+- id: miners_strike
+  title: "The miners lay down their picks"
+  scope: city
+  weight: 2
+  when: "tax > 0.18 or approval < 0.5"
+  days: 3
+  on_start: {economy: -0.05}
+  while: {economy: -0.04, mood.guilds: -0.02}
+  commands: {SOLIDARITY: help, SCAB: hinder}
+  help_needed: 0.5
+  on_help: {text: "The kingdom stood with the miners. The crown had to raise their pay.", mood.commoners: 0.08, treasury_pc: -3, loyalty.commoners: 0.03}
+  on_timeout: {text: "The strike broke. The miners went back to work, furious.", mood.commoners: -0.06, loyalty.commoners: -0.05}
+  options:
+    - {id: raise, label: "Raise the miners' pay", cost_pc: 4, ends: true, effects: {mood.commoners: 0.06, loyalty.commoners: 0.05, mood.guilds: -0.02}, text: "The king raised the miners' pay. The picks are swinging again."}
+    - {id: guards, label: "Send guards to break the strike", cost_pc: 1, ends: true, effects: {mood.commoners: -0.1, loyalty.commoners: -0.1, loyalty.army: 0.02}, text: "The king sent guards to the mines. The strike is over. Nobody is smiling."}
+
+# =========================================================================== good times (storyteller)
+- id: harvest_festival
+  title: "Harvest festival in {hold}"
+  scope: hold
+  weight: 3
+  days: 2
+  while: {mood.hold: 0.04, economy: 0.03}
+  commands: {FEAST: help, DANCE: help}
+  help_needed: 0.35
+  on_help: {text: "{hold}'s harvest festival was the best in memory. {resident} danced until sunrise.", mood: 0.04, wealth_pc.guilds: 25, loyalty: 0.02}
+  on_timeout: {text: "The festival in {hold} wound down quietly.", mood.hold: 0.01}
+  options:
+    - {id: royal_wine, label: "Send barrels of royal wine", cost_pc: 2, effects: {progress: 0.3, loyalty.hold: 0.04}, text: "The king sent barrels of royal wine to {hold}."}
+
+- id: merchant_caravan
+  title: "A merchant caravan from the east arrives at the gates"
   scope: city
   weight: 2
   when: "pop >= 40"
   days: 3
-  commands: {WELCOME: help, REJECT: hinder}
-  help_needed: 0.5
-  on_help: {text: "The people welcomed the tech HQ. Rents are already rising.", economy: 0.08, mood.business: 0.06, mood.labor: -0.04, service.housing: -0.06}
-  on_timeout: {text: "The tech giant took its HQ elsewhere.", mood.business: -0.04}
+  commands: {TRADE: help, HAGGLE: help, ROB: hinder}
+  help_needed: 0.45
+  on_help: {text: "The caravan sold out and promised to come back with more.", economy: 0.07, mood.guilds: 0.06, wealth_pc.guilds: 40}
+  on_timeout: {text: "The caravan packed up and moved on.", mood.guilds: -0.03}
   options:
-    - {id: tax_break, label: "Offer a 5-year tax break", cost_pc: 6, ends: true, effects: {economy: 0.1, mood.business: 0.07, mood.labor: -0.05, service.housing: -0.06}, text: "The mayor handed the tech giant a tax break. The HQ is coming."}
-    - {id: demand_housing, label: "Only if they fund housing", cost_pc: 0, effects: {mood.labor: 0.04, mood.business: -0.02}, text: "The mayor demanded they fund affordable housing first."}
-    - {id: refuse, label: "Turn them away", cost_pc: 0, ends: true, effects: {mood.business: -0.06, mood.labor: 0.03}, text: "The mayor turned the tech giant away."}
+    - {id: toll, label: "Charge a royal toll", cost_pc: -3, effects: {mood.guilds: -0.05, loyalty.guilds: -0.03}, text: "The king charged the caravan a toll. The treasury is happy. The guilds are not."}
+    - {id: welcome, label: "Welcome them, no toll", cost_pc: 0, effects: {progress: 0.3, mood.guilds: 0.04}, text: "The king welcomed the caravan with open gates."}
 
-- id: transit_strike
-  title: "Bus drivers go on strike"
+- id: tournament
+  title: "The king announces a tournament"
   scope: city
   weight: 2
-  when: "tax < 0.2 or approval < 0.5"
-  days: 4
-  on_start: {service.transit: -0.1}
-  while: {economy: -0.05, mood.business: -0.03}
-  commands: {SOLIDARITY: help, SCAB: hinder}
-  help_needed: 0.5
-  on_help: {text: "Public support pushed City Hall into a deal with the drivers.", mood.labor: 0.06, treasury_pc: -3, service.transit: 0.1}
-  on_timeout: {text: "The strike fizzled out. The drivers went back angry.", mood.labor: -0.05, service.transit: 0.08}
-  options:
-    - {id: raise, label: "Give drivers a raise", cost_pc: 5, ends: true, effects: {mood.labor: 0.06, service.transit: 0.1, mood.business: -0.02}, text: "The mayor gave the drivers a raise. Buses are back."}
-    - {id: replace, label: "Hire replacement drivers", cost_pc: 2, ends: true, effects: {mood.labor: -0.08, service.transit: 0.05, loyalty.labor: -0.05}, text: "The mayor brought in replacement drivers."}
-
-- id: food_festival
-  title: "A food truck festival takes over {ward}"
-  scope: ward
-  weight: 3
+  when: "pop >= 60"
   days: 2
-  while: {mood.ward: 0.04, economy: 0.04}
-  commands: {EAT: help, SHOP: help}
+  champions: army
+  while: {mood: 0.03}
+  commands: {JOUST: help, CHEER: help, BOO: hinder}
   help_needed: 0.4
-  on_help: {text: "The food festival in {ward} was a huge hit.", wealth_pc.business: 30, mood: 0.03}
-  on_timeout: {text: "The food festival wrapped up.", mood.ward: 0.01}
+  on_help: {text: "The tournament was a triumph. {resident} won the joust and the crowd went wild.", service.festivals: 0.08, loyalty: 0.04, mood: 0.03}
+  on_timeout: {text: "The tournament happened. Mostly people talked about the food.", service.festivals: 0.02}
   options:
-    - {id: sponsor, label: "Sponsor it", cost_pc: 2, effects: {mood.ward: 0.04, loyalty: 0.01}, text: "City Hall sponsored the festival."}
-    - {id: permits, label: "Charge permit fees", cost_pc: -2, effects: {mood.business: -0.03}, text: "City Hall charged festival permit fees."}
+    - {id: grand_prize, label: "Offer a grand prize", cost_pc: 2, effects: {progress: 0.3, mood.army: 0.04}, text: "The king put up a grand prize: a sword from the royal armory."}
+    - {id: join_in, label: "The king rides in the joust himself", cost_pc: 0, effects: {progress: 0.2, mood: 0.02}, text: "The king rode in the joust himself. He fell off. He says he was pushed."}
 
-- id: crime_wave
-  title: "Break-ins spike in {ward}"
-  scope: ward
-  weight: 2
-  when: "q_safety < 0.85"
-  days: 4
-  while: {mood.ward: -0.04, unrest.ward: 0.03}
-  commands: {WATCH: help, PANIC: hinder}
-  help_needed: 0.5
-  on_help: {text: "A neighborhood watch in {ward} helped put a stop to the break-ins.", mood.ward: 0.05, service.safety: 0.03}
-  on_timeout: {text: "The break-ins in {ward} slowed, but trust in City Hall took a hit.", loyalty: -0.02}
-  options:
-    - {id: patrols, label: "Extra patrols", cost_pc: 3, ends: true, effects: {service.safety: 0.06, mood.business: 0.03, mood.ward: 0.03}, text: "Extra patrols were sent into {ward}."}
-    - {id: youth, label: "Fund youth programs", cost_pc: 4, effects: {mood.residents: 0.04, service.culture: 0.03}, text: "The mayor funded youth programs in {ward}."}
-
-- id: flood
-  title: "Flooding in {ward}"
-  scope: ward
-  ward_trait: flood-prone
-  weight: 2
+- id: gold_vein
+  title: "Miners strike gold in {hold}!"
+  scope: hold
+  hold_trait: mining
+  weight: 1
+  when: "pop >= 60"
   days: 3
-  on_start: {wealth_pc.ward: -60, service.housing: -0.05, mood.ward: -0.1}
-  while: {mood.ward: -0.03}
-  commands: {SANDBAG: help, EVACUATE: help}
-  help_needed: 0.5
-  on_help: {text: "Residents sandbagged {ward} and saved most of the homes.", mood.ward: 0.08, loyalty: 0.02}
-  on_timeout: {text: "The water receded from {ward}, leaving a mess behind.", mood.ward: -0.04}
+  commands: {DIG: help, STEAL: hinder}
+  help_needed: 0.45
+  on_help: {text: "{hold} dug out a fortune. The crown takes its share.", treasury_pc: 8, wealth_pc.hold: 60, mood.hold: 0.06}
+  on_timeout: {text: "The vein ran dry sooner than anyone hoped.", treasury_pc: 2}
   options:
-    - {id: relief, label: "Emergency relief payments", cost_pc: 6, effects: {wealth_pc.ward: 50, mood.ward: 0.06, loyalty: 0.03}, text: "The mayor sent relief payments to {ward}."}
-    - {id: levee, label: "Promise a new levee", cost_pc: 0, effects: {mood.ward: 0.02}, text: "The mayor promised {ward} a new levee."}
+    - {id: royal_claim, label: "Claim the mine for the crown", cost_pc: -6, ends: true, effects: {mood.hold: -0.08, loyalty.hold: -0.06}, text: "The king claimed the gold mine for the crown. {hold} is not pleased."}
+    - {id: share, label: "Let the miners keep most of it", cost_pc: 0, effects: {progress: 0.2, loyalty.hold: 0.04}, text: "The king let {hold}'s miners keep their gold."}
 
-- id: rent_spike
-  title: "Landlords hike rents across the city"
-  scope: city
-  weight: 2
-  when: "q_housing < 0.9"
-  days: 5
-  while: {mood.labor: -0.04, mood.residents: -0.02}
-  commands: {ORGANIZE: help, PAY: hinder}
-  help_needed: 0.5
-  on_help: {text: "Tenants organized and forced landlords to the table.", mood.labor: 0.06, mood.business: -0.03}
-  on_timeout: {text: "The rent hikes stuck.", wealth_pc.labor: -40}
-  options:
-    - {id: rent_cap, label: "Cap rent increases", cost_pc: 0, ends: true, effects: {mood.labor: 0.07, mood.business: -0.06}, text: "The mayor capped rent increases."}
-    - {id: build, label: "Fast-track new housing", cost_pc: 8, effects: {service.housing: 0.08, mood.business: 0.02}, text: "The mayor fast-tracked new housing."}
-
-- id: blackout
-  title: "Blackout across the city"
+- id: comet
+  title: "A comet blazes across the sky. Some call it an omen."
   scope: city
   weight: 1
   days: 2
-  on_start: {economy: -0.08, mood: -0.05}
-  commands: {HELP: help, LOOT: hinder}
-  help_needed: 0.5
-  on_help: {text: "Neighbors shared generators and candles until the power came back.", mood: 0.05}
-  on_timeout: {text: "The power came back on.", mood: 0.01}
-  options:
-    - {id: generators, label: "Rent emergency generators", cost_pc: 3, ends: true, effects: {mood: 0.03}, text: "Emergency generators kept the hospitals and shops running."}
-
-- id: scandal
-  title: "Scandal: a city contractor overbilled millions"
-  scope: city
-  weight: 2
-  when: "has('newspaper')"
-  days: 3
-  on_start: {loyalty: -0.04}
-  commands: {INVESTIGATE: help, IGNORE: hinder}
+  commands: {WISH: help, DOOM: hinder}
   help_needed: 0.4
-  on_help: {text: "Public pressure forced a full investigation. Money was recovered.", treasury_pc: 5, loyalty: 0.03}
-  on_timeout: {text: "The scandal faded, but people remember.", loyalty: -0.02}
+  on_help: {text: "The kingdom made a thousand wishes on the comet. Spirits are high.", mood: 0.05, loyalty: 0.02}
+  on_timeout: {text: "The comet faded. The doom-sayers are still talking.", mood: -0.02, loyalty: -0.02}
   options:
-    - {id: fire, label: "Fire the contractor publicly", cost_pc: 0, ends: true, effects: {loyalty: 0.03}, text: "The mayor fired the contractor in front of the cameras."}
-    - {id: deny, label: "Deny everything", cost_pc: 0, effects: {loyalty: -0.04}, text: "The mayor denied any wrongdoing."}
+    - {id: astronomer, label: "Declare it a sign of the king's greatness", cost_pc: 0, effects: {loyalty: -0.02, mood.army: 0.02}, text: "The royal astronomer declared the comet a sign of the king's greatness. Nobody believes him."}
 
-- id: rival_poaching
-  title: "Port Calder is poaching our businesses"
+# =========================================================================== the king's vanity (storyteller)
+- id: mocking_bard
+  title: "A traveling bard is singing mocking songs about the king"
   scope: city
-  weight: 3
-  when: "has('rival')"
-  days: 5
-  while: {economy: -0.04, mood.business: -0.03}
-  commands: {SHOPLOCAL: help, DEFEND: help, DEFECT: hinder}
-  help_needed: 0.55
-  on_help: {text: "The city rallied behind local businesses. Port Calder backed off.", economy: 0.05, mood.business: 0.06,
-            next: {event: rival_truce, in_days: 4}}
-  on_timeout: {text: "Several businesses moved to Port Calder.", economy: -0.05, wealth_pc.business: -50,
-               next: {event: rival_war, in_days: 3}}
-  options:
-    - {id: incentives, label: "Counter with business incentives", cost_pc: 6, effects: {mood.business: 0.05, economy: 0.03}, text: "The mayor countered with incentives for local businesses."}
-    - {id: campaign, label: "Launch a 'Buy Local' campaign", cost_pc: 2, effects: {mood: 0.02}, text: "City Hall launched a Buy Local campaign."}
-
-- id: rival_war
-  title: "Turf war: Port Calder claims the river trade"
-  scope: city
-  weight: 2
-  when: "has('rival') and pop >= 300"
-  days: 6
-  while: {economy: -0.05}
-  commands: {ATTACK: help, DEFEND: help, SURRENDER: hinder}
-  help_needed: 0.6
-  on_help: {text: "The city won the river trade war. Port Calder is furious.", economy: 0.1, mood: 0.06, loyalty: 0.04,
-            next: {event: rival_truce, in_days: 5}}
-  on_timeout: {text: "Port Calder took the river trade.", economy: -0.08, mood: -0.05,
-               next: {event: rival_truce, in_days: 6}}
-  options:
-    - {id: tariffs, label: "Slap tariffs on Port Calder", cost_pc: 0, effects: {economy: -0.02, mood.labor: 0.03, mood.business: -0.03}, text: "The mayor slapped tariffs on Port Calder."}
-    - {id: negotiate, label: "Negotiate a split", cost_pc: 0, ends: true, effects: {economy: 0.03}, text: "The mayor negotiated a split of the river trade.", next: {event: rival_truce, in_days: 4}}
-
-- id: celebrity
-  title: "A celebrity just moved to {ward}"
-  scope: ward
   weight: 2
   days: 2
-  on_start: {mood.ward: 0.04}
-  while: {economy: 0.02}
-  commands: {FAN: help, IGNORE: hinder}
+  commands: {SING: hinder, HUSH: help}
   help_needed: 0.4
-  on_help: {text: "{ward} is suddenly the coolest place in the city.", mood.ward: 0.05, wealth_pc.ward: 20}
-  on_timeout: {text: "The celebrity buzz died down.", mood.ward: 0.0}
+  on_help: {text: "The crowd hushed the bard and he left town. The king is pretending he never heard the songs.", loyalty: 0.03}
+  on_timeout: {text: "The whole kingdom knows the words now. The king does not find it funny.", loyalty: -0.05, mood: 0.03}
   options:
-    - {id: key, label: "Give them the key to the city", cost_pc: 1, effects: {loyalty.residents: 0.02, loyalty.labor: -0.01}, text: "The mayor gave the celebrity the key to the city."}
+    - {id: hire, label: "Pay the bard to sing his praises instead", cost_pc: 1, effects: {progress: 0.4}, text: "The king paid the bard to write a song about his magnificent jawline."}
+    - {id: banish, label: "Banish the bard", cost_pc: 0, ends: true, effects: {loyalty: -0.04, mood.commoners: -0.03}, text: "The king banished the bard. The song got more popular."}
 
-- id: budget_hole
-  title: "Audit finds a hole in the city budget"
+- id: statue_decree
+  title: "The king wants a giant golden statue of himself"
   scope: city
-  weight: 3
-  when: "treasury < 0"
-  days: 4
-  on_start: {loyalty: -0.03}
-  commands: {DONATE: help, PANIC: hinder}
-  help_needed: 0.4
-  on_help: {text: "Citizens chipped in to help close the gap.", treasury_pc: 6}
-  on_timeout: {text: "The budget hole is still there.", loyalty: -0.02}
-  options:
-    - {id: cuts, label: "Emergency spending cuts", cost_pc: -8, effects: {service.culture: -0.1, service.housing: -0.05, mood: -0.03}, text: "The mayor announced emergency spending cuts."}
-    - {id: borrow, label: "Borrow from the state", cost_pc: -10, effects: {loyalty: -0.01}, text: "The mayor borrowed from the state to cover the gap."}
-
-- id: union_demands
-  title: "Workers demand higher wages"
-  scope: city
-  weight: 2
-  when: "faction_labor < 0.5"
-  days: 4
-  while: {economy: -0.02}
-  commands: {STRIKE: help, WORK: hinder}
-  help_needed: 0.5
-  on_help: {text: "The workers won higher wages.", mood.labor: 0.08, mood.business: -0.05, wealth_pc.labor: 40}
-  on_timeout: {text: "The wage push ran out of steam.", mood.labor: -0.05}
-  options:
-    - {id: minimum_wage, label: "Raise the city minimum wage", cost_pc: 0, ends: true, effects: {mood.labor: 0.08, mood.business: -0.06, wealth_pc.labor: 30}, text: "The mayor raised the city minimum wage."}
-    - {id: refuse, label: "Refuse", cost_pc: 0, effects: {mood.labor: -0.05, mood.business: 0.03}, text: "The mayor refused the workers' demands."}
-
-- id: startup_boom
-  title: "Startup boom in {ward}"
-  scope: ward
-  weight: 2
-  when: "economy > 1.0"
-  days: 3
-  while: {economy: 0.03, mood.ward: 0.02}
-  commands: {INVEST: help, SHOP: help}
-  help_needed: 0.4
-  on_help: {text: "{ward} became the city's startup hub.", wealth_pc.ward: 40, economy: 0.04}
-  on_timeout: {text: "The startup buzz in {ward} settled down.", mood.ward: 0.0}
-  options:
-    - {id: incubator, label: "Open a city incubator", cost_pc: 4, effects: {economy: 0.03, mood.business: 0.04}, text: "The mayor opened a startup incubator in {ward}."}
-
-
-# ===================================================================================== story arcs
-# planned_only: true -> the storyteller never picks these at random. They come from a season plan,
-# from you (`city.run event start ...`), or as a follow-up (`next:`) of another event.
-#
-# "A vs B" events: the help word is choice A, the hinder word is choice B.
-#   on_help = A won, on_timeout = B won (or nobody cared enough).
-
-# ---------------------------------------------------------------- launch
-- id: grand_opening
-  planned_only: true
-  title: "New Harbor opens its doors"
-  scope: city
-  days: 1
-  on_start: {mood: 0.05}
-  commands: {CELEBRATE: help, MOVEIN: help}
-  help_needed: 0.3
-  on_help: {text: "Opening day was a party. The whole city showed up.", mood: 0.05, loyalty: 0.03}
-  on_timeout: {text: "Opening day was quiet. People are still finding their way in.", mood: 0.0}
-  options:
-    - {id: ribbon, label: "Cut the ribbon with a speech", cost_pc: 1, effects: {loyalty: 0.02}, text: "The mayor cut the ribbon and gave a very long speech."}
-
-- id: first_budget
-  planned_only: true
-  title: "The first budget vote: parks or police?"
-  scope: city
+  weight: 1
+  when: "treasury > 0 and not built('statue')"
   days: 2
-  commands: {PARKS: help, POLICE: hinder}
-  help_needed: 0.35
-  on_help: {text: "The people chose parks. New green space is coming.", service.culture: 0.12, mood.residents: 0.05, mood.business: -0.02}
-  on_timeout: {text: "The people chose police. More patrols are coming.", service.safety: 0.12, mood.business: 0.04, mood.residents: -0.02}
+  choices:
+    BUILD: {text: "The statue goes up. It is very large. It is very gold.", treasury_pc: -6, service.festivals: 0.04, mood.commoners: -0.04}
+    MELT: {text: "The gold goes into the granaries instead. The king is sulking.", service.food: 0.08, mood.commoners: 0.05}
   options:
-    - {id: overrule_parks, label: "Overrule the vote: fund parks", cost_pc: 4, ends: true, effects: {service.culture: 0.1, loyalty: -0.03}, text: "The mayor ignored the vote and funded parks anyway."}
-    - {id: overrule_police, label: "Overrule the vote: fund police", cost_pc: 4, ends: true, effects: {service.safety: 0.1, loyalty: -0.03}, text: "The mayor ignored the vote and funded police anyway."}
-    - {id: respect, label: "Respect whatever the people choose", cost_pc: 0, effects: {loyalty: 0.02}, text: "The mayor promised to respect the vote."}
+    - {id: insist, label: "Insist on the statue", side: BUILD, cost_pc: 0, text: "The king insists. The statue is happening."}
+    - {id: humble, label: "Graciously let the gold go to the granaries", side: MELT, cost_pc: 0, text: "The king, through gritted teeth, agrees the granaries come first."}
 
-- id: block_party
+# =========================================================================== season plan arcs (planned_only)
+- id: coronation
+  title: "King Aldric is crowned. The gates of Emberfall are open."
+  scope: city
   planned_only: true
-  title: "Block party in {ward}"
-  scope: ward
   days: 1
-  while: {mood.ward: 0.04}
-  commands: {PARTY: help, SLEEP: hinder}
+  commands: {KNEEL: help, CHEER: help}
   help_needed: 0.3
-  on_help: {text: "{ward} threw the block party of the year. {resident} DJ'd until 2am.", mood.ward: 0.06}
-  on_timeout: {text: "The {ward} block party fizzled out early.", mood.ward: 0.0}
-  options:
-    - {id: permit, label: "Close the street for it", cost_pc: 1, effects: {mood.ward: 0.03}, text: "City Hall closed the street for the {ward} block party."}
+  on_help: {text: "The coronation was glorious. The kingdom cheered its new king.", service.festivals: 0.06, loyalty: 0.04}
+  on_timeout: {text: "The coronation was quiet. People are still finding their way through the gates.", loyalty: 0.01}
 
-# ---------------------------------------------------------------- the scandal arc
-- id: councilor_scandal
+- id: first_decree
+  title: "The first royal decree: WALLS or GRANARY?"
+  scope: city
   planned_only: true
-  title: "Leaked texts: {councilor} took cash from developers"
-  scope: ward
-  days: 3
-  on_start: {loyalty.ward: -0.04, mood.ward: -0.03}
-  commands: {RESIGN: help, DEFEND: hinder}
-  help_needed: 0.4
-  on_help: {text: "Under pressure from the streets, {councilor} resigned in disgrace.", loyalty: 0.03, mood.ward: 0.03}
-  on_timeout: {text: "{councilor} survived the scandal. People are asking who else was paid.", loyalty: -0.03,
-               next: {event: scandal_city_hall, in_days: 2}}
+  days: 2
+  choices:
+    WALLS: {text: "Stone walls will rise around Emberfall.", service.defense: 0.12, mood.army: 0.05, mood.commoners: -0.02}
+    GRANARY: {text: "The royal gold goes to granaries. No one will go hungry this winter.", service.food: 0.12, mood.commoners: 0.05, mood.army: -0.02}
   options:
-    - {id: suspend, label: "Suspend the councilor", cost_pc: 0, ends: true, effects: {loyalty: 0.03}, text: "The mayor suspended {councilor} pending an investigation."}
-    - {id: stand_by, label: "Stand by your councilor", cost_pc: 0, effects: {loyalty: -0.04}, text: "The mayor stood by {councilor}.", next: {event: scandal_city_hall, in_days: 2}}
+    - {id: back_walls, label: "Back WALLS", side: WALLS, cost_pc: 0, text: "The king declared for WALLS."}
+    - {id: back_granary, label: "Back GRANARY", side: GRANARY, cost_pc: 0, text: "The king declared for GRANARY."}
 
-- id: scandal_city_hall
+- id: court_treason
+  title: "Treason! Lord {lord} of {hold} was caught selling secrets to Varn"
+  scope: hold
   planned_only: true
-  title: "The {councilor} scandal reaches City Hall"
-  scope: ward
-  days: 3
-  on_start: {loyalty: -0.05}
-  while: {mood: -0.02}
-  commands: {INVESTIGATE: help, MOVEON: hinder}
+  when: "has('court')"
+  days: 2
+  choices:
+    DUNGEON: {text: "Lord {lord} has been thrown in the dungeon. {hold} needs a new lord.", depose.hold: 1, loyalty: 0.03, mood.hold: -0.03}
+    PARDON: {text: "Lord {lord} was pardoned. Half the court is whispering.", loyalty.hold: 0.04, loyalty: -0.03, next: {event: treason_spreads, in_days: 2, hold: same}}
+  options:
+    - {id: dungeon, label: "Throw them in the dungeon", side: DUNGEON, cost_pc: 0, text: "The king wants Lord {lord} in chains."}
+    - {id: mercy, label: "Show royal mercy", side: PARDON, cost_pc: 0, text: "The king is inclined to be merciful."}
+
+- id: treason_spreads
+  title: "The pardoned lord of {hold} wasn't working alone. Varn's spies are in the court."
+  scope: hold
+  planned_only: true
+  days: 2
+  on_start: {loyalty: -0.04, mood: -0.03}
+  commands: {EXPOSE: help, PROTECT: hinder}
   help_needed: 0.45
-  on_help: {text: "An independent investigation cleared City Hall - barely.", loyalty: 0.04}
-  on_timeout: {text: "The scandal never fully went away. It'll come up at the recall vote.", loyalty: -0.04}
+  on_help: {text: "Three spies were unmasked. {resident} found the letters.", loyalty: 0.05, service.defense: 0.04}
+  on_timeout: {text: "The spies slipped away to Varn with the kingdom's secrets.", service.defense: -0.08, loyalty: -0.05}
   options:
-    - {id: audit, label: "Order a public audit", cost_pc: 3, effects: {loyalty: 0.03}, text: "The mayor ordered a full public audit."}
-    - {id: blame, label: "Blame the councilor for everything", cost_pc: 0, ends: true, effects: {loyalty: -0.02, mood.ward: -0.04}, text: "The mayor threw {councilor} under the bus."}
+    - {id: purge, label: "Purge the court", cost_pc: 0, ends: true, effects: {loyalty: -0.04, mood.guilds: -0.04, service.defense: 0.04}, text: "The king purged the court. Everyone is suspect now."}
 
-# ---------------------------------------------------------------- the rival arc (Port Calder)
-- id: rival_arrives
+# ---- the barbarian war: scouts -> raid -> horde. Each step happens either way; how well
+# ---- the crowd does decides how bad the next one is.
+- id: barbarian_scouts
+  title: "Barbarian scouts spotted near {hold}"
+  scope: hold
+  hold_trait: frontier
   planned_only: true
-  title: "Port Calder's mayor calls New Harbor 'a village with Wi-Fi'"
-  scope: city
   days: 2
-  commands: {CLAPBACK: help, IGNORE: hinder}
+  champions: army
+  on_start: {mood.hold: -0.05}
+  commands: {WARN: help, TRACK: help, IGNORE: hinder}
   help_needed: 0.35
-  on_help: {text: "The city clapped back. Port Calder's mayor deleted the post.", mood: 0.04, loyalty: 0.02,
-            next: {event: rival_poaching, in_days: 3}}
-  on_timeout: {text: "New Harbor stayed quiet. Port Calder took that as weakness.",
-               next: {event: rival_poaching, in_days: 2}}
+  on_help: {text: "Riders from {hold} warned the whole kingdom. The holds are arming.", service.defense: 0.05,
+            next: {event: barbarian_raid, in_days: 0, hold: same}}
+  on_timeout: {text: "Nobody took the scouts seriously. The barbarians know the roads now.", service.defense: -0.06,
+               next: {event: barbarian_raid, in_days: 0, hold: same}}
   options:
-    - {id: trash_talk, label: "Fire back on social media", cost_pc: 0, effects: {mood: 0.03, loyalty: 0.02}, text: "The mayor fired back: 'At least our Wi-Fi works.'"}
-    - {id: summit, label: "Invite their mayor to talks", cost_pc: 1, ends: true, effects: {economy: 0.02}, text: "The mayor invited Port Calder to a summit.", next: {event: rival_truce, in_days: 5}}
+    - {id: beacons, label: "Light the warning beacons", cost_pc: 1, effects: {progress: 0.4}, text: "The king ordered every beacon lit."}
+    - {id: dismiss, label: "Dismiss it as rumors", cost_pc: 0, effects: {loyalty.army: -0.03}, text: "The king said a few scouts are nothing to worry about."}
 
-- id: rival_truce
+- id: barbarian_raid
+  title: "BARBARIANS ATTACK {hold}!"
+  scope: hold
   planned_only: true
-  title: "Port Calder offers a truce"
-  scope: city
   days: 2
-  commands: {ACCEPT: help, REFUSE: hinder}
-  help_needed: 0.35
-  on_help: {text: "The people accepted the truce. Trade with Port Calder is open again.", economy: 0.06, mood.business: 0.05}
-  on_timeout: {text: "The truce was refused. Port Calder says this isn't over.", mood.labor: 0.03,
-               next: {event: rival_war, in_days: 6}}
+  champions: army
+  on_start: {mood.hold: -0.08, wealth_pc.hold: -30}
+  while: {mood.hold: -0.03}
+  commands: {FIGHT: help, FORTIFY: help, FLEE: hinder}
+  help_needed: 0.45
+  on_help: {text: "{hold} held! {resident} was first over the barricade. But the raiders were only the vanguard.",
+            loyalty.hold: 0.06, mood.army: 0.06, next: {event: barbarian_horde, in_days: 0}}
+  on_timeout: {text: "Raiders burned the outskirts of {hold}. And behind them comes the horde.", mood.hold: -0.12,
+               service.food: -0.06, loyalty.hold: -0.06, next: {event: barbarian_horde, in_days: 0}}
   options:
-    - {id: sign, label: "Sign it", cost_pc: 0, ends: true, effects: {economy: 0.06, loyalty: 0.01}, text: "The mayor signed the truce with Port Calder."}
-    - {id: demands, label: "Make demands first", cost_pc: 0, effects: {mood: 0.02}, text: "The mayor demanded Port Calder apologise first."}
+    - {id: royal_guard, label: "Send the royal guard", cost_pc: 3, effects: {progress: 0.35, loyalty.hold: 0.03}, text: "The king sent the royal guard to {hold}."}
+    - {id: abandon, label: "Pull back and protect the capital", cost_pc: 0, effects: {loyalty.hold: -0.1}, text: "The king pulled his soldiers back to the capital. {hold} is on its own."}
 
-# ---------------------------------------------------------------- season finale build-up
-- id: town_hall
-  planned_only: true
-  title: "Town hall: the mayor faces the city before the recall vote"
+- id: barbarian_horde
+  title: "THE HORDE IS AT THE GATES. Every subject is needed."
   scope: city
-  days: 1
-  commands: {CHEER: help, BOO: hinder}
-  help_needed: 0.3
-  on_help: {text: "The town hall went well. The mayor got a standing ovation from the front rows.", loyalty: 0.04}
-  on_timeout: {text: "The town hall was a disaster. The mayor got booed off the stage.", loyalty: -0.05}
+  planned_only: true
+  days: 3
+  champions: army
+  help_needed: 0.55
+  on_start: {mood: -0.06, economy: -0.04}
+  while: {mood: -0.03, economy: -0.03}
+  commands: {FIGHT: help, FORTIFY: help, FLEE: hinder, SURRENDER: hinder}
+  on_help: {text: "VICTORY! The horde broke against Emberfall's walls. Songs will be sung about this day.",
+            loyalty: 0.12, mood: 0.1, service.festivals: 0.08, mood.army: 0.08}
+  on_timeout: {text: "The horde sacked the outer holds and rode off with the harvest. Emberfall survives, barely.",
+               loyalty: -0.12, mood: -0.08, treasury_pc: -8, service.food: -0.1}
   options:
-    - {id: apologise, label: "Apologise for this season's mistakes", cost_pc: 0, effects: {loyalty: 0.03}, text: "The mayor apologised. Some people even believed it."}
-    - {id: double_down, label: "Double down: 'I was right about everything'", cost_pc: 0, effects: {loyalty: -0.02, mood.business: 0.03}, text: "The mayor doubled down."}
+    - {id: mercenaries, label: "Hire mercenaries", cost_pc: 6, effects: {progress: 0.3}, text: "The king emptied the treasury for sellswords."}
+    - {id: lead_charge, label: "The king leads the charge himself", cost_pc: 0, effects: {progress: 0.15, loyalty.army: 0.05}, text: "The king put on his armor and rode out at the head of the army."}
+    - {id: tribute, label: "Pay the barbarians to leave", cost_pc: 10, ends: true, effects: {loyalty.army: -0.12, loyalty: -0.06}, text: "The king paid the horde to go away. The army will never forgive him."}
+
+- id: pretender
+  title: "A stranger arrives claiming to be the true heir to the throne"
+  scope: city
+  planned_only: true
+  days: 2
+  choices:
+    HEIR: {text: "The kingdom believes the stranger. The Reckoning just got dangerous for the king.", loyalty: -0.08}
+    KING: {text: "The kingdom stood by its king. The stranger was laughed out of the gates.", loyalty: 0.05}
+  options:
+    - {id: arrest, label: "Arrest the pretender", side: KING, cost_pc: 0, text: "The king ordered the pretender arrested."}
+    - {id: feast, label: "Invite the stranger to a feast and charm the kingdom", side: KING, cost_pc: 2, effects: {mood: 0.03}, text: "The king threw a feast for the stranger. Keep your friends close."}
+
+- id: royal_audience
+  title: "Royal audience: the king hears his subjects before the Reckoning"
+  scope: city
+  planned_only: true
+  days: 2
+  commands: {CHEER: help, PETITION: help, JEER: hinder}
+  help_needed: 0.5
+  on_help: {text: "The audience went well. The king listened, and for once, he didn't interrupt.", loyalty: 0.07}
+  on_timeout: {text: "The audience was a disaster. Rotten cabbages were thrown.", loyalty: -0.07, mood: -0.03}
+  options:
+    - {id: cut_taxes, label: "Promise lower taxes", cost_pc: 0, effects: {loyalty.guilds: 0.05, progress: 0.2}, text: "The king promised lower taxes after the Reckoning."}
+    - {id: free_bread, label: "Free bread for everyone", cost_pc: 3, effects: {loyalty.commoners: 0.05, progress: 0.2}, text: "The king handed out free bread at the gates."}
+
+- id: empty_treasury
+  title: "The royal treasury is empty. The guards haven't been paid."
+  scope: city
+  planned_only: true
+  days: 3
+  on_start: {mood.army: -0.06, service.defense: -0.05}
+  commands: {DONATE: help, HOARD: hinder}
+  help_needed: 0.45
+  on_help: {text: "Subjects chipped in to pay the guards. The king owes them one.", treasury_pc: 6, loyalty.army: 0.04}
+  on_timeout: {text: "Half the guards walked off the job.", service.defense: -0.1, loyalty.army: -0.06}
+  options:
+    - {id: sell_crown_jewels, label: "Sell some crown jewels", cost_pc: -8, ends: true, effects: {loyalty: 0.02}, text: "The king sold three crown jewels. He kept the big one."}
+    - {id: war_tax, label: "A special tax on the guilds", cost_pc: -5, ends: true, effects: {mood.guilds: -0.08, loyalty.guilds: -0.08}, text: "The king slapped an emergency tax on the guilds."}
+
+# ---- season 2: the rival crown of Varn
+- id: varn_envoy
+  title: "An envoy from Varn calls Emberfall 'a pig farm with a flag'"
+  scope: city
+  planned_only: true
+  days: 2
+  choices:
+    CLAPBACK: {text: "Emberfall roasted Varn right back. The envoy left red-faced.", mood: 0.04, loyalty: 0.03, next: {event: varn_poaching, in_days: 2}}
+    IGNORE: {text: "Emberfall rose above it. Varn took that as weakness.", mood: -0.02, next: {event: varn_poaching, in_days: 1}}
+  options:
+    - {id: roast, label: "Deliver a royal roast", side: CLAPBACK, cost_pc: 0, text: "The king has prepared a few words for Varn."}
+    - {id: dignity, label: "Stay dignified", side: IGNORE, cost_pc: 0, text: "The king will not dignify that with a response."}
+
+- id: varn_poaching
+  title: "Varn is luring Emberfall's best smiths across the mountains"
+  scope: city
+  planned_only: true
+  days: 3
+  while: {economy: -0.03, mood.guilds: -0.02}
+  commands: {STAY: help, LOYAL: help, DEFECT: hinder}
+  help_needed: 0.5
+  on_help: {text: "The guilds stayed loyal. Varn's gold didn't buy anyone.", mood.guilds: 0.05, loyalty.guilds: 0.04,
+            next: {event: varn_treaty, in_days: 1}}
+  on_timeout: {text: "Dozens of craftsmen left for Varn.", economy: -0.06, loyalty.guilds: -0.05,
+               next: {event: varn_treaty, in_days: 1}}
+  options:
+    - {id: guild_charter, label: "Grant the guilds a royal charter", cost_pc: 3, effects: {progress: 0.3, mood.guilds: 0.04}, text: "The king granted the guilds a royal charter."}
+
+- id: varn_treaty
+  title: "Varn offers a treaty. Sign it, or go to war?"
+  scope: city
+  planned_only: true
+  days: 2
+  choices:
+    PEACE: {text: "The treaty is signed. Trade flows over the mountains.", economy: 0.06, mood.guilds: 0.05, mood.army: -0.04}
+    WAR: {text: "Emberfall declares war on Varn!", mood.army: 0.06, mood.guilds: -0.04, next: {event: varn_war, in_days: 1}}
+  options:
+    - {id: sign, label: "Sign the treaty", side: PEACE, cost_pc: 0, text: "The king is ready to sign."}
+    - {id: tear_up, label: "Tear it up in front of the envoy", side: WAR, cost_pc: 0, text: "The king tore the treaty in half."}
+
+- id: varn_war
+  title: "WAR WITH VARN. Their army marches through the mountain pass."
+  scope: city
+  planned_only: true
+  days: 3
+  champions: army
+  help_needed: 0.6
+  on_start: {mood: -0.05, economy: -0.05}
+  while: {economy: -0.03}
+  commands: {FIGHT: help, AMBUSH: help, FLEE: hinder}
+  on_help: {text: "Varn's army was routed in the pass. Emberfall rules the mountains!", loyalty: 0.12, economy: 0.06, mood.army: 0.1}
+  on_timeout: {text: "Varn took the mountain pass. Emberfall pays tribute now.", loyalty: -0.12, treasury_pc: -10, mood: -0.06}
+  options:
+    - {id: mercenaries, label: "Hire mercenaries", cost_pc: 6, effects: {progress: 0.3}, text: "The king hired every sellsword in the north."}
+    - {id: sue_for_peace, label: "Sue for peace", cost_pc: 5, ends: true, effects: {loyalty.army: -0.1, economy: 0.02}, text: "The king begged Varn for peace. It cost a fortune and his pride."}
+
+# ---- season 2: the dragon
+- id: dragon_sighting
+  title: "A dragon was seen over the mountains near {hold}"
+  scope: hold
+  planned_only: true
+  days: 2
+  on_start: {mood.hold: -0.05}
+  commands: {WATCH: help, FLEE: hinder}
+  help_needed: 0.4
+  on_help: {text: "Lookouts in {hold} tracked the dragon to its lair.", service.defense: 0.04, next: {event: dragon_attack, in_days: 2, hold: same}}
+  on_timeout: {text: "The dragon vanished into the clouds. Nobody knows where it will strike.", mood: -0.03, next: {event: dragon_attack, in_days: 1, hold: same}}
+
+- id: dragon_attack
+  title: "THE DRAGON ATTACKS {hold}!"
+  scope: hold
+  planned_only: true
+  days: 2
+  champions: army
+  help_needed: 0.55
+  on_start: {mood.hold: -0.12, service.food: -0.08, wealth_pc.hold: -60}
+  commands: {FIGHT: help, HIDE: hinder}
+  on_help: {text: "The dragon was driven off with arrows and fire. {resident} landed the shot that wounded it.", loyalty: 0.08, mood.hold: 0.08,
+            next: {event: dragon_bargain, in_days: 2}}
+  on_timeout: {text: "{hold} burned. The dragon flew off with a cow in each claw.", mood.hold: -0.1, loyalty.hold: -0.08,
+               next: {event: dragon_bargain, in_days: 1}}
+  options:
+    - {id: dragonslayer, label: "Hire a famous dragonslayer", cost_pc: 5, effects: {progress: 0.4}, text: "The king hired a dragonslayer. He has only one eye, which is a good sign."}
+
+- id: dragon_bargain
+  title: "The dragon demands a tribute of gold. SLAY it, or PAY it?"
+  scope: city
+  planned_only: true
+  days: 2
+  choices:
+    SLAY: {text: "Emberfall marches on the dragon's lair. Legends are made today.", mood.army: 0.06, treasury_pc: -3, loyalty: 0.05}
+    PAY: {text: "The dragon got its gold and went to sleep. For now.", treasury_pc: -8, mood: 0.03}
+  options:
+    - {id: slay, label: "The crown will slay the beast", side: SLAY, cost_pc: 0, text: "The king swears the dragon dies."}
+    - {id: pay, label: "Pay the dragon", side: PAY, cost_pc: 0, text: "The king would rather pay than burn."}

@@ -1,23 +1,23 @@
-"""Command line.
+"""Command line. `./kingdom ...` is a shortcut for `.venv/bin/python -m city.run ...`.
 
-TEST CITY - run a whole scenario with a fake audience:
-    python -m city.run test --scenario scenarios/season1.yaml
-    python -m city.run test --scenario scenarios/viral.yaml --mayor llm --days 10
+TEST KINGDOM - run a whole scenario with a fake audience:
+    ./kingdom test --scenario scenarios/season1.yaml              (newest run is always runs/latest)
+    ./kingdom test --scenario scenarios/viral.yaml --king llm --days 10
 
 PLANNING:
-    python -m city.run plan --plan seasons/season1.yaml         the season calendar (what to prep)
-    python -m city.run check                                    validate content, packs and plans
+    ./kingdom plan --plan seasons/season1.yaml         the season calendar (what to prep)
+    ./kingdom check                                    validate content, packs and plans
 
-LIVE CITY - run exactly one day with real inputs:
-    python -m city.run day --state data/live --followers ~/exports/instagram.zip --comments comments.json
-    python -m city.run status --state data/live --user somehandle
+LIVE KINGDOM - run exactly one day with real inputs:
+    ./kingdom day --state data/live --followers ~/exports/instagram.zip --comments comments.json
+    ./kingdom status --state data/live --user somehandle
 
 EVENTS BY HAND (test or live state):
-    python -m city.run event list     --state data/live
-    python -m city.run event start    --state data/live flood --ward Riverside     # tomorrow's post
-    python -m city.run event schedule --state data/live rival_arrives --day 12
-    python -m city.run event end      --state data/live flood
-    python -m city.run event cancel   --state data/live rival_arrives
+    ./kingdom event list     --state runs/latest/state
+    ./kingdom event start    --state runs/latest/state bandits --hold Millbrook     # tomorrow's post
+    ./kingdom event schedule --state runs/latest/state barbarian_scouts --day 12
+    ./kingdom event end      --state runs/latest/state bandits
+    ./kingdom event cancel   --state runs/latest/state barbarian_scouts
 """
 import argparse
 import logging
@@ -40,16 +40,16 @@ def cmd_test(args):
     cfg = config.load()
     cfg.update(scen.get("balance") or {})
     days = args.days or scen.get("days", 30)
-    city = City(cfg, scen.get("city", "New Harbor"), seed=args.seed)
+    city = City(cfg, scen.get("kingdom", scen.get("city", "Emberfall")), seed=args.seed)
     if args.plan or scen.get("plan"):
         plan.attach(city, args.plan or scen["plan"])
     for e in scen.get("events") or []:   # events you schedule by hand in a scenario
-        storyteller.schedule(city, e["event"], e["day"], e.get("ward"), source="scenario")
+        storyteller.schedule(city, e["event"], e["day"], e.get("hold", e.get("ward")), source="scenario")
     audience = FakeAudience(scen, seed=args.seed)
     mayor = make(args.mayor)
     out = Path(args.out or f"runs/{Path(args.scenario).stem}-{int(time.time())}")
     forced = {int(d): load_pack(p) for d, p in (scen.get("packs") or {}).items()}
-    print(f"{'day':>4} {'pop':>7} {'joined':>6} {'approv':>6} {'treasury':>12} {'tax':>5} {'tension':>7}  happenings")
+    print(f"{'day':>4} {'pop':>7} {'joined':>6} {'loyal':>6} {'gold':>12} {'tax':>5} {'tension':>7}  happenings")
     t0 = time.time()
     for _ in range(days):
         d = city.day + 1
@@ -58,18 +58,26 @@ def cmd_test(args):
         comments = audience.comments_on(d, pack, city)
         r = run_day(city, mayor, followers, comments, pack)
         s = r["stats"]
-        what = "; ".join(([f"NEW {e['title']}" for e in r["events_started"]] +
-                          [f"END {e['outcome'][:50]}" for e in r["events_ended"]] + r["sim"]["notes"])[:3])
+        first = [report.headline(r)] if r.get("election") else []
+        what = "; ".join((first + [f"NEW {e['title']}" for e in r["events_started"]] +
+                          [f"END {e['outcome'][:60]}" for e in r["events_ended"]] + r["sim"]["notes"])[:3])
         print(f"{r['day']:>4} {s['population']:>7} {r['joined']:>6} {s['approval']:>6.0%} {s['treasury']:>12,.0f} "
-              f"{s['tax_rate']:>5.0%} {s['tension']:>7.2f}  {what[:110]}")
+              f"{s['tax_rate']:>5.0%} {s['tension']:>7.2f}  {what[:140]}")
         if args.reports:
             report.save(city, r, out / "days")
     city.save(out / "state")
+    latest = out.parent / "latest"
+    try:   # runs/latest always points at the newest run
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        latest.symlink_to(out.name)
+    except OSError:
+        pass
     final = city.history[-1]
-    print(f"\n{days} days in {time.time() - t0:.1f}s · wards: {len(city.wards)} · milestones: {city.milestones}")
-    print(f"final approval {final['approval']:.0%}, treasury ${final['treasury']:,.0f}, "
+    print(f"\n{days} days in {time.time() - t0:.1f}s · holds: {len(city.wards)} · milestones: {city.milestones}")
+    print(f"final loyalty {final['approval']:.0%}, treasury {final['treasury']:,.0f} gold, "
           f"events run: {len(city.event_log)}, projects: {[p['name'] for p in city.projects]}")
-    print(f"saved to {out}  (try: python -m city.run event list --state {out / 'state'})")
+    print(f"saved to {out}  (also {latest})  try: ./kingdom event list --state {latest}/state")
 
 
 def cmd_day(args):
@@ -90,7 +98,7 @@ def cmd_day(args):
 def cmd_status(args):
     city = City.load(Path(args.state), config.load())
     i = city.citizens.index.get(args.user.lstrip("@").lower())
-    print(report.status_card(city, i) if i is not None else "not a resident")
+    print(report.status_card(city, i) if i is not None else "not a subject")
 
 
 def cmd_plan(args):
@@ -128,12 +136,15 @@ def cmd_event(args):
     cat = storyteller.catalog()
     if args.action == "list" and not state:
         for e in cat.values():
-            print(f"{e['id']:<18} {e['title']}  [{', '.join(w.upper() for w in (e.get('commands') or {}))}]")
+            words = e.get("choices") or e.get("commands") or {}
+            kind = "vote" if e.get("choices") else "event"
+            plan_only = " (season plans only)" if e.get("planned_only") else ""
+            print(f"{e['id']:<20} {kind:<5} {e['title']}  [{', '.join(str(w).upper() for w in words)}]{plan_only}")
         return
     city = City.load(state, cfg)
     if args.action == "list":
         print(f"Day {city.day} (season {city.season})")
-        print("Active: " + (", ".join(f"{a['id']} - {a['title']} ({a['days_left']} days, {a['progress']:.0%} helped)"
+        print("Active: " + (", ".join(f"{a['id']} - {a['title']} ({a['days_left']} days left)"
                                       for a in city.events) or "none"))
         print("Scheduled: " + (", ".join(f"{s['event']} on day {s['day']} ({s['source']})"
                                          for s in city.scheduled) or "none"))
@@ -146,13 +157,13 @@ def cmd_event(args):
     if args.id not in cat and args.action in ("start", "schedule"):
         raise SystemExit(f"unknown event '{args.id}'. See: python -m city.run event list")
     if args.action == "start":
-        a = storyteller.start(city, args.id, args.ward, source="you")
+        a = storyteller.start(city, args.id, args.hold, source="you")
         if not a:
             raise SystemExit("couldn't start it (already running?)")
         city.pack = next_pack(city)
         print(f"Started: {a['title']}. It's the subject of the next post: {', '.join(city.pack['commands'])}")
     elif args.action == "schedule":
-        storyteller.schedule(city, args.id, args.day, args.ward, source="you")
+        storyteller.schedule(city, args.id, args.day, args.hold, source="you")
         print(f"Scheduled {args.id} for day {args.day}'s post.")
     elif args.action == "end":
         a = storyteller.end(city, args.id)
@@ -188,19 +199,19 @@ def main():
     t.add_argument("--scenario", required=True)
     t.add_argument("--plan", help="season plan file or folder (overrides the scenario's)")
     t.add_argument("--days", type=int)
-    t.add_argument("--mayor", default="rules", choices=["rules", "llm"])
+    t.add_argument("--king", "--mayor", dest="mayor", default="rules", choices=["rules", "llm"])
     t.add_argument("--seed", type=int, default=1)
     t.add_argument("--out")
     t.add_argument("--reports", action="store_true", help="write a report + episode script for every day")
     d = sub.add_parser("day", help="run one real day")
     d.add_argument("--state", required=True)
-    d.add_argument("--name", default="New Harbor")
+    d.add_argument("--name", default="Emberfall")
     d.add_argument("--plan", help="attach a season plan (only needed once)")
     d.add_argument("--followers")
     d.add_argument("--comments")
     d.add_argument("--pack")
-    d.add_argument("--mayor", default="llm", choices=["rules", "llm"])
-    s = sub.add_parser("status", help="print a citizen card")
+    d.add_argument("--king", "--mayor", dest="mayor", default="llm", choices=["rules", "llm"])
+    s = sub.add_parser("status", help="print a subject card")
     s.add_argument("--state", required=True)
     s.add_argument("--user", required=True)
     pl = sub.add_parser("plan", help="show a season's calendar")
@@ -211,7 +222,7 @@ def main():
     e.add_argument("action", choices=["list", "start", "schedule", "end", "cancel"])
     e.add_argument("id", nargs="?")
     e.add_argument("--state")
-    e.add_argument("--ward")
+    e.add_argument("--hold", "--ward", dest="hold")
     e.add_argument("--day", type=int)
     c = sub.add_parser("check", help="validate events, projects, milestones, packs and plans")
     c.add_argument("--plan", default="seasons")

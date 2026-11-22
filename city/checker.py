@@ -15,9 +15,9 @@ from .effects import COMMAND_EFFECTS
 from .model import SERVICES, WARD_TRAITS
 from .roles import FACTIONS
 
-EFFECT_HEADS = {"treasury", "treasury_pc", "economy", "service", "mood", "loyalty", "wealth_pc", "unrest"}
-TARGETS = {"", "all", "ward", *FACTIONS}
-PLACEHOLDERS = {"ward", "councilor", "resident"}
+EFFECT_HEADS = {"treasury", "treasury_pc", "economy", "service", "mood", "loyalty", "wealth_pc", "unrest", "depose"}
+TARGETS = {"", "all", "ward", "hold", *FACTIONS}
+PLACEHOLDERS = {"ward", "councilor", "resident", "hold", "lord"}
 STAT_NAMES = {"pop", "approval", "treasury", "tax", "economy", "day", "season", "season_day", "unrest", "has",
               "happened", "result", "active", "built", "min", "max", "and", "or", "not", "None", "True", "False",
               "helped", "timed_out", "mayor"} | {f"q_{s}" for s in SERVICES} | {f"faction_{f}" for f in FACTIONS}
@@ -31,7 +31,7 @@ def _yaml(path, problems):
         return None
 
 
-def _effects(where, eff, problems, event_ids=None):
+def _effects(where, eff, problems, event_ids=None, option=False):
     if eff is None:
         return
     if not isinstance(eff, dict):
@@ -47,14 +47,18 @@ def _effects(where, eff, problems, event_ids=None):
                 problems.append(f"{where}: next -> unknown event '{nxt.get('event')}'")
             continue
         head, _, target = k.partition(".")
+        if head == "progress" and option:
+            if not isinstance(v, (int, float)):
+                problems.append(f"{where}: 'progress' should be a number")
+            continue
         if head not in EFFECT_HEADS:
             problems.append(f"{where}: unknown effect '{k}' (known: {', '.join(sorted(EFFECT_HEADS))})")
         elif head == "service" and target not in SERVICES:
             problems.append(f"{where}: '{k}' - service must be one of {SERVICES}")
         elif head in ("mood", "loyalty", "wealth_pc") and target not in TARGETS:
-            problems.append(f"{where}: '{k}' - target must be one of all, ward, {', '.join(FACTIONS)}")
-        elif head == "unrest" and target != "ward":
-            problems.append(f"{where}: '{k}' - use unrest.ward")
+            problems.append(f"{where}: '{k}' - target must be one of all, hold, {', '.join(FACTIONS)}")
+        elif head in ("unrest", "depose") and target not in ("", "ward", "hold"):
+            problems.append(f"{where}: '{k}' - use {head}.hold")
         if not isinstance(v, (int, float)):
             problems.append(f"{where}: '{k}' should be a number, got {v!r}")
 
@@ -67,7 +71,7 @@ def _text(where, text, problems):
         return
     bad = names - PLACEHOLDERS
     if bad:
-        problems.append(f"{where}: unknown placeholder(s) {sorted(bad)} - use {{ward}}, {{councilor}}, {{resident}}")
+        problems.append(f"{where}: unknown placeholder(s) {sorted(bad)} - use {{hold}}, {{lord}}, {{resident}}")
 
 
 def _condition(where, expr, problems):
@@ -95,10 +99,28 @@ def check_events(problems):
             if not e.get(field):
                 problems.append(f"{w}: missing {field}")
         _text(w + " title", e.get("title", ""), problems)
-        if e.get("scope", "city") not in ("city", "ward"):
-            problems.append(f"{w}: scope must be city or ward")
-        if e.get("ward_trait") and e["ward_trait"] not in WARD_TRAITS:
-            problems.append(f"{w}: ward_trait must be one of {sorted(WARD_TRAITS)}")
+        if e.get("scope", "city") not in ("city", "ward", "hold"):
+            problems.append(f"{w}: scope must be city or hold")
+        trait = e.get("hold_trait") or e.get("ward_trait")
+        if trait and trait not in WARD_TRAITS:
+            problems.append(f"{w}: hold_trait must be one of {sorted(WARD_TRAITS)}")
+        if e.get("champions") and e["champions"] not in FACTIONS:
+            problems.append(f"{w}: champions must be one of {FACTIONS}")
+        choices = {str(k).upper(): v for k, v in (e.get("choices") or {}).items()}
+        if choices:
+            if e.get("commands"):
+                problems.append(f"{w}: a decree vote uses choices: - drop commands:")
+            if len(choices) < 2:
+                problems.append(f"{w}: a decree vote needs at least 2 choices")
+            if e.get("days", 3) < 2:
+                problems.append(f"{w}: decree votes need days >= 2, or the king never gets to back a side")
+            for word, out in choices.items():
+                if not re.fullmatch(r"[A-Z]+", word):
+                    problems.append(f"{w}: choice {word!r} should be a single word, letters only")
+                _effects(f"{w} choice {word}", out or {}, problems, idset)
+            for o in e.get("options") or []:
+                if o.get("side") and str(o["side"]).upper() not in choices:
+                    problems.append(f"{w} option {o.get('id')}: side '{o['side']}' isn't one of {sorted(choices)}")
         if not isinstance(e.get("days", 3), int) or e.get("days", 3) < 1:
             problems.append(f"{w}: days must be a whole number >= 1")
         _condition(w + " when", e.get("when"), problems)
@@ -109,7 +131,7 @@ def check_events(problems):
                 problems.append(f"{w}: command {word} must be help or hinder, got {kind!r}")
             if not re.fullmatch(r"[A-Za-z]+", str(word)):
                 problems.append(f"{w}: command {word!r} should be a single word, letters only")
-        if e.get("commands") and not e.get("on_help"):
+        if not choices and e.get("commands") and not e.get("on_help"):
             problems.append(f"{w}: has commands but no on_help - helping would do nothing")
         oids = [o.get("id") for o in e.get("options") or []]
         if len(oids) != len(set(oids)):
@@ -120,7 +142,7 @@ def check_events(problems):
                 problems.append(f"{ow}: options need an id and a label")
             if not isinstance(o.get("cost_pc", 0), (int, float)):
                 problems.append(f"{ow}: cost_pc must be a number")
-            _effects(ow, o.get("effects"), problems, idset)
+            _effects(ow, o.get("effects"), problems, idset, option=True)
             if o.get("text"):
                 _text(ow, o["text"], problems)
             if o.get("next"):
@@ -136,6 +158,7 @@ def check_all(plan_path="seasons"):
     for m in milestones:
         if not m.get("id") or not isinstance(m.get("pop"), int) or not m.get("title"):
             problems.append(f"milestones.yaml [{m.get('id', '?')}]: needs id, pop (number) and title")
+        _condition(f"milestones.yaml [{m.get('id', '?')}] silent_if", m.get("silent_if"), problems)
     projects = _yaml(CONTENT / "projects.yaml", problems) or []
     for p in projects:
         w = f"projects.yaml [{p.get('id', '?')}]"

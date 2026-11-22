@@ -1,8 +1,0 @@
-# A war post. Effects: event.help / event.hinder count toward the named event.
-post: river-war
-window_hours: 24
-event: rival_war
-commands:
-  ATTACK: event.help
-  DEFEND: event.help
-  SURRENDER: event.hinder

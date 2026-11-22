@@ -1,23 +1,34 @@
-# SEASON 2 - "The Rival" (outline - fill in after Season 1 shows what people respond to)
-# Port Calder becomes the season's antagonist. Bigger city, bigger stakes.
-title: "The Rival"
-theme: "New Harbor versus Port Calder."
+# SEASON 2 - "The Rival Crown"  (outline - fill in after Season 1 shows what people like)
+# Varn, the kingdom beyond the mountains, becomes the villain. A dragon wakes up.
+# Day numbers are season days (day 1 = the first day of season 2).
+
+title: "The Rival Crown"
+theme: "Emberfall isn't alone anymore."
 storyteller: fill
+
 beats:
   - day: 1
-    announce: "Season 2. The mayor is (still / newly) in charge. Port Calder is watching."
-    note: "Open with the recall result."
-  - day: 4
-    event: rival_poaching
+    announce: "Season 2 begins. Whoever sits on the throne now has a problem: Varn."
+    note: "Open on the Reckoning result. New ruler? Introduce them."
+
+  - day: 3
+    event: varn_envoy
+    agenda: "Varn's envoy insulted Emberfall in front of the whole court."
+    note: "Starts the Varn arc: envoy (vote) -> poaching -> treaty vote PEACE or WAR -> maybe war."
+
   - day: 12
-    if: "not happened('rival_war')"
-    event: rival_war
-    else: {event: rival_truce}
-    note: "War episode: ATTACK / DEFEND / SURRENDER."
+    event: dragon_sighting
+    note: "The dragon arc: sighting -> attack on a hold -> SLAY or PAY vote."
+
   - day: 20
-    event: councilor_scandal
+    if: "result('varn_treaty') == 'PEACE'"
+    event: merchant_caravan
+    else: {event: bandits}
+
   - day: 28
-    event: town_hall
+    event: royal_audience
+    announce: "The Reckoning is in 2 days."
+
   - day: 30
-    pack: packs/recall.yaml
-    announce: "SEASON 2 FINALE: KEEP or RECALL?"
+    pack: packs/reckoning.yaml
+    announce: "THE RECKONING: KNEEL or REVOLT."

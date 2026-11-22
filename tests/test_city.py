@@ -12,7 +12,7 @@ from city.sources.instagram_export import read_followers
 
 def test_parse_latest_command_wins_and_status():
     pack = default_pack()
-    comments = [{"username": "a", "text": "PROTEST!", "timestamp": 1},
+    comments = [{"username": "a", "text": "GRUMBLE!", "timestamp": 1},
                 {"username": "a", "text": "ok fine, work", "timestamp": 2},
                 {"username": "b", "text": "STATUS please", "timestamp": 3},
                 {"username": "c", "text": "move in", "timestamp": 4},
@@ -76,46 +76,129 @@ def _city_with(n=60):
 def test_schedule_starts_event_for_that_days_post():
     from city import storyteller
     city = _city_with()
-    storyteller.schedule(city, "heatwave", city.day + 2)
+    storyteller.schedule(city, "bandits", city.day + 2)
     run_day(city, RuleMayor(), [], [])                   # end of this day -> starts for tomorrow's post
-    assert any(e["id"] == "heatwave" for e in city.events)
-    assert "COOL" in city.pack["commands"]
+    assert any(e["id"] == "bandits" for e in city.events)
+    assert "HUNT" in city.pack["commands"]
 
 
 def test_follow_up_chain():
     from city import storyteller
     city = _city_with()
-    a = storyteller.start(city, "rival_arrives")
+    a = storyteller.start(city, "barbarian_scouts")
     a["days_left"] = 1                                   # make it time out today
     run_day(city, RuleMayor(), [], [])
-    assert any(s["event"] == "rival_poaching" for s in city.scheduled)
+    assert any(e["id"] == "barbarian_raid" for e in city.events) or \
+        any(s["event"] == "barbarian_raid" for s in city.scheduled)
 
 
 def test_plan_beats_and_conditions(tmp_path):
     from city import plan
     f = tmp_path / "plan.yaml"
     f.write_text("storyteller: off\nbeats:\n"
-                 "  - {day: 1, event: grand_opening}\n"
-                 "  - {day: 3, if: 'pop > 100000', event: tech_hq, else: {event: heatwave}}\n")
+                 "  - {day: 1, event: coronation}\n"
+                 "  - {day: 3, if: 'pop > 100000', event: tournament, else: {event: comet}}\n")
     city = City(config.load())
     plan.attach(city, f)
     from city.day import pack_for_today
     p = pack_for_today(city)
-    assert "CELEBRATE" in p["commands"]
+    assert "KNEEL" in p["commands"]
     for _ in range(2):
         run_day(city, RuleMayor(), [f"u{i}" for i in range(50)], [])
-    assert any(e["id"] == "heatwave" for e in city.events)   # condition false -> else branch
+    assert any(e["id"] == "comet" for e in city.events)   # condition false -> else branch
 
 
 def test_placeholders_use_real_handles():
     from city import storyteller
     city = _city_with()
     city.wards[0]["councilor"] = 0
-    a = storyteller.start(city, "councilor_scandal", city.wards[0]["name"])
-    assert a["title"].startswith("Leaked texts: @" + city.citizens.handles[0])
+    a = storyteller.start(city, "court_treason", city.wards[0]["name"])
+    assert a["title"].startswith("Treason! Lord @" + city.citizens.handles[0])
 
 
 def test_content_checks_clean():
     from city.checker import check_all
     problems, _ = check_all("seasons")
     assert problems == []
+
+
+def test_become_job_changes_trade_and_faction():
+    city = _city_with()
+    run_day(city, RuleMayor(), [], [{"username": "u1", "text": "become a blacksmith!", "timestamp": 1},
+                                    {"username": "u2", "text": "BECOME SOLDIERS", "timestamp": 2},
+                                    {"username": "u3", "text": "become king", "timestamp": 3}])
+    c = city.citizens
+    from city.roles import JOB_NAMES
+    assert JOB_NAMES[int(c.job[c.index["u1"]])] == "blacksmith"
+    assert JOB_NAMES[int(c.job[c.index["u2"]])] == "soldier"
+    assert "Peasant" in report_card(city, "u3") or "Freeman" in report_card(city, "u3")
+
+
+def report_card(city, user):
+    from city.report import status_card
+    return status_card(city, city.citizens.index[user])
+
+
+def test_king_cannot_answer_before_the_crowd():
+    """Events started tonight can't be settled by the king tonight - the post comes first."""
+    from city import storyteller
+    city = _city_with()
+    storyteller.schedule(city, "bandits", city.day + 1)
+    run_day(city, RuleMayor(), [], [])
+    a = next(e for e in city.events if e["id"] == "bandits")
+    assert a.get("option") is None and not storyteller.can_respond(city, a)
+    assert storyteller.choose_option(city, a, "send_guards") is None
+    run_day(city, RuleMayor(), [], [])                   # after one post, the king may respond
+    assert storyteller.can_respond(city, a) or a.get("option") or a not in city.events
+
+
+def test_decree_vote_crowd_wins_and_king_can_overrule():
+    from city import storyteller
+    from city.packs import from_event
+    for side, expect in ((None, "GRANARY"), ("back_walls", "WALLS")):
+        city = _city_with()
+        storyteller.start(city, "first_decree")
+        city.pack = from_event({**storyteller.catalog()["first_decree"], "id": "first_decree"})
+        assert set(city.pack["commands"]) == {"WALLS", "GRANARY"}
+        votes = [{"username": f"u{i}", "text": "GRANARY" if i < 40 else "WALLS", "timestamp": i} for i in range(50)]
+        run_day(city, _Fixed(side), [], votes)
+        before = city.approval()
+        run_day(city, _Fixed(side), [], votes)
+        done = next(e for e in city.event_log if e["id"] == "first_decree")
+        assert done["result"] == expect
+        if side:
+            assert "overruled" in done["outcome"] and city.approval() < before
+
+
+class _Fixed(RuleMayor):
+    """Rules king that backs a fixed side on the decree (or nothing)."""
+    def __init__(self, option):
+        self.option = option
+
+    def decide(self, city):
+        d = super().decide(city)
+        d["event_choices"] = [{"event_id": "first_decree", "option_id": self.option, "why": ""}] if self.option else []
+        return d
+
+
+def test_barbarian_war_chain_runs_itself():
+    from city import storyteller
+    city = _city_with(120)
+    storyteller.start(city, "barbarian_scouts")
+    seen = set()
+    for _ in range(9):
+        run_day(city, RuleMayor(), [], [])
+        seen |= {e["id"] for e in city.events} | {e["id"] for e in city.event_log}
+    assert {"barbarian_scouts", "barbarian_raid", "barbarian_horde"} <= seen
+
+
+def test_milestone_silent_when_story_already_introduced_it():
+    from city import storyteller
+    city = _city_with(10)
+    storyteller.start(city, "varn_envoy")
+    r = run_day(city, RuleMayor(), [f"x{i}" for i in range(320)], [])
+    assert "rival" in city.milestones
+    assert not any("Rival Crown" in n for n in r["sim"]["notes"])   # unlocked quietly: the story already did it
+    city2 = _city_with(10)
+    r2 = run_day(city2, RuleMayor(), [f"x{i}" for i in range(320)], [])
+    assert any("Rival Crown" in n for n in r2["sim"]["notes"])      # ...but announced when it didn't

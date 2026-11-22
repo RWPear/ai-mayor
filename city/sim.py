@@ -1,14 +1,14 @@
-"""One simulated day for every citizen, all vectorised.
+"""One simulated day for every subject, all vectorised.
 
-Order: income -> taxes -> city spending -> services -> moods -> approval ->
-activism/unrest -> protests/riots -> people moving away -> projects ->
-milestones -> councilors -> petitions.
+Order: income -> taxes -> crown spending -> services -> moods -> loyalty ->
+activism/unrest -> angry crowds/riots -> people leaving -> projects ->
+milestones -> lords -> petitions.
 """
 import numpy as np
 
 from . import effects
 from .model import FACTION_WANTS, SERVICES, TAX_PAIN, load_yaml
-from .roles import FACTIONS, FACTION_LABEL
+from .roles import FACTIONS, FACTION_LABEL, the
 
 MILESTONES = None
 PROJECTS = None
@@ -45,17 +45,17 @@ def simulate(city, ctx):
 
     # ---------------------------------------------------------------- economy & income
     share = lambda flag: float(f[flag][a].mean()) if n_active else 0.0
-    city.economy += (1.0 + 0.15 * (city.quality["transit"] - 0.8) - city.economy) * 0.08  # drifts to its base
+    city.economy += (1.0 + 0.15 * (city.quality["roads"] - 0.8) - city.economy) * 0.08  # drifts to its base
     economy = float(np.clip(city.economy + ctx.economy_offset + 0.6 * share("shop") - 0.8 * share("strike")
                             + 0.2 * share("work"), 0.3, 2.0))
     income = c.wage() * economy * np.where(f["work"], 1.25, 1.0) * np.where(f["strike"], 0.0, 1.0)
-    business = c.faction == FACTIONS.index("business")
+    business = c.faction == FACTIONS.index("guilds")
     income = income * np.where(business, 0.85 + 0.6 * share("shop") + 0.15 * (economy - 1), 1.0)
     income = np.where(a, income, 0).astype(np.float32)
 
     revenue = float(income.sum() * city.tax_rate)
     spending = revenue * city.spend_ratio
-    cost_of_living = cfg["cost_of_living"] * (1.35 - 0.35 * city.quality["housing"])
+    cost_of_living = cfg["cost_of_living"] * (1.35 - 0.35 * city.quality["food"])
     shop_spend = np.where(f["shop"], 30.0, 0.0)
     donate = np.where(f["donate"] & (c.wealth > 60), 50.0, 0.0)
     c.wealth += np.where(a, income * (1 - city.tax_rate) - cost_of_living - shop_spend - donate, 0).astype(np.float32)
@@ -70,7 +70,8 @@ def simulate(city, ctx):
         funded = spending * city.budget.get(s, 0.25) / (pop * cfg["service_cost_per_capita"])
         goal = min(1.5, funded ** 0.8)
         city.quality[s] += (goal - city.quality[s]) * cfg["service_drift"]
-    city.quality["culture"] = min(1.5, city.quality["culture"] + 0.15 * share("volunteer"))
+    city.quality["festivals"] = min(1.5, city.quality["festivals"] + 0.15 * share("volunteer"))
+    city.quality["defense"] = min(1.5, city.quality["defense"] + 0.15 * share("train"))
 
     # ---------------------------------------------------------------- mood
     ward_mod = np.zeros((len(city.wards), len(SERVICES)), np.float32)
@@ -86,13 +87,15 @@ def simulate(city, ctx):
     wealth_term = 0.15 * np.tanh((c.wealth - 500) / 1500)
     afford = income * (1 - city.tax_rate) - cost_of_living
     afford_term = 0.08 * np.tanh(afford / 60)
-    cmd_term = 0.03 * f["protest"] + 0.04 * f["volunteer"] + 0.02 * f["shop"] - 0.01 * f["work"]
+    cmd_term = 0.03 * f["protest"] + 0.04 * f["volunteer"] + 0.02 * f["shop"] - 0.01 * f["work"] + 0.01 * f["train"]
+    # an empty treasury hurts: guards unpaid, roads rotting, the king borrowing from moneylenders
+    debt_term = -cfg["debt_mood"] * min(1.0, max(0.0, -city.treasury) / (n_active * 15)) if city.treasury < 0 else 0.0
     unrest = np.array([w["unrest"] for w in city.wards], np.float32)[c.ward]
     target = np.clip(0.55 + cfg["service_weight"] * service_term + tax_term + wealth_term + afford_term + cmd_term
-                     - 0.15 * unrest + c.temper + ctx.mood_offset, 0, 1)
+                     - 0.15 * unrest + c.temper + ctx.mood_offset + debt_term, 0, 1)
     c.mood = np.where(a, c.mood + (target - c.mood) * cfg["mood_drift"], c.mood).astype(np.float32)
 
-    # ---------------------------------------------------------------- approval of the mayor
+    # ---------------------------------------------------------------- loyalty to the king
     nudge = (0.05 * f["support"] - 0.05 * f["oppose"] - 0.03 * (f["protest"] | f["strike"])
              - cfg["approval_fatigue"])
     c.loyalty = np.where(a, np.clip(c.loyalty + (c.mood - c.loyalty) * cfg["loyalty_drift"] + nudge, 0, 1),
@@ -111,30 +114,35 @@ def simulate(city, ctx):
         w["unrest"] = float(np.clip(0.7 * w["unrest"] + 0.3 * (c.activism[m].mean() + max(0, 0.5 - c.mood[m].mean())),
                                     0, 1))
         if protesting >= cfg["protest_share"] or w["unrest"] > 0.55:
-            riot = w["unrest"] > cfg["riot_unrest"] and city.quality["safety"] < 0.8
+            riot = w["unrest"] > cfg["riot_unrest"] and city.quality["defense"] < 0.8
             w["protest"] = 2 if riot else 1
             # protests drag on everyone nearby: approval drops, shops lose business
             c.loyalty[m] = np.clip(c.loyalty[m] - cfg["protest_contagion"] * (2 if riot else 1), 0, 1)
             city.economy = max(0.4, city.economy - 0.01 * (2 if riot else 1))
             if riot:
-                effects.apply(city, {"wealth_pc.business": -40, "mood": -0.04, "loyalty.ward": -0.05}, wi)
-                city.quality["safety"] = max(0, city.quality["safety"] - 0.04)
-                report["notes"].append(f"Riot in {w['name']}! Shop windows smashed.")
+                effects.apply(city, {"wealth_pc.guilds": -40, "mood": -0.04, "loyalty.ward": -0.05}, wi)
+                city.quality["defense"] = max(0, city.quality["defense"] - 0.04)
+                report["notes"].append(f"Riot in {w['name']}! Market stalls smashed and torches lit.")
             else:
-                report["notes"].append(f"Street protest in {w['name']} ({int(protesting * 100)}% of residents out).")
+                report["notes"].append(f"An angry crowd gathers in {w['name']} ({int(protesting * 100)}% of the hold "
+                                       f"is out).")
 
     protesting_wards = sum(1 for w in city.wards if w["protest"])
     if len(city.wards) > 1 and protesting_wards >= max(2, len(city.wards) / 2):
-        report["notes"].insert(0, f"City-wide protests: {protesting_wards} of {len(city.wards)} wards in the streets!")
+        report["notes"].insert(0, f"Unrest across the kingdom: {protesting_wards} of {len(city.wards)} holds "
+                                  f"in the streets!")
 
     # ---------------------------------------------------------------- moving away
     c.low_days = np.where(a & (c.mood < cfg["leave_mood"]), c.low_days + 1, 0).astype(np.int16)
     leaving = np.where(a & (c.low_days >= cfg["leave_days"]))[0]
     for i in leaving:
         c.status[i] = 1
-        c.log(i, city.day, "gave up and moved away")
+        c.log(i, city.day, "gave up and left the kingdom")
     if len(leaving):
-        report["notes"].append(f"{len(leaving)} residents gave up on the city and moved away.")
+        report["notes"].append(f"{len(leaving)} subjects packed up and left the kingdom.")
+    if city.treasury < 0 and city.day % 3 == 0:
+        report["notes"].append(f"The royal treasury is {-city.treasury:,.0f} gold in debt. The guards grumble "
+                               "about unpaid wages.")
     report["left"] = int(len(leaving))
 
     # ---------------------------------------------------------------- projects
@@ -145,7 +153,7 @@ def simulate(city, ctx):
                 p["status"] = "done"
                 p["finished"] = city.day
                 effects.apply(city, projects_catalog()[p["id"]].get("effects"))
-                report["notes"].append(f"The {p['name']} is finished!")
+                report["notes"].append(f"{the(p['name'])[0].upper()}{the(p['name'])[1:]} is finished!")
 
     # ---------------------------------------------------------------- milestones
     newpop = city.population()
@@ -153,11 +161,16 @@ def simulate(city, ctx):
     for ms in milestones():
         if ms["id"] not in city.milestones and newpop >= ms["pop"]:
             city.milestones.append(ms["id"])
+            # silent_if: the story already introduced this (e.g. the rival showed up in the season plan)
+            from .storyteller import condition_ok
+            if ms.get("silent_if") and condition_ok(city, ms["silent_if"]):
+                continue
             report["unlocked"].append(ms)
             report["notes"].append(f"MILESTONE: {ms['title']} - {ms['text']}")
 
-    # ---------------------------------------------------------------- councilors (after the council unlocks)
-    if "council" in city.milestones and city.day % 7 == 1:
+    # ---------------------------------------------------------------- lords (after the court unlocks)
+    # the king names a lord for each hold every week: its most active, most loyal subject
+    if ("court" in city.milestones or "council" in city.milestones) and city.day % 7 == 1:
         for wi, w in enumerate(city.wards):
             m = np.where(a & (c.ward == wi))[0]
             if len(m):
@@ -165,8 +178,8 @@ def simulate(city, ctx):
                 best = int(m[np.argmax(score)])
                 if w["councilor"] != best:
                     w["councilor"] = best
-                    c.log(best, city.day, f"became councilor of {w['name']}")
-                    report["notes"].append(f"@{c.handles[best]} is the new councilor for {w['name']}.")
+                    c.log(best, city.day, f"was named Lord of {w['name']}")
+                    report["notes"].append(f"The king named @{c.handles[best]} Lord of {w['name']}.")
 
     report["economy"] = round(economy, 3)
     report["revenue"] = round(revenue, 1)
@@ -188,7 +201,7 @@ def petitions(city):
         if mood > 0.55:
             continue
         top = max(FACTION_WANTS[fa], key=lambda s: FACTION_WANTS[fa][s] * (1.2 - city.quality[s]))
-        ask = "lower taxes" if fa == "business" and city.tax_rate > 0.18 else f"better {top}"
+        ask = "lower taxes" if fa == "guilds" and city.tax_rate > 0.18 else f"better {top}"
         signers = np.where(m)[0]
         loud = signers[np.argsort(-c.activism[signers])][:3]
         out.append({"id": f"p{city.day}-{fa}", "faction": fa, "from": FACTION_LABEL[fa], "ask": ask,

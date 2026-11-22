@@ -2,7 +2,7 @@
 post: daily
 window_hours: 24
 commands:
-  WORK: work
-  PROTEST: protest
-  SHOP: shop
-  VOLUNTEER: volunteer
+  WORK: work        # earn more today
+  TRADE: shop       # spend at the market: helps the guilds and the economy
+  TRAIN: train      # drill with the army: better defense
+  GRUMBLE: protest  # complain loudly: angry crowds if enough people do it

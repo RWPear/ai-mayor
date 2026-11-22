@@ -1,9 +1,0 @@
-# Tests a hand-written command pack: day 5's post is the river war.
-city: New Harbor
-days: 12
-start_followers: 400
-growth: {daily: 15}
-engagement: 0.2
-packs:
-  5: packs/river_war.yaml
-  6: packs/river_war.yaml

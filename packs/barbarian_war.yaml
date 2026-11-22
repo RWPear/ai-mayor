@@ -1,0 +1,11 @@
+# A hand-written war post. event.help / event.hinder count toward the named event.
+# (Season plans usually build this automatically from the event's own words - use a pack file
+#  when you want different words, or to mix in other commands.)
+post: barbarian-war
+window_hours: 24
+event: barbarian_horde
+commands:
+  FIGHT: event.help
+  FORTIFY: event.help
+  FLEE: event.hinder
+  SURRENDER: event.hinder

@@ -1,20 +1,27 @@
-"""A fake audience for the test city: followers who join over time and comment
+"""A fake audience for the test kingdom: followers who join over time and comment
 on posts in believable patterns, so you can run a whole season in minutes.
 
 People come in archetypes (loyal, worker, activist, shopper, troll). They pick
 from whatever commands the post offers, and they react to how their citizen is
-doing: an unhappy citizen's owner protests, opposes and votes to recall.
-Scenario files can force behaviour ("days 12-18: 60% PROTEST") to stress-test.
+doing: an unhappy subject's owner grumbles, opposes and votes to REVOLT.
+Scenario files can force behaviour ("days 12-18: 60% GRUMBLE") to stress-test.
 """
+import hashlib
 import random
+
+from ..roles import JOB_NAMES
 
 ARCHETYPES = {
     # effect -> weight. Only effects the current pack offers are used.
-    "loyal":    {"support": 4, "work": 3, "volunteer": 3, "event.help": 5, "vote.keep": 8, "shop": 1},
-    "worker":   {"work": 6, "shop": 2, "strike": 2, "event.help": 3, "volunteer": 1, "vote.keep": 3, "vote.recall": 3},
-    "activist": {"protest": 5, "oppose": 3, "strike": 4, "event.help": 4, "volunteer": 2, "vote.recall": 6},
-    "shopper":  {"shop": 6, "work": 2, "event.help": 2, "donate": 1, "vote.keep": 3, "vote.recall": 2},
-    "troll":    {"event.hinder": 5, "oppose": 3, "protest": 2, "leave": 1, "vote.recall": 4},
+    "loyal":    {"support": 4, "work": 3, "volunteer": 3, "train": 3, "event.help": 5, "event.choice": 5,
+                 "vote.keep": 8, "shop": 1},
+    "worker":   {"work": 6, "shop": 2, "strike": 2, "train": 1, "event.help": 3, "event.choice": 4, "volunteer": 1,
+                 "vote.keep": 3, "vote.recall": 3},
+    "activist": {"protest": 5, "oppose": 3, "strike": 4, "event.help": 4, "event.choice": 5, "volunteer": 2,
+                 "vote.recall": 6},
+    "shopper":  {"shop": 6, "work": 2, "event.help": 2, "event.choice": 3, "donate": 1, "vote.keep": 3,
+                 "vote.recall": 2},
+    "troll":    {"event.hinder": 5, "oppose": 3, "protest": 2, "event.choice": 3, "leave": 1, "vote.recall": 4},
 }
 UNHAPPY = {"protest": 6, "oppose": 4, "strike": 3, "vote.recall": 8, "event.hinder": 1}
 FIRST = ["alex", "sam", "jordan", "taylor", "casey", "riley", "morgan", "jamie", "drew", "quinn", "avery", "rowan",
@@ -86,13 +93,22 @@ class FakeAudience:
                 options = [(e, wt) for e, wt in prefs.items() if e in words_by_effect]
                 if options:
                     eff = self.rng.choices([e for e, _ in options], [w for _, w in options])[0]
-                    word = self.rng.choice(words_by_effect[eff])
+                    ws = words_by_effect[eff]
+                    if eff == "event.choice":   # each decree has a favourite, so votes aren't a coin flip
+                        bias = [1 + (int(hashlib.md5(f"{day}{w}".encode()).hexdigest(), 16) % 100) / 40 for w in ws]
+                        word = self.rng.choices(ws, bias)[0]
+                    else:
+                        word = self.rng.choice(ws)
             if self.rng.random() < 0.04:
                 out.append({"username": h, "text": "STATUS", "timestamp": ts})
+            war = "FIGHT" in pack["commands"]
+            if self.rng.random() < (0.06 if war else 0.015):
+                job = "soldier" if war else self.rng.choice(JOB_NAMES)
+                out.append({"username": h, "text": f"BECOME {job.upper()}", "timestamp": ts})
             if word is None:
                 if self.rng.random() < 0.3:
                     out.append({"username": h, "text": self.rng.choice(["first", "love this", "who runs this",
-                                                                         "mayor is sus"]), "timestamp": ts})
+                                                                         "the king is sus"]), "timestamp": ts})
                 continue
             out.append({"username": h, "text": word.lower() if self.rng.random() < 0.2 else word
                         + self.rng.choice(FLAVOR), "timestamp": ts})

@@ -1,6 +1,0 @@
-# Season finale.
-post: recall-vote
-window_hours: 24
-commands:
-  KEEP: vote.keep
-  RECALL: vote.recall

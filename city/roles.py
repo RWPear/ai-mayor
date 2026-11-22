@@ -1,29 +1,51 @@
-"""Who citizens are. A new citizen's job comes from their handle (same handle,
-same job, every time), and their title comes from what they actually do:
-comment PROTEST a lot and you become known as an Organizer.
+"""Who subjects are.
+
+A new subject's job comes from their handle (same handle, same job, every time),
+so following is enough to get a life in the kingdom. Anyone can change job by
+commenting BECOME <JOB> (e.g. "BECOME BLACKSMITH") on any post.
+
+Rank is earned by deeds: Peasant -> Freeman -> Squire -> Knight. Lords are
+appointed by the king (one per hold). Epithets come from what you actually do:
+grumble a lot and you become "the Grumbler".
 """
 import hashlib
 
-# job -> (faction, base daily wage)
+# job -> (faction, base daily wage in gold)
 JOBS = {
-    "nurse": ("labor", 150), "barista": ("labor", 95), "teacher": ("labor", 135),
-    "mechanic": ("labor", 130), "delivery driver": ("labor", 100), "electrician": ("labor", 155),
-    "line cook": ("labor", 95), "bus driver": ("labor", 120), "warehouse worker": ("labor", 105),
-    "software dev": ("business", 240), "shop owner": ("business", 170), "realtor": ("business", 180),
-    "food truck owner": ("business", 140), "accountant": ("business", 175), "startup founder": ("business", 150),
-    "student": ("residents", 40), "retiree": ("residents", 80), "artist": ("residents", 75),
-    "stay-at-home parent": ("residents", 50), "musician": ("residents", 70), "librarian": ("residents", 110),
+    # commoners: the people who keep everyone fed
+    "farmer": ("commoners", 110), "fisher": ("commoners", 100), "miner": ("commoners", 140),
+    "woodcutter": ("commoners", 105), "miller": ("commoners", 120), "shepherd": ("commoners", 90),
+    "bard": ("commoners", 70),
+    # guilds: crafts and trade
+    "blacksmith": ("guilds", 170), "merchant": ("guilds", 210), "mason": ("guilds", 160),
+    "innkeeper": ("guilds", 150), "alchemist": ("guilds", 190), "tailor": ("guilds", 130),
+    "baker": ("guilds", 125),
+    # army: the crown's swords
+    "soldier": ("army", 120), "archer": ("army", 125), "guard": ("army", 115), "scout": ("army", 110),
+    "sailor": ("army", 105),
 }
 JOB_NAMES = list(JOBS)
-FACTIONS = ["labor", "business", "residents"]
-FACTION_LABEL = {"labor": "Workers", "business": "Business", "residents": "Residents"}
+FACTIONS = ["commoners", "guilds", "army"]
+FACTION_LABEL = {"commoners": "Commoners", "guilds": "Guilds", "army": "Army"}
 
-FIRST = ["Dana", "Marcus", "Priya", "Leo", "Ava", "Jamal", "Rosa", "Theo", "Mei", "Owen", "Zara", "Eli",
-         "Nina", "Caleb", "Iris", "Mateo", "June", "Arjun", "Hana", "Felix", "Lena", "Omar", "Ruby", "Sam",
-         "Tessa", "Victor", "Wren", "Yusuf", "Chloe", "Diego", "Freya", "Gus", "Ines", "Kofi", "Luz", "Nico"]
-LAST = ["Ruiz", "Okafor", "Patel", "Novak", "Kim", "Brennan", "Haddad", "Silva", "Lindqvist", "Moreau",
-        "Tanaka", "Walsh", "Adeyemi", "Kowalski", "Reyes", "Fischer", "Nakamura", "O'Neil", "Varga", "Duarte",
-        "Ahmed", "Becker", "Costa", "Dube", "Engel", "Farrow", "Grant", "Ibarra", "Jensen", "Kaur"]
+FIRST = ["Aldo", "Brienne", "Cedric", "Dara", "Edric", "Freya", "Gareth", "Hilde", "Ivo", "Jora", "Kael",
+         "Lyra", "Magnus", "Nell", "Osric", "Petra", "Quill", "Rowena", "Soren", "Tamsin", "Ulric", "Vera",
+         "Wynn", "Yara", "Zeke", "Ansel", "Bryn", "Cora", "Dmitri", "Elspeth", "Fenn", "Greta", "Halvard",
+         "Isolde", "Jasper", "Kira", "Leif", "Maren", "Nadia", "Oona"]
+LAST = ["Ashdown", "Blackwood", "Coldbrook", "Dunmore", "Emberly", "Fairweather", "Greyhame", "Hollowell",
+        "Ironside", "Juniper", "Kettleby", "Longstride", "Marsh", "Northwood", "Oakheart", "Pennywhistle",
+        "Quickwater", "Redfern", "Stonebridge", "Thistle", "Underhill", "Vance", "Whitlock", "Yarrow",
+        "Brightwater", "Crowley", "Dawson", "Elmsworth", "Foxglove", "Goodbarrow"]
+
+
+def a_job(job):
+    """'a blacksmith', 'an innkeeper'."""
+    return ("an " if job[0] in "aeiou" else "a ") + job
+
+
+def the(name):
+    """'the Royal Granary', but 'The Crown & Tankard' stays as it is."""
+    return name if name.lower().startswith("the ") else f"the {name}"
 
 
 def _h(handle, salt=""):
@@ -31,18 +53,42 @@ def _h(handle, salt=""):
 
 
 def identity(handle):
-    """Name and job for a new citizen, stable for the same handle."""
+    """Name and job for a new subject, stable for the same handle."""
     h = _h(handle)
     name = f"{FIRST[h % len(FIRST)]} {LAST[(h // 97) % len(LAST)]}"
     job = JOB_NAMES[(h // 7919) % len(JOB_NAMES)]
     return name, job
 
 
-# titles earned from behaviour: (counter, threshold, title)
+def job_from_word(word):
+    """'BLACKSMITH' / 'blacksmiths' / 'Smith' -> 'blacksmith' (or None)."""
+    w = str(word).strip().lower()
+    if w in JOBS:
+        return w
+    if w.endswith("s") and w[:-1] in JOBS:
+        return w[:-1]
+    aliases = {"smith": "blacksmith", "warrior": "soldier", "fisherman": "fisher",
+               "trader": "merchant", "cook": "baker", "builder": "mason", "hunter": "scout",
+               "musician": "bard", "sailer": "sailor", "lumberjack": "woodcutter"}
+    return aliases.get(w)
+
+
+# ranks earned from deeds: (rank, min actions, min battles)
+RANKS = [("Knight", 25, 3), ("Squire", 12, 0), ("Freeman", 5, 0), ("Peasant", 0, 0)]
+
+
+def rank_for(counts):
+    for rank, actions, battles in RANKS:
+        if counts.get("commands", 0) >= actions and counts.get("battles", 0) >= battles:
+            return rank
+    return "Peasant"
+
+
+# epithets earned from behaviour: (counter, threshold, epithet)
 TITLES = [
-    ("protest", 8, "Organizer"), ("work", 10, "Workhorse"), ("shop", 8, "Big Spender"),
-    ("volunteer", 6, "Neighborhood Hero"), ("donate", 5, "Benefactor"), ("support", 6, "Loyalist"),
-    ("oppose", 6, "Thorn in the Mayor's Side"),
+    ("protest", 8, "the Grumbler"), ("work", 10, "the Tireless"), ("shop", 8, "the Big Spender"),
+    ("volunteer", 6, "the Helpful"), ("donate", 5, "the Generous"), ("support", 6, "the Loyal"),
+    ("oppose", 6, "Thorn in the King's Side"), ("train", 8, "the Drillmaster"), ("battles", 4, "the Brave"),
 ]
 
 

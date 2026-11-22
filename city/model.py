@@ -1,5 +1,9 @@
-"""The city as a whole: money, services, wards, factions, projects, events,
-milestones and history. Saved as one JSON file next to the citizen arrays.
+"""The kingdom as a whole: gold, services, holds, factions, projects, events,
+milestones and history. Saved as one JSON file next to the subject arrays.
+
+Naming note: in the code a hold is still called a "ward" and a lord a
+"councilor" (the engine is theme-neutral). Everything players and content
+authors see says hold and lord; content files may use either word.
 """
 import json
 import random
@@ -11,23 +15,24 @@ import yaml
 from .citizens import Citizens
 from .config import CONTENT
 
-SERVICES = ["safety", "housing", "transit", "culture"]
-SERVICE_LABEL = {"safety": "Public safety", "housing": "Housing", "transit": "Transit", "culture": "Parks & culture"}
+SERVICES = ["defense", "food", "roads", "festivals"]
+SERVICE_LABEL = {"defense": "Walls & guards", "food": "Granaries", "roads": "Roads & trade",
+                 "festivals": "Taverns & festivals"}
 
 # how much each faction cares about each service, and how much taxes hurt them
 FACTION_WANTS = {
-    "labor": {"housing": 0.4, "safety": 0.25, "transit": 0.25, "culture": 0.1},
-    "business": {"transit": 0.4, "safety": 0.35, "housing": 0.1, "culture": 0.15},
-    "residents": {"culture": 0.35, "safety": 0.3, "housing": 0.2, "transit": 0.15},
+    "commoners": {"food": 0.4, "defense": 0.25, "festivals": 0.2, "roads": 0.15},
+    "guilds": {"roads": 0.4, "defense": 0.3, "festivals": 0.15, "food": 0.15},
+    "army": {"defense": 0.45, "food": 0.3, "festivals": 0.15, "roads": 0.1},
 }
-TAX_PAIN = {"labor": 1.0, "business": 1.6, "residents": 0.8}
+TAX_PAIN = {"commoners": 1.0, "guilds": 1.6, "army": 0.8}
 
-WARD_NAMES = ["Riverside", "Old Market", "Northgate", "Brickworks", "Hillcrest", "Union Square", "Lantern Row",
-              "Foundry District", "Elm Park", "Harbor Point", "Copper Hill", "Southside", "Mill Creek",
-              "Ironbridge", "Westfield", "Cedar Heights", "Canal Street", "Signal Yard", "Bellwood", "Kingsway"]
-WARD_TRAITS = {"flood-prone": {"housing": -0.1}, "nightlife": {"culture": 0.15, "safety": -0.1},
-               "historic": {"culture": 0.1, "transit": -0.1}, "industrial": {"housing": -0.05, "transit": 0.1},
-               "leafy": {"culture": 0.1}, "busy": {"transit": 0.1, "safety": -0.05}, "quiet": {"safety": 0.1}}
+WARD_NAMES = ["Millbrook", "Stonehollow", "Ashford", "Thornwick", "Greywater", "Oakridge", "Ravenmoor",
+              "Kettle Hill", "Wolfden", "Saltmarsh", "Highcrag", "Briarwood", "Fenwick", "Ironmere", "Goldfield",
+              "Frostvale", "Duskwood", "Copperhold", "Elderglen", "Kingsreach"]
+WARD_TRAITS = {"frontier": {"defense": -0.12}, "fertile": {"food": 0.15}, "market town": {"roads": 0.1, "defense": -0.05},
+               "mining": {"food": -0.05, "roads": 0.1}, "forest": {"festivals": 0.05, "roads": -0.1},
+               "coastal": {"food": 0.1, "defense": -0.05}, "fortified": {"defense": 0.12}}
 
 
 def load_yaml(name):
@@ -36,7 +41,7 @@ def load_yaml(name):
 
 
 class City:
-    def __init__(self, cfg, name="New Harbor", seed=1):
+    def __init__(self, cfg, name="Emberfall", seed=1):
         self.cfg = cfg
         self.name = name
         self.day = 0
@@ -55,7 +60,7 @@ class City:
         self.milestones = []      # unlocked milestone ids
         self.petitions = []
         self.history = []         # one row of stats per day
-        self.mayor = {"name": "Mayor Vale", "term": 1, "promises": []}
+        self.mayor = {"name": "King Aldric", "term": 1, "promises": []}   # the ruler (AI)
         self.pack = None
         self.scheduled = []       # events queued by you, the season plan, or follow-ups
         self.plan = None          # season plan settings + progress (see city/plan.py)
@@ -68,8 +73,8 @@ class City:
         i = len(self.wards)
         if i < len(WARD_NAMES):
             name = WARD_NAMES[i]
-        else:  # big cities: combine name parts, e.g. "North Copper", "Upper Mill Creek"
-            pre = ["North", "South", "East", "West", "Upper", "Lower", "New", "Old", "Little", "Port"]
+        else:  # big kingdoms: combine name parts, e.g. "North Ashford", "Upper Kettle Hill"
+            pre = ["North", "South", "East", "West", "Upper", "Lower", "New", "Old", "Little", "Far"]
             base = WARD_NAMES[(i - len(WARD_NAMES)) % len(WARD_NAMES)]
             k = (i - len(WARD_NAMES)) // len(WARD_NAMES)
             name = f"{pre[k % len(pre)]} {base}" + (f" {k // len(pre) + 2}" if k >= len(pre) else "")

@@ -1,10 +1,12 @@
-# Things the mayor can build. cost_pc = cost per citizen at the time it starts.
-- {id: garden,    name: "Community Garden",        cost_pc: 6,  days: 3,  unlock: null,      effects: {service.culture: 0.08, mood.residents: 0.04}}
-- {id: substation, name: "Police Substation",      cost_pc: 10, days: 5,  unlock: null,      effects: {service.safety: 0.12, mood.business: 0.03, mood.labor: -0.02}}
-- {id: housing,   name: "Affordable Housing Block", cost_pc: 18, days: 8, unlock: null,      effects: {service.housing: 0.18, mood.labor: 0.06, mood.business: -0.02}}
-- {id: market,    name: "Night Market",            cost_pc: 8,  days: 4,  unlock: null,      effects: {economy: 0.05, mood.business: 0.04, service.culture: 0.04}}
-- {id: brt,       name: "Bus Rapid Line",          cost_pc: 16, days: 7,  unlock: transit,   effects: {service.transit: 0.18, economy: 0.04}}
-- {id: printshop, name: "Ledger Press Building",   cost_pc: 7,  days: 4,  unlock: newspaper, effects: {service.culture: 0.05, loyalty: 0.02}}
-- {id: port,      name: "Harbor Expansion",        cost_pc: 22, days: 10, unlock: rival,     effects: {economy: 0.1, mood.business: 0.06}}
-- {id: stadium,   name: "City Stadium",            cost_pc: 40, days: 15, unlock: stadium,   effects: {economy: 0.08, service.culture: 0.15, mood.residents: 0.05, mood.labor: -0.03}}
-- {id: subway,    name: "Subway Line 1",           cost_pc: 45, days: 20, unlock: subway,    effects: {service.transit: 0.3, economy: 0.08}}
+# Things the king can build. cost_pc = gold per subject at the time it starts. No building on credit.
+- {id: granary,    name: "Royal Granary",        cost_pc: 8,  days: 4,  unlock: null,    effects: {service.food: 0.12, mood.commoners: 0.04}}
+- {id: watchtower, name: "Watchtowers",          cost_pc: 10, days: 5,  unlock: null,    effects: {service.defense: 0.12, mood.army: 0.03}}
+- {id: market,     name: "Market Square",        cost_pc: 8,  days: 4,  unlock: null,    effects: {economy: 0.05, mood.guilds: 0.04, service.festivals: 0.04}}
+- {id: tavern,     name: "The Crown & Tankard",  cost_pc: 6,  days: 3,  unlock: null,    effects: {service.festivals: 0.1, mood: 0.02}}
+- {id: walls,      name: "Stone Walls",          cost_pc: 18, days: 8,  unlock: null,    effects: {service.defense: 0.2, mood.army: 0.04, mood.commoners: 0.02}}
+- {id: statue,     name: "Golden Statue of the King", cost_pc: 14, days: 5, unlock: null, effects: {service.festivals: 0.04, loyalty: -0.03, mood.commoners: -0.03}}
+- {id: road,       name: "The King's Road",      cost_pc: 16, days: 7,  unlock: roads,   effects: {service.roads: 0.18, economy: 0.04}}
+- {id: heraldhall, name: "Herald's Hall",        cost_pc: 7,  days: 4,  unlock: herald,  effects: {service.festivals: 0.05, loyalty: 0.02}}
+- {id: port,       name: "Trading Port",         cost_pc: 22, days: 10, unlock: rival,   effects: {economy: 0.1, mood.guilds: 0.06}}
+- {id: arena,      name: "Tourney Arena",        cost_pc: 40, days: 15, unlock: tourney, effects: {economy: 0.06, service.festivals: 0.15, mood: 0.03}}
+- {id: castle,     name: "Second Castle",        cost_pc: 45, days: 20, unlock: castle,  effects: {service.defense: 0.3, mood.army: 0.06}}

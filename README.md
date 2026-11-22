@@ -1,45 +1,53 @@
-# AI Mayor
+# AI Kingdom  (repo: ai-mayor)
 
-**You live here. Comment to change your city.**
+**You live here. Comment to change the kingdom.**
 
-An AI mayor runs a city whose citizens are real followers. Following moves you
-in. Comments on each post are that day's controls (WORK, PROTEST, SHOP...,
-or ATTACK / DEFEND when there's a war). The mayor has to keep the city happy,
-solvent and in one piece - and at the end of every 30-day season, the people
-vote on whether to recall it.
+An AI king rules Emberfall, a kingdom whose subjects are real followers. Following moves you in and
+gives you a trade. Comments on each post are that day's actions (WORK, TRADE, TRAIN, GRUMBLE..., or
+FIGHT / FORTIFY when the barbarians come, or a decree vote like WALLS vs GRANARY). The king has to keep
+the kingdom fed, defended, solvent and loyal - and at the end of every 30-day season comes the
+Reckoning: the people KNEEL or REVOLT.
 
-- **One brain, many people.** Only the mayor uses a language model (about 2 calls a day). Citizens are
+- **One brain, many people.** Only the king uses a language model (about 2 calls a day). Subjects are
   numpy arrays: 100,000 of them simulate a day in well under a second.
-- **Comments are commands.** Each post gets a *command pack* - 2-4 words and what they do. Change them
-  any time; packs are YAML, no code.
-- **Wards.** Neighbourhoods of up to 500 people, each with its own mood, unrest, protests and an
-  elected councilor. New wards open as the city grows.
-- **A storyteller.** Events (floods, strikes, scandals, a rival city's trade war...) arrive when the city
-  gets too calm, ramping up toward each season's finale.
-- **Milestones** unlock as the city grows (council, transit, newspaper, rival city, stadium, subway...).
-- **STATUS** - anyone can comment STATUS and get a reply card for their citizen. No website needed.
+- **Comments are commands.** Each post gets a *command pack* - 2-4 words and what they do. Packs are
+  YAML, no code. Always available: `STATUS` (your subject card), `JOIN`, and `BECOME <JOB>`.
+- **Roles and ranks.** Commoners, guilds and the army want different things. Soldiers count double in
+  battles. Deeds raise your rank (Peasant -> Freeman -> Squire -> Knight); the king names a Lord for
+  each hold every week.
+- **Decree votes.** The crowd votes; the king can back their pick or overrule them - and pays for it.
+  The king never answers before the crowd has had a post.
+- **Holds.** Regions of up to 500 people, each with its own mood, unrest, angry crowds and a lord.
+  New holds open as the kingdom grows.
+- **A storyteller and season plans.** A planned path through each season (`seasons/`), arcs that branch
+  on what the crowd did (the barbarian war, treason, Varn, the dragon), and random events in between.
+- **STATUS** - comment STATUS and get a card unique to you: name, rank, trade, hold, deeds, battles,
+  how the king sees you, and how close you are to the next rank.
 
 ## Layout
 
 ```
-city/            the engine
+kingdom          shortcut: ./kingdom <command>  ==  .venv/bin/python -m city.run <command>
+city/            the engine (theme-neutral; in the code a hold is a "ward", the king is the "mayor")
   day.py         one day, start to finish (same code for test and live)
-  sim.py         economy, services, moods, protests, projects, milestones, petitions
-  citizens.py    the citizens (numpy arrays)
+  sim.py         economy, services, moods, angry crowds, projects, milestones, lords, petitions
+  citizens.py    the subjects (numpy arrays), ranks, job changes
+  roles.py       trades, factions, ranks, epithets
   packs.py       comment parsing + command packs
-  effects.py     what commands do + declarative city effects
-  storyteller.py events, follow-ups, scheduling and pacing
+  effects.py     what commands do + declarative kingdom effects
+  storyteller.py events, decree votes, follow-ups, scheduling and pacing
   plan.py        season plans (beats, conditions, calendar)
   checker.py     validates content before it runs
-  mayor.py       the AI mayor (Ollama) and the rule-based test mayor
+  mayor.py       the AI king (Ollama) and the rule-based test king
   report.py      daily report, episode script for the video, STATUS cards
   sources/       fake audience (test) and Instagram follower export reader (live)
-content/         events, projects, milestones, mayor persona, balance overrides (all YAML)
+content/         events, projects, milestones, ruler persona, balance overrides (all YAML)
 seasons/         season plans: season1.yaml (written), season2.yaml (outline)
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going)
 packs/           command packs for posts
 scenarios/       test scenarios
-tests/           python -m pytest -q
+tests/           .venv/bin/python -m pytest -q
+chmod +x kingdom          # once: enables the ./kingdom shortcut
 ```
 
 ## Setup (brainbox)
@@ -49,46 +57,46 @@ git clone https://github.com/RWPear/ai-mayor.git ~/ai-mayor-dev
 cd ~/ai-mayor-dev
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest -q
+chmod +x kingdom          # once: enables the ./kingdom shortcut
 ```
 
-## The test city (play with it freely)
+## The test kingdom (play with it freely)
 
-Run a whole season in seconds with a fake audience:
+Run a whole season in seconds with a fake audience. The newest run is always at `runs/latest`.
 
 ```bash
-.venv/bin/python -m city.run test --scenario scenarios/season1.yaml     # Season 1 as planned
-.venv/bin/python -m city.run test --scenario scenarios/baseline.yaml
-.venv/bin/python -m city.run test --scenario scenarios/revolt.yaml      # audience turns on the mayor
-.venv/bin/python -m city.run test --scenario scenarios/collapse.yaml    # worst case
-.venv/bin/python -m city.run test --scenario scenarios/viral.yaml       # 80 -> ~13,000 people
-.venv/bin/python -m city.run test --scenario scenarios/mega.yaml        # 100,000 people
-.venv/bin/python -m city.run test --scenario scenarios/river_war.yaml   # a hand-written war pack
+./kingdom test --scenario scenarios/season1.yaml        # Season 1 as planned
+./kingdom test --scenario scenarios/baseline.yaml
+./kingdom test --scenario scenarios/revolt.yaml         # audience turns on the king
+./kingdom test --scenario scenarios/collapse.yaml       # worst case: should end in a REVOLT
+./kingdom test --scenario scenarios/viral.yaml          # 80 -> ~10,000 people
+./kingdom test --scenario scenarios/mega.yaml           # 100,000 people
+./kingdom test --scenario scenarios/barbarian_war.yaml  # a hand-written war pack
 ```
 
-Add `--mayor llm` to use the real AI mayor (needs Ollama; set `OLLAMA_URL=http://192.168.1.23:11434`),
-and `--reports` to write each day's report, episode script and STATUS replies into `runs/`.
+Add `--king llm` to use the real AI king (needs Ollama; set `OLLAMA_URL=http://192.168.1.23:11434`),
+and `--reports` to write each day's report, episode script and STATUS replies into `runs/latest/days/`.
 
 **Season plans:** `seasons/season1.yaml` is the planned path through Season 1. See it as a calendar with
-`python -m city.run plan --plan seasons/season1.yaml`, and play it out with
-`python -m city.run test --scenario scenarios/season1.yaml`. The big picture is in `docs/SEASONS.md`.
+`./kingdom plan --plan seasons/season1.yaml`. The big picture is in `docs/SEASONS.md`.
 
-**Events:** write them in `content/events.yaml` (guide: `docs/EVENTS.md`), then `python -m city.run check`.
-Start, schedule or end events by hand with `python -m city.run event ...` - works on test runs and the live city.
+**Events:** write them in `content/events.yaml` (guide: `docs/EVENTS.md`), then `./kingdom check`.
+Start, schedule or end events by hand with `./kingdom event ...` - works on test runs and the live kingdom.
 
 **Balancing:** change `content/balance.yaml` (or a scenario's `balance:` block), rerun, compare.
 **New event:** add it to `content/events.yaml`. **New comment words:** write a pack in `packs/`.
 **New kind of effect** (code): add it to `city/effects.py`, test it here first.
 
-## The live city (hands off)
+## The live kingdom (hands off)
 
-The live city runs one day at a time with real inputs:
+The live kingdom runs one day at a time with real inputs:
 
 ```bash
-.venv/bin/python -m city.run day --state data/live \
+./kingdom day --state data/live \
     --followers ~/exports/instagram-export.zip \
     --comments  comments/day-14.json \
     --pack      packs/daily.yaml \
-    --plan      seasons            # only the first time - the city remembers its plan
+    --plan      seasons            # only the first time - the kingdom remembers its plan
 ```
 
 - `--followers`: Instagram's own **Download your information** export (Followers and following, JSON).
@@ -96,13 +104,13 @@ The live city runs one day at a time with real inputs:
   back if they comment.
 - `--comments`: the post's comments as `[{"username", "text", "timestamp"}]`. (Phase 2 fetches these
   from the Instagram API automatically; until then they can be exported by hand.)
-- `--pack`: optional. If left out, the city uses the pack it suggested yesterday (an event's words,
-  the recall vote on the finale, or the daily basics).
+- `--pack`: optional. If left out, the kingdom uses the pack it suggested yesterday (an event's words,
+  the Reckoning on the finale, or the daily basics).
 
 Each day writes `data/live/days/dayNNN.md` (report), `.episode.json` (script for the video) and
 `.replies.json` (STATUS replies to post).
 
-Look up anyone: `.venv/bin/python -m city.run status --state data/live --user somehandle`
+Look up anyone: `./kingdom status --state data/live --user somehandle`
 
 ## Test vs live
 
@@ -123,8 +131,9 @@ then `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` there 
 ## Roadmap
 
 1. **Engine + test city** - this.
-2. **Instagram:** fetch each post's comments and post STATUS replies via the Instagram API
-   (creator/business account + a Meta app), so a day runs with no manual steps.
-3. **Episode video:** episode script -> city timelapse + the mayor's voice (CosyVoice) + captions
+2. **Instagram:** fetch each post's comments via the Instagram API (professional account + a Meta app)
+   and answer STATUS with a *private reply* (a DM to the commenter, once per comment, within 7 days),
+   so a day runs with no manual steps and every card is personal.
+3. **Episode video:** episode script -> kingdom view + the king's voice (CosyVoice) + captions
    (ffmpeg) -> sent to your phone for approval (n8n).
-4. **Public page** (static, on Cloudflare) for anyone who wants their citizen's full story.
+4. **Public page** (static, on Cloudflare) for anyone who wants their subject's full story.

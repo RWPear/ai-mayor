@@ -1,4 +1,4 @@
-"""Every citizen is a row in a set of numpy arrays, so the daily update is a
+"""Every subject (citizen) is a row in a set of numpy arrays, so the daily update is a
 handful of vector operations whether there are 50 people or 100,000.
 No language model ever looks at an individual citizen.
 """
@@ -6,9 +6,10 @@ import json
 
 import numpy as np
 
-from .roles import FACTIONS, JOBS, JOB_NAMES, _h, identity, title_for
+from .roles import FACTIONS, JOBS, JOB_NAMES, _h, a_job, identity, rank_for, title_for
 
-COUNTERS = ["work", "protest", "shop", "volunteer", "donate", "support", "oppose", "commands"]
+COUNTERS = ["work", "protest", "shop", "volunteer", "donate", "support", "oppose", "commands", "train",
+            "battles"]
 ACTIVE, LEFT = 0, 1
 
 
@@ -101,6 +102,19 @@ class Citizens:
     def title(self, i):
         return title_for(self.counts_of(i))
 
+    def rank(self, i):
+        return rank_for(self.counts_of(i))
+
+    def set_job(self, i, job, day):
+        """BECOME <JOB>: a new trade (and maybe a new faction). Returns True if it changed."""
+        j = JOB_NAMES.index(job)
+        if int(self.job[i]) == j:
+            return False
+        self.job[i] = j
+        self.faction[i] = FACTIONS.index(JOBS[job][0])
+        self.log(i, day, f"became {a_job(job)}")
+        return True
+
     # ------------------------------------------------------------------ save / load
     def save(self, path):
         arrays = {k: getattr(self, k) for k in ("job", "faction", "ward", "wealth", "mood", "loyalty", "activism",
@@ -121,7 +135,8 @@ class Citizens:
         for k in ("job", "faction", "ward", "wealth", "mood", "loyalty", "activism", "low_days", "status",
                   "joined", "last_cmd"):
             setattr(c, k, data[k])
-        c.counts = {k: data[f"count_{k}"] for k in COUNTERS}
+        c.counts = {k: (data[f"count_{k}"] if f"count_{k}" in data else np.zeros(len(c.handles), np.int32))
+                    for k in COUNTERS}
         c.temper = data["temper"] if "temper" in data else np.array(
             [(_h(h, "temper") % 1000) / 1000 * 0.3 - 0.15 for h in c.handles], np.float32)
         return c

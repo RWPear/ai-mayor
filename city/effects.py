@@ -1,10 +1,11 @@
 """Two kinds of effects:
 
 1. Command effects - what a comment does to the commenter's citizen (work,
-   protest, shop...). Packs give these comment words; new effects are new
-   functions here (and get tested in the test city before going live).
-2. City effects - the small declarative dictionaries in content/*.yaml used by
-   events, mayor options and projects (e.g. {service.housing: 0.1, mood.labor: -0.03}).
+   grumble, trade, train...). Packs give these comment words; new effects are
+   new functions here (and get tested in the test kingdom before going live).
+2. Kingdom effects - the small declarative dictionaries in content/*.yaml used
+   by events, the king's options and projects (e.g. {service.food: 0.1, mood.commoners: -0.03}).
+   "hold" and "ward" mean the same thing in effect keys (mood.hold == mood.ward).
 """
 import numpy as np
 
@@ -20,11 +21,15 @@ class DayContext:
         n = len(city.citizens)
         self.n = n
         self.flags = {k: np.zeros(n, bool) for k in
-                      ("work", "protest", "shop", "volunteer", "donate", "strike", "support", "oppose")}
+                      ("work", "protest", "shop", "volunteer", "donate", "strike", "support", "oppose",
+                       "train")}
         self.mood_offset = np.zeros(n, np.float32)   # added to today's mood target
         self.economy_offset = 0.0
         self.status_requests = []                    # citizen indexes who asked for their card
-        self.event_votes = {}                        # event id -> {"help": n, "hinder": n}
+        self.event_votes = {}                        # event id -> {"help": n, "hinder": n, "choices": {word: n}}
+        self.helpers = {}                            # event id -> citizen indexes who helped (for battle deeds)
+        self.word = None                             # the comment word being applied right now
+        self.actions = {}                            # username -> comment word, for today's post
         self.election_votes = {"keep": 0, "recall": 0}
         self.notes = []
 
@@ -48,14 +53,29 @@ def status(city, idx, ctx, arg=None):
     ctx.status_requests.extend(int(i) for i in idx)
 
 
+def _votes(ctx, arg):
+    return ctx.event_votes.setdefault(arg or "*", {"help": 0, "hinder": 0, "choices": {}})
+
+
 def event_help(city, idx, ctx, arg=None):
-    v = ctx.event_votes.setdefault(arg or "*", {"help": 0, "hinder": 0})
-    v["help"] += len(idx)
+    """Counts toward the event. If the event has `champions: army`, that faction's help counts extra."""
+    from .storyteller import catalog
+    n = float(len(idx))
+    champ = (catalog().get(arg) or {}).get("champions")
+    if champ in FACTIONS:
+        n += (city.cfg["champion_weight"] - 1) * float((city.citizens.faction[idx] == FACTIONS.index(champ)).sum())
+    _votes(ctx, arg)["help"] += n
+    ctx.helpers.setdefault(arg or "*", []).extend(int(i) for i in idx)
 
 
 def event_hinder(city, idx, ctx, arg=None):
-    v = ctx.event_votes.setdefault(arg or "*", {"help": 0, "hinder": 0})
-    v["hinder"] += len(idx)
+    _votes(ctx, arg)["hinder"] += len(idx)
+
+
+def event_choice(city, idx, ctx, arg=None):
+    """A decree vote: the comment word itself is the vote (WALLS vs GRANARY)."""
+    ch = _votes(ctx, arg)["choices"]
+    ch[ctx.word] = ch.get(ctx.word, 0) + len(idx)
 
 
 def vote_keep(city, idx, ctx, arg=None):
@@ -75,6 +95,7 @@ COMMAND_EFFECTS = {
     "protest": _flag("protest"),
     "shop": _flag("shop"),
     "volunteer": _flag("volunteer"),
+    "train": _flag("train"),
     "donate": _flag("donate"),
     "strike": _flag("strike", "protest"),
     "support": _flag("support"),
@@ -83,6 +104,7 @@ COMMAND_EFFECTS = {
     "status": status,
     "event.help": event_help,
     "event.hinder": event_hinder,
+    "event.choice": event_choice,
     "vote.keep": vote_keep,
     "vote.recall": vote_recall,
 }
@@ -95,7 +117,7 @@ def _members(city, target, ward):
     a = c.active()
     if target in (None, "", "all"):
         return a
-    if target == "ward":
+    if target in ("ward", "hold"):
         return a & (c.ward == ward) if ward is not None else a
     if target in FACTIONS:
         return a & (c.faction == FACTIONS.index(target))
@@ -103,12 +125,12 @@ def _members(city, target, ward):
 
 
 def apply(city, effects, ward=None, ctx=None, daily=False):
-    """Applies a dict like {service.housing: 0.1, mood.labor: -0.03, treasury_pc: -4}.
+    """Applies a dict like {service.food: 0.1, mood.commoners: -0.03, treasury_pc: -4}.
     daily=True means it's an ongoing 'while' effect: mood/economy become today's offsets."""
     c = city.citizens
     pop = max(1, city.population())
     for key, val in (effects or {}).items():
-        if key in ("text",) or val is None:
+        if key in ("text", "next", "progress") or val is None:
             continue
         head, _, target = key.partition(".")
         if head == "treasury_pc":
@@ -134,6 +156,8 @@ def apply(city, effects, ward=None, ctx=None, daily=False):
         elif head == "wealth_pc":
             m = _members(city, target, ward)
             c.wealth[m] += float(val)
+        elif head == "depose" and ward is not None and val:
+            city.wards[ward]["councilor"] = None   # the hold's lord loses the title
         elif head == "unrest" and ward is not None:
             w = city.wards[ward]
             w["unrest"] = float(np.clip(w["unrest"] + float(val), 0, 1))
