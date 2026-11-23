@@ -1,15 +1,32 @@
 // The palette and the hand-painted textures (drawn on canvases at startup - no image files needed).
+// Two looks: "flat" (the default - clean, flat-shaded pastel colours in the spirit of Thronefall: no textures,
+// faceted shapes, warm light) and "textured" (?style=textured: the painted planks, stones and thatch).
 import * as THREE from "three";
 import { rng } from "./noise.js";
 
-export const C = {
+export const STYLE = new URLSearchParams(location.search).get("style") === "textured" ? "textured" : "flat";
+export const FLAT = STYLE === "flat";
+
+const PAINTED = {
   grass: 0x6f9149, grassDry: 0x93a25a, grassDark: 0x4f7337, mud: 0x6b5236, dirt: 0x8a6c47, sand: 0xb59a6c,
   rock: 0x8e8d86, water: 0x3b6f86, plaster: 0xe3d6ba, plaster2: 0xd8c39b, plaster3: 0xcfd2c4, timber: 0x4a3222,
   plank: 0x8c6239, plankDark: 0x6b4a2c, thatch: 0xc7a457, thatchOld: 0x9c8550, stone: 0x9a968c, slate: 0x56606a,
   clay: 0xa95f3b, iron: 0x5d6368, canvas: 0xe0d5b8, gold: 0xe2b448, leaf1: 0x3f7a35, leaf2: 0x5a8f3a, leaf3: 0x2f6131,
   pine: 0x2c5a3a, trunk: 0x5c3d24, crop: 0x8dbb4c, banner: 0x274b8a, fire: 0xffa13d, glass: 0x2a2f33,
-  windowLit: 0xffc977,
+  windowLit: 0xffc977, autumn1: 0xb8862f, autumn2: 0xa5532c, soil: 0x6a4c2e, roofRed: 0x9c4b32,
 };
+// bright, soft and a little toy-like: yellow-green fields, golden thatch, cream walls, turquoise water
+const PASTEL = {
+  grass: 0x8cbf4e, grassDry: 0xb3c95b, grassDark: 0x5f9a45, mud: 0xa98a5c, dirt: 0xd8b67c, sand: 0xe8d39a,
+  rock: 0xaeaab2, water: 0x4db3c6, plaster: 0xf6e4bf, plaster2: 0xf1d6a6, plaster3: 0xeee2c6, timber: 0x6e4a32,
+  plank: 0xb0804f, plankDark: 0x86603d, thatch: 0xe6b65d, thatchOld: 0xc9a05a, stone: 0xc2bcb0, slate: 0x5f80b0,
+  clay: 0xcd6a45, iron: 0x6d747c, canvas: 0xf1e7cf, gold: 0xf2c24e, leaf1: 0x5ea646, leaf2: 0x7fbd4b, leaf3: 0x4b8d40,
+  pine: 0x3f8253, trunk: 0x7d5538, crop: 0xa9d158, banner: 0x3f6fc4, fire: 0xffa13d, glass: 0x3c4a57,
+  windowLit: 0xffd27f, autumn1: 0xeaa53c, autumn2: 0xdb7342, soil: 0x9b6b42, roofRed: 0xc85f3f,
+};
+export const C = FLAT ? PASTEL : PAINTED;
+// in the flat look a texture name just means "the colour that thing is"
+const TEX_COLOR = { stone: "stone", thatch: "thatch", slate: "slate", brick: "clay", soil: "soil" };
 
 function canvasTex(w, h, draw, repeat = true) {
   const c = document.createElement("canvas"); c.width = w; c.height = h;
@@ -100,7 +117,20 @@ export function makeTextures() {
 
 const cache = new Map();
 // shared materials by key: colour + texture, so hundreds of buildings cost a handful of materials
+const OURS = new Set(Object.values(PASTEL));
+const tmpC = new THREE.Color(), hsl = {};
+function pastel(hexN) {                                   // one-off colours in the kit: a little brighter and softer
+  if (OURS.has(hexN) || hexN === 0xffffff) return hexN;
+  tmpC.setHex(hexN).getHSL(hsl);
+  return tmpC.setHSL(hsl.h, Math.min(1, hsl.s * 1.12 + 0.04), 0.1 + hsl.l * 0.92).getHex();
+}
 export function M(color, tex = null, opts = {}) {
+  if (FLAT) color = pastel(color);
+  if (FLAT && tex && tex !== "soft") {                     // no textures: the colour of the thing, flat-shaded
+    if (color === 0xffffff && TEX_COLOR[tex]) color = C[TEX_COLOR[tex]];
+    tex = null;
+    opts = { flatShading: true, roughness: 1, ...opts, metalness: 0 };
+  } else if (FLAT) opts = { flatShading: true, roughness: 1, ...opts };
   const key = `${color}|${tex}|${JSON.stringify(opts)}`;
   if (!cache.has(key)) {
     cache.set(key, new THREE.MeshStandardMaterial({ color, map: tex ? TEX[tex] : null, roughness: 0.92, metalness: 0, ...opts }));

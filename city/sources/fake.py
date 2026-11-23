@@ -57,6 +57,13 @@ FREE_TEXT = [
     "I bless {target} at the chapel",
     "I bake a pie for the whole street",
     "I become a beggar and sit outside the chapel",
+    # their own builds (asked at court)
+    "I want to start a vegetable garden behind my house",
+    "I'd like to build a little beehive by my home",
+    "can I set up a bread oven next to my tent?",
+    "I want to plant an orchard",
+    "I'm going to build a workbench so I can make chairs",
+    "I spend the evening on my garden, pulling weeds",
 ]
 
 ARCHETYPES = {

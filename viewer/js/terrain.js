@@ -1,7 +1,7 @@
 // The land: height, ground colour (with paths worn by people), the river, grass in the wind, sky, sun, weather.
 import * as THREE from "three";
-import { C, TEX } from "./materials.js";
-import { fbm, smoothstep, distToPath, distToSeg, rng, clamp } from "./noise.js";
+import { C, TEX, FLAT } from "./materials.js";
+import { fbm, smoothstep, distToPath, distToSeg, rng, clamp, hash } from "./noise.js";
 
 export const V = (x, z, y = 0) => new THREE.Vector3(x, y, -z);   // world (x east, z north) -> three (x, y, -z)
 
@@ -55,14 +55,20 @@ export class Land {
   }
 
   buildGround() {
-    const size = this.S.terrain.ground.size[0], seg = this.q === "low" ? 160 : 300;
-    const g = new THREE.PlaneGeometry(size, size, seg, seg);
+    // the flat look: big low-poly facets (each triangle one colour, a little lift and tilt to catch the light)
+    const size = this.S.terrain.ground.size[0], seg = FLAT ? (this.q === "low" ? 120 : 210) : (this.q === "low" ? 160 : 300);
+    let g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = -pos.getZ(i); const r = Math.hypot(x, z); pos.setY(i, r > 205 ? farHeight(x, z) - 0.35 : this.height(x, z) + (r > 196 ? 0.06 : 0)); }
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = -pos.getZ(i); const r = Math.hypot(x, z);
+      const jig = FLAT ? (hash(Math.round(x * 10) * 7919 + Math.round(z * 10)) % 1000 / 1000 - 0.5) * 0.22 : 0;
+      pos.setY(i, r > 205 ? farHeight(x, z) - 0.35 : this.height(x, z) + jig + (r > 196 ? 0.06 : 0));
+    }
+    if (FLAT) g = g.toNonIndexed();
     g.computeVertexNormals();
-    g.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(pos.count * 3), 3));
-    this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+    this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: FLAT }));
     this.ground.receiveShadow = true;
     this.group.add(this.ground);
     this.paint([]);
@@ -76,8 +82,11 @@ export class Land {
     const sand = new THREE.Color(C.sand), rock = new THREE.Color(C.rock), mud = new THREE.Color(C.mud), dirt = new THREE.Color(C.dirt);
     const maxWear = Math.max(1, ...trails.map((t) => t.wear));
     const camp = (this.S.places.find((p) => p.id === "camp") || {}).pos;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = -pos.getZ(i), y = pos.getY(i);
+    const stepN = FLAT ? 3 : 1;                                   // flat look: one colour per triangle, at its middle
+    for (let i0 = 0; i0 < pos.count; i0 += stepN) {
+      let x = pos.getX(i0), z = -pos.getZ(i0), y = pos.getY(i0);
+      if (FLAT) { x = (x + pos.getX(i0 + 1) + pos.getX(i0 + 2)) / 3; z = -(pos.getZ(i0) + pos.getZ(i0 + 1) + pos.getZ(i0 + 2)) / 3; y = (y + pos.getY(i0 + 1) + pos.getY(i0 + 2)) / 3; }
+      const i = i0;
       const n = fbm(x * 0.04 + 9, z * 0.04, 3);
       c.copy(grass).lerp(dry, clamp(n + 0.35, 0, 1) * 0.7);
       const dw = Math.hypot(x - this.woods.pos[0], z - this.woods.pos[1]);
@@ -88,7 +97,7 @@ export class Land {
       c.lerp(rock, hillUp * (0.45 + 0.4 * clamp(fbm(x * 0.2, z * 0.2) + 0.5, 0, 1)));
       const droad = distToPath(x, z, this.road.path);
       c.lerp(dirt, (1 - smoothstep(this.road.width * 0.35, this.road.width * 0.75, droad)) * 0.95);
-      if (camp) c.lerp(mud, (1 - smoothstep(10, 26, Math.hypot(x - camp[0], z - camp[1]))) * 0.75);
+      if (camp && (this.S.tents || []).length) c.lerp(mud, (1 - smoothstep(10, 26, Math.hypot(x - camp[0], z - camp[1]))) * 0.75);
       if (Math.hypot(x, z) < 9) c.lerp(dirt, (1 - Math.hypot(x, z) / 9) * 0.7);         // trodden around the shack
       for (const t of trails) {
         const w = 0.6 + 1.6 * t.wear / maxWear;
@@ -100,7 +109,11 @@ export class Land {
       for (const L of lots) {                                                        // bare earth under buildings
         if (Math.abs(x - L.pos[0]) < L.hw + 1.5 && Math.abs(z - L.pos[1]) < L.hd + 1.5) c.lerp(dirt, 0.55);
       }
-      col.setXYZ(i, c.r, c.g, c.b);
+      if (FLAT) {                                                                    // a touch of variety per facet
+        const v = (hash(i0 * 31 + 7) % 1000) / 1000 - 0.5;
+        c.offsetHSL(v * 0.012, 0, v * 0.035);
+        for (let k = 0; k < 3; k++) col.setXYZ(i + k, c.r, c.g, c.b);
+      } else col.setXYZ(i, c.r, c.g, c.b);
     }
     col.needsUpdate = true;
     this.lots = lots;
@@ -128,9 +141,12 @@ export class Land {
     g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
     g.setIndex(idx); g.computeVertexNormals();
     TEX.water.wrapS = TEX.water.wrapT = THREE.RepeatWrapping;
-    this.water = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-      color: C.water, roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.88, normalMap: TEX.water,
-      normalScale: new THREE.Vector2(0.35, 0.35) }));
+    this.water = new THREE.Mesh(g, FLAT
+      ? new THREE.MeshStandardMaterial({ color: C.water, roughness: 0.35, metalness: 0, transparent: true, opacity: 0.92,
+        normalMap: TEX.water, normalScale: new THREE.Vector2(0.12, 0.12), emissive: 0x0b3540, emissiveIntensity: 0.6 })
+      : new THREE.MeshStandardMaterial({
+        color: C.water, roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.88, normalMap: TEX.water,
+        normalScale: new THREE.Vector2(0.35, 0.35) }));
     this.water.receiveShadow = true;
     this.group.add(this.water);
   }
@@ -230,7 +246,7 @@ export class Land {
         if (distToSeg(x, z, t.from, t.to) < w + 0.4) { g *= 0.15 + 0.85 * (1 - t.wear / maxWear); }
       }
       const k = (j * N + i) * 4;
-      d[k] = y; d[k + 1] = g * 0.92; d[k + 2] = clamp(fbm(x * 0.04 + 9, z * 0.04, 3) + 0.35, 0, 1) * 0.7; d[k + 3] = 1;
+      d[k] = y; d[k + 1] = g * (FLAT ? 0.16 * clamp(fbm(x * 0.09 + 3, z * 0.09, 2) * 2 + 0.6, 0, 1.4) : 0.92); d[k + 2] = clamp(fbm(x * 0.04 + 9, z * 0.04, 3) + 0.35, 0, 1) * 0.7; d[k + 3] = 1;
     }
     this.gTex.needsUpdate = true;
   }
@@ -270,12 +286,12 @@ export class Land {
     const fp = far.attributes.position, fc = new Float32Array(fp.count * 3), g1 = new THREE.Color(C.grass), g2 = new THREE.Color(C.grassDark);
     for (let i = 0; i < fp.count; i++) {
       const x = fp.getX(i), z = -fp.getZ(i), r = Math.hypot(x, z);
-      fp.setY(i, r < 196 ? -30 : farHeight(x, z));
+      fp.setY(i, r < 232 ? farHeight(x, z) - 2.5 : farHeight(x, z));      // tucked just under the map's edge
       const c = farColor(x, z);
       fc[i * 3] = c.r; fc[i * 3 + 1] = c.g; fc[i * 3 + 2] = c.b;
     }
     far.setAttribute("color", new THREE.BufferAttribute(fc, 3)); far.computeVertexNormals();
-    this.far = new THREE.Mesh(far, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    this.far = new THREE.Mesh(far, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: FLAT }));
     this.far.receiveShadow = true;
     this.group.add(this.far);
     const R = rng(5), sp = [];
@@ -286,7 +302,7 @@ export class Land {
     const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
     this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
     this.scene.add(this.stars);
-    this.hemi = new THREE.HemisphereLight(0xcfe3ff, 0x40502c, 0.8);
+    this.hemi = FLAT ? new THREE.HemisphereLight(0xdcefff, 0xa89a6a, 1.0) : new THREE.HemisphereLight(0xcfe3ff, 0x40502c, 0.8);
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     this.sun.castShadow = true;
     const sm = this.q === "low" ? 1024 : 4096;
@@ -321,20 +337,26 @@ export class Land {
     const day = clamp(elev * 3 + 0.25, 0, 1);
     const U = this.skyU, warmS = clamp(1 - Math.abs(elev) * 2.6, 0, 1);
     U.sunDir.value.copy(sunDir); U.night.value = 1 - day; U.cover.value = fog ? 0.95 : wet ? 0.85 : grey ? 0.7 : /windy/.test(weather) ? 0.45 : 0.25;
-    U.top.value.setHSL(0.6, grey ? 0.15 : 0.55, 0.04 + day * (grey ? 0.42 : 0.46));
-    U.horizon.value.setHSL(0.58, grey ? 0.1 : 0.35, 0.07 + day * (grey ? 0.58 : 0.68)).lerp(new THREE.Color(0xf0a868), warmS * 0.55 * (elev > -0.25 ? 1 : 0));
+    if (FLAT) {                                                        // a soft cyan sky, pale at the horizon
+      U.top.value.setHSL(0.57, grey ? 0.2 : 0.62, 0.05 + day * (grey ? 0.5 : 0.55));
+      U.horizon.value.setHSL(0.52, grey ? 0.12 : 0.45, 0.08 + day * (grey ? 0.62 : 0.74)).lerp(new THREE.Color(0xf6b27a), warmS * 0.6 * (elev > -0.25 ? 1 : 0));
+    } else {
+      U.top.value.setHSL(0.6, grey ? 0.15 : 0.55, 0.04 + day * (grey ? 0.42 : 0.46));
+      U.horizon.value.setHSL(0.58, grey ? 0.1 : 0.35, 0.07 + day * (grey ? 0.58 : 0.68)).lerp(new THREE.Color(0xf0a868), warmS * 0.55 * (elev > -0.25 ? 1 : 0));
+    }
     U.sunCol.value.setHSL(0.09, 0.8, 0.55 + 0.3 * (1 - warmS));
     this.sun.position.copy(focus).addScaledVector(sunDir, 300); this.sun.target.position.copy(focus);
-    this.sun.intensity = day * (grey ? 0.9 : 2.6);
+    this.sun.intensity = day * (grey ? 0.9 : FLAT ? 2.3 : 2.6);
     const warm = clamp(1 - Math.abs(elev) * 3, 0, 1);
-    this.sun.color.setHSL(0.09, 0.6 * warm + 0.1, 0.75 + 0.2 * (1 - warm));
-    this.hemi.intensity = 0.12 + day * (grey ? 0.9 : 0.75);
+    this.sun.color.setHSL(0.09, 0.6 * warm + (FLAT ? 0.25 : 0.1), 0.75 + 0.2 * (1 - warm));
+    this.hemi.intensity = 0.15 + day * (grey ? 0.9 : FLAT ? 1.05 : 0.75);
+    if (FLAT) this.hemi.color.setHSL(0.58, 0.45, 0.6 + 0.28 * day);  // shadows go a soft blue, not black
     this.moon.intensity = (1 - day) * 0.35;
     this.moon.position.copy(focus).add(new THREE.Vector3(-120, 200, 80)); this.moon.target = this.sun.target;
     this.stars.material.opacity = (1 - day) * (grey ? 0.15 : 0.9);
     const fc = U.horizon.value.clone();
     this.scene.fog.color.copy(fc);
-    this.scene.fog.density = fog ? 0.02 : wet ? 0.0045 : grey ? 0.0018 : 0.0011;
+    this.scene.fog.density = fog ? 0.02 : wet ? 0.0045 : grey ? 0.0018 : FLAT ? 0.0008 : 0.0011;
     if (this.recording) this.scene.fog.density = Math.min(this.scene.fog.density, 0.0035);   // a timelapse must see the town
     this.sky.visible = true;
     this.scene.background = null;

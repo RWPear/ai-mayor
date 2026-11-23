@@ -2,7 +2,7 @@
 // first) and leave stumps; stones disappear from the hill as they're hauled away.
 import * as THREE from "three";
 import { C, M } from "./materials.js";
-import { rng, hash } from "./noise.js";
+import { rng, hash, distToPath, fbm } from "./noise.js";
 import { V } from "./terrain.js";
 
 export class Nature {
@@ -25,7 +25,8 @@ export class Nature {
     this.trees.forEach((t, i) => {
       const R = rng(i + 100);
       for (let k = 0; k < 3; k++) {
-        col.setHex([C.leaf1, C.leaf2, C.leaf3][(i + k) % 3]).offsetHSL((R() - 0.5) * 0.03, 0, (R() - 0.5) * 0.08);
+        const autumn = hash(i * 13 + 5) % 100 < 12;                  // a few trees turning, for colour
+        col.setHex(autumn ? [C.autumn1, C.autumn2][(i + k) % 2] : [C.leaf1, C.leaf2, C.leaf3][(i + k) % 3]).offsetHSL((R() - 0.5) * 0.03, 0, (R() - 0.5) * 0.08);
         this.blob.setColorAt(i * 3 + k, col);
         col.setHex(C.pine).offsetHSL(0, 0, (R() - 0.5) * 0.06);
         this.cone.setColorAt(i * 3 + k, col);
@@ -41,12 +42,76 @@ export class Nature {
       const s = 1.4 + Rr() * 2.6 * (1 - d / H.r);
       o2.position.copy(V(x, z, land.height(x, z) + s * 0.25)); o2.rotation.set(Rr() * 3, Rr() * 3, Rr() * 3); o2.scale.set(s * (0.9 + Rr() * 0.5), s * (0.6 + Rr() * 0.5), s * (0.9 + Rr() * 0.5));
       o2.updateMatrix(); this.outcrop.setMatrixAt(i, o2.matrix);
-      this.outcrop.setColorAt(i, col.setHex(C.rock).offsetHSL(0, -0.02, (Rr() - 0.6) * 0.15));
+      this.outcrop.setColorAt(i, col.setHex(C.rock).offsetHSL(0, -0.02, (Rr() - 0.45) * 0.12));
     }
     this.outcrop.castShadow = this.outcrop.receiveShadow = true;
     this.group.add(this.trunk, this.blob, this.cone, this.stump, this.rock, this.outcrop);
     this.felled = -1; this.hauled = -1;
     this.setFelled(S.trees_felled || 0); this.setHauled(S.stones_hauled || 0);
+    this.buildDecor(S);
+  }
+
+  // the little things that make a field look lived-in from far off: bushes, flowers, pebbles, a lone tree here
+  // and there. Never on the river, the road, or (see clearAround) under anything built.
+  buildDecor(S) {
+    const land = this.land, R = rng(2024), flat = { flatShading: true, roughness: 1 };
+    const spots = { bush: [], flower: [], pebble: [], lone: [] };
+    const okAt = (x, z, gap) => distToPath(x, z, land.river.path) > land.river.width / 2 + gap && distToPath(x, z, land.road.path) > land.road.width + gap
+      && Math.hypot(x, z) > 10 && Math.hypot(x - land.woods.pos[0], z - land.woods.pos[1]) > land.woods.r * 1.05;
+    for (let k = 0; k < 6000 && spots.bush.length + spots.flower.length < 420; k++) {
+      const x = (R() - 0.5) * 380, z = (R() - 0.5) * 380;
+      if (Math.hypot(x, z) > 185 || !okAt(x, z, 2)) continue;
+      if (fbm(x * 0.03 + 5, z * 0.03, 2) + 0.15 < R() * 0.9) continue;          // in clumps, with open meadow between
+      const roll = R();
+      if (roll < 0.42) spots.bush.push([x, z, 0.6 + R() * 0.7]);
+      else if (roll < 0.8) spots.flower.push([x, z, R()]);
+      else if (roll < 0.93) spots.pebble.push([x, z, 0.3 + R() * 0.5]);
+      else if (Math.hypot(x - land.field[0], z - land.field[1]) > 45) spots.lone.push([x, z, 0.8 + R() * 0.4]);
+    }
+    this.decor = spots;
+    const n = (a) => Math.max(1, a.length);
+    this.bush = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), M(0xffffff, null, flat), n(spots.bush));
+    this.flower = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.14, 0), M(0xffffff, null, flat), n(spots.flower) * 5);
+    this.pebble = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), M(0xffffff, null, flat), n(spots.pebble));
+    this.loneTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.38, 3, 6).translate(0, 1.5, 0), M(C.trunk, null, flat), n(spots.lone));
+    this.loneTop = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.7, 0), M(0xffffff, null, flat), n(spots.lone));
+    const col = new THREE.Color(), FL = [0xf4f1e8, 0xf2d24b, 0xe8789a, 0x9fb8f0, 0xf09a4a];
+    spots.bush.forEach((b, i) => this.bush.setColorAt(i, col.setHex([C.leaf1, C.leaf2, C.leaf3][i % 3]).offsetHSL(0, 0, (rng(i)() - 0.5) * 0.08)));
+    spots.flower.forEach((f, i) => { for (let k = 0; k < 5; k++) this.flower.setColorAt(i * 5 + k, col.setHex(FL[Math.floor(f[2] * FL.length)])); });
+    spots.pebble.forEach((p, i) => this.pebble.setColorAt(i, col.setHex(C.rock).offsetHSL(0, 0, (rng(i + 5)() - 0.3) * 0.1)));
+    spots.lone.forEach((t, i) => this.loneTop.setColorAt(i, col.setHex(hash(i * 3) % 5 === 0 ? C.autumn1 : [C.leaf1, C.leaf2][i % 2])));
+    for (const m of [this.bush, this.pebble, this.loneTrunk, this.loneTop]) { m.castShadow = true; m.receiveShadow = true; }
+    this.group.add(this.bush, this.flower, this.pebble, this.loneTrunk, this.loneTop);
+    this.clearAround([]);
+  }
+
+  clearAround(lots) {
+    const land = this.land, o = new THREE.Object3D(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const under = (x, z) => lots.some((L) => Math.abs(x - L.pos[0]) < L.hw + 2.5 && Math.abs(z - L.pos[1]) < L.hd + 2.5);
+    const { bush, flower, pebble, lone } = this.decor;
+    bush.forEach(([x, z, s], i) => {
+      if (under(x, z)) { this.bush.setMatrixAt(i, zero); return; }
+      const R = rng(i + 7); o.position.copy(V(x, z, land.height(x, z) + s * 0.3)); o.rotation.set(R() * 3, R() * 3, R() * 3); o.scale.set(s * 1.2, s * 0.8, s); o.updateMatrix(); this.bush.setMatrixAt(i, o.matrix);
+    });
+    flower.forEach(([x, z], i) => {
+      const R = rng(i + 99), gone = under(x, z);
+      for (let k = 0; k < 5; k++) {
+        if (gone) { this.flower.setMatrixAt(i * 5 + k, zero); continue; }
+        const fx = x + (R() - 0.5) * 1.4, fz = z + (R() - 0.5) * 1.4;
+        o.position.copy(V(fx, fz, land.height(fx, fz) + 0.16)); o.rotation.set(0, 0, 0); o.scale.setScalar(0.8 + R() * 0.6); o.updateMatrix(); this.flower.setMatrixAt(i * 5 + k, o.matrix);
+      }
+    });
+    pebble.forEach(([x, z, s], i) => {
+      if (under(x, z)) { this.pebble.setMatrixAt(i, zero); return; }
+      const R = rng(i + 3); o.position.copy(V(x, z, land.height(x, z) + s * 0.15)); o.rotation.set(R() * 3, R() * 3, R() * 3); o.scale.set(s * 1.3, s * 0.6, s); o.updateMatrix(); this.pebble.setMatrixAt(i, o.matrix);
+    });
+    lone.forEach(([x, z, s], i) => {
+      if (under(x, z)) { this.loneTrunk.setMatrixAt(i, zero); this.loneTop.setMatrixAt(i, zero); return; }
+      const y = land.height(x, z);
+      o.position.copy(V(x, z, y - 0.1)); o.rotation.set(0, i, 0); o.scale.setScalar(s); o.updateMatrix(); this.loneTrunk.setMatrixAt(i, o.matrix);
+      o.position.copy(V(x, z, y + 4.1 * s)); o.scale.set(s * 1.2, s * 1.35, s * 1.2); o.updateMatrix(); this.loneTop.setMatrixAt(i, o.matrix);
+    });
+    for (const m of [this.bush, this.flower, this.pebble, this.loneTrunk, this.loneTop]) m.instanceMatrix.needsUpdate = true;
   }
 
   setFelled(f) {

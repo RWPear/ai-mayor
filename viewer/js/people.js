@@ -187,7 +187,7 @@ export class Crowd {
     this.group = new THREE.Group(); this.group.add(this.outline, this.body, this.headOut, this.head, this.hat);
     scene.add(this.group);
     this.people = [];
-    this.o = new THREE.Object3D();
+    this.o = new THREE.Object3D(); this.o.rotation.order = "YXZ";    // turn to face, then lean forward
   }
 
   set(people) {   // [{role, handle, home:[x,z], work:[x,z]}]
@@ -208,7 +208,7 @@ export class Crowd {
     states.forEach((s, i) => {
       if (i >= this.people.length) return;
       const hide = s.hidden;
-      o.position.set(s.x, s.y + (s.lie ? 0.45 : s.bob), s.z); o.rotation.set(s.lie ? -Math.PI / 2 : s.lean || 0, s.heading, 0);
+      o.position.set(s.x, s.y + (s.lie ? 0.45 : s.bob), s.z); o.rotation.set(s.lie ? -Math.PI / 2 : s.lean || 0, s.heading, 0, "YXZ");
       o.scale.set(hide ? 0 : 1, hide ? 0 : 1, hide ? 0 : 0.9); o.updateMatrix();
       this.body.setMatrixAt(i, o.matrix);
       o.scale.multiplyScalar(1.07); o.updateMatrix(); this.outline.setMatrixAt(i, o.matrix);

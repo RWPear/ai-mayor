@@ -30,11 +30,17 @@ to see what it is. Click a line in the feed to jump there.
 
 ## What you see
 
+**The look:** in the spirit of Thronefall, but a world you can walk around in: clean flat colours, no
+textures, low-poly faceted ground, chunky trees (a few already turning orange), golden thatch and cream
+walls, turquoise water, a soft cyan sky, warm sun and soft blue shadows. Bushes, flowers, pebbles and lone
+trees dot the meadow. `?style=textured` brings back the older painted look (planks, stones, thatch
+textures, dense grass).
+
 - **The land:**
   - real terrain: the field and the shack sit flat, the rocky hill rises with outcrops, and the river cuts a
     bed with sandy banks
   - the country rolls out to blue hills on the horizon
-  - dense grass sways in the wind; it grows everywhere except paths, the river, building lots and the
+  - tufts of grass sway in the wind; they grow everywhere except paths, the river, building lots and the
     hilltop
 - **Paths wear in where people walk:** settlers between home and work, Aldric between the places he keeps
   going. The more feet, the wider and browner.
@@ -47,6 +53,9 @@ to see what it is. Click a line in the feed to jump there.
     through the day
   - finished buildings appear at the moment they were finished
   - collapses leave scorched ruins
+  - Aldric's fixes show on the shack as he makes them: a proper thatched roof, a door that shuts, a chimney;
+    his fire pit, drying rack or bench stand beside it
+  - people's own builds stand by their homes, with their name in the tooltip
   - the crowned king's hall flies his banner
 - **The camp:** canvas tents in rows by the road, with campfires.
 - **The stores:** heaps by the shack (or the storehouse): log stacks, stone, clay, thatch bundles, sacks and
@@ -58,8 +67,14 @@ to see what it is. Click a line in the feed to jump there.
     crowned; there's a smith's apron, a guard's helmet, a thief's hood, a farmer's straw hat, a wizard's
     point
   - they chop, mine, dig, hammer, fish, forage, eat, sit, talk, sleep and dance
-  - settlers walk to work at about 7 and home at about 7 in the evening (each a little early or late);
-    people in tents sit around the camp fires after dark
+  - settlers walk to work at about 7 and home at about 7 in the evening (each a little early or late).
+    At work they go to real spots: a standing tree in the woods, a rock on the hill, a place on the river
+    bank, a side of the scaffolding, a row in a garden. They work there an hour or so, facing it, then walk
+    to the next, and stop for a bite at midday. Only so many fit on one building (the same crew limit the
+    simulation uses), and each garden row has one person. They only bob when they walk.
+  - people with their own build work on it in the evening, by their home
+  - people in tents sit around the camp fires after dark
+  - the jester strolls about the court, stopping to perform
   - whoever is in a story that day walks to where it happened
 - **Time and weather:** sun and shadows across the day, warm light at dawn and dusk, stars at night,
   clouds, rain, fog and wind. Windows glow at night, chimneys smoke in the morning and evening, and

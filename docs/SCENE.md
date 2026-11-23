@@ -59,7 +59,12 @@ its cameras and the recorders that turn a run into timelapses.
   - work and gathering: `workshop`, `hall`
   - defense: `tower`, `wall_ring` (a palisade around the settlement, with `radius`)
   - paths and water: `well`, `bridge`, `jetty`, `road`
+  - his odds and ends: `firepit`, `prop` (a drying rack, a bench, a woodpile)
   - other: `ruin` (with `of`: what it was meant to be)
+- The shack's own fixes (a new roof, a door, a chimney, a window) come as `upgrades: [{name, t}]` on the
+  shack and are drawn on it from the minute they're finished.
+- Someone's own build has `owner` (their handle) and stands by their home; in `projects` it's named
+  "@handle's garden".
 - `size` is `[width x, depth z, height]` in metres. Lots never overlap and never sit on the river or the road.
 - `state`: `standing`, `scaffold` (a project) or `ruin`. `quality: "shoddy"` buildings should **lean**.
 - `look` is the model's one-line description. Use it for variation now, or for generated assets later.

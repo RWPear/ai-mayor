@@ -37,11 +37,18 @@ to, and the tent camp appears the first time people have nowhere to sleep.
 
   | Size | Example | Holds | Rough cost |
   |---|---|---|---|
-  | tiny | a bed, a stone axe | 1 | an afternoon |
-  | small | cottage | 2-4 | 30 materials, 10 hours |
-  | medium | longhouse | 6-12 | 80 materials, 28 hours, needs timber framing |
-  | large | a row of houses | 20-40 | 200 materials, 70 hours, needs stone foundations |
-  | huge | an apartment building | 60-120 | 480 materials, 160 hours, needs mortar and multi-storey building |
+  | tiny | a fire pit, a bed, a stone axe | 1 | 8 materials, 2 hours |
+  | small | cottage | 2-4 | 20 materials, 7 hours (a man alone: about a day, gathering included) |
+  | medium | longhouse | 6-12 | 60 materials, 22 hours, needs timber framing |
+  | large | a row of houses | 20-40 | 160 materials, 60 hours, needs stone foundations |
+  | huge | an apartment building | 60-120 | 400 materials, 160 hours, needs mortar and multi-storey building |
+
+  Only so many people fit on one building at once (a crew of 3 / 4 / 6 / 10), so even a crowd takes a day or
+  two on a big one, and how big he can go grows with his hands and his experience (no tenement next to the
+  shack).
+- **The first days have to show something.** Day one he patches the roof or builds a fire pit (an hour or two
+  each), and a cottage goes up in about a day. Loneliness bothers him less while he's alone, so he doesn't
+  spend his afternoons singing to the empty field. His first house can lean, but it doesn't collapse.
 
 - **Techniques:** thatching, timber framing, stone foundations, mortar, kiln firing, multi-storey building,
   carpentry, metalwork, knots. He can try something he doesn't know how to do yet: each missing
@@ -86,6 +93,22 @@ to, and the tent camp appears the first time people have nowhere to sleep.
     foreman makes building faster, a forager brings in more food), decree
   - **any time the peddler's cart is on the road:** trade, buying tools, nails, seed potatoes or grain, or
     selling materials for gold
+
+## Their own builds
+
+People can build their own small things, with his leave:
+
+- "I want to start a vegetable garden behind my house" (or a hut, a beehive, a bread oven, a workbench, a
+  stall) goes to his court as a request. He says yes or no when he holds court. If nobody answers within a
+  day, nobody stopped them, so they start anyway.
+- Granted, it's **their** project, on a lot by their home. They put in a couple of hours every evening, and
+  five more on any day they comment about it ("I spend the evening on my garden, pulling weeds"). In 3D they
+  work on it after they get home.
+- Finished, it stands with their name on it ("@rowan's garden"), they get a reply and the credit, and it does
+  what its kind does: a garden feeds people, a hut gives a bed (they move out of their tent), a workbench
+  makes work a little faster.
+- **What keeps it sane at scale:** one build per person at a time, and only tiny or small things. Anything
+  bigger ("a great stone tower") becomes a petition for the king to build.
 
 ## Food and rough nights
 

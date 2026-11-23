@@ -288,7 +288,7 @@ def visitors(world):
     i = int(city.rng.choice(np.where(act)[0].tolist()))
     if city.living.get("town", {}).get("land"):
         asks = ["wants to know when their house will be ready", "says someone's been taking from the woodpile",
-                "wants permission to plant a garden by the river", "found a strange old coin in the field",
+                "found a strange old coin in the field",
                 "complains that the tents leak", "wants Aldric to settle a fight over the last dry blanket",
                 "says there are wolf tracks by the stores", "offers to teach the children their letters"]
     else:

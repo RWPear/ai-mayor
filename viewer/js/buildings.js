@@ -11,7 +11,7 @@ export const WIN_LIT = new THREE.MeshStandardMaterial({ color: 0x3a2f22, emissiv
 const WIN_DARK = new THREE.MeshStandardMaterial({ color: C.glass, roughness: 0.3, metalness: 0.1 });
 export const FLAME = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 2.2, transparent: true, opacity: 0.9 });
 
-const PLASTERS = [C.plaster, C.plaster2, C.plaster3, 0xe8d2b0, 0xd9cfb8];
+const PLASTERS = [C.plaster, C.plaster2, C.plaster3, 0xf0d9b5, 0xe9dcc0];
 const wallMat = (style, R) => style === "plank" ? M(C.plank, "plank") : style === "stone" ? M(0xffffff, "stone")
   : style === "brick" ? M(0xffffff, "brick") : M(PLASTERS[Math.floor(R() * PLASTERS.length)], "plaster");
 const roofMat = (kind) => kind === "slate" ? M(0xffffff, "slate") : kind === "plank" ? M(C.plankDark, "plank") : M(0xffffff, "thatch");
@@ -110,9 +110,48 @@ const SHAPES = {
     const dr = mesh(box(0.9, 1.85, 0.08), M(0x6e5136, "plank")); dr.position.set(-1.05, 0.93, -(d / 2 + 0.35)); dr.rotation.y = 0.55; g.add(dr);
     const gap = mesh(box(0.9, 1.85, 0.05), M(0x1a130d)); gap.position.set(-1.4, 0.93, -(d / 2 + 0.02)); g.add(gap);
     const crate = mesh(box(0.7, 0.6, 0.7), M(C.plank, "plank")); crate.position.set(1.8, 0.3, -2.6); crate.rotation.y = 0.4; g.add(crate);
-    const pit = mesh(new THREE.TorusGeometry(0.5, 0.15, 5, 10).rotateX(Math.PI / 2), M(C.stone)); pit.position.set(-2.3, 0.1, -3.2); g.add(pit);
+    if (!b.noPit) {
+      const pit = mesh(new THREE.TorusGeometry(0.5, 0.15, 5, 10).rotateX(Math.PI / 2), M(C.stone)); pit.position.set(-2.3, 0.1, -3.2); g.add(pit);
+      out.fires.push({ obj: pit, small: true });
+    }
+    // his fixes, as he makes them: a proper roof, a door that shuts, a chimney, a window
+    const ups = (b.upgrades || []).map((u) => (typeof u === "string" ? u : u.name).toLowerCase());
+    if (ups.some((u) => /roof|thatch/.test(u))) {         // a proper thatched gable on the old walls
+      for (const p of [patch, patch2, roof]) p.visible = false;
+      const up = mesh(box(w, hf - hb + 0.05, 0.14), wood); up.position.set(0, hb + (hf - hb) / 2, d / 2); g.add(up);
+      for (const sx of [-1, 1]) { const fill = mesh(box(0.14, hf - hb, d), dark); fill.position.set(sx * (w / 2 - 0.07), hb + (hf - hb) / 2, 0); fill.scale.y = 1; g.add(fill); }
+      const gab = gableRoof(w + 0.1, d + 0.1, 1.7, 0.5, "thatch", dark, 0.45); gab.position.y = hf; g.add(gab);
+    }
+    if (ups.some((u) => /door/.test(u))) { dr.rotation.y = 0; dr.position.set(-1.4, 0.93, -(d / 2 + 0.1)); gap.visible = false; }
+    if (ups.some((u) => /chimney|hearth|fireplace/.test(u))) chimney(g, w / 2 - 0.5, d / 2 - 0.5, hb + 1.2, out.smoke);
+    if (ups.some((u) => /window/.test(u))) { const win = mesh(box(0.8, 0.7, 0.1), out.lit ? WIN_LIT : WIN_DARK, { cast: false }); win.position.set(1.0, 1.5, -(d / 2 + 0.1)); g.add(win); }
+    return g;
+  },
+  firepit(b, R, out) {
+    // a ring of stones, a few logs to sit on, a pot on a tripod: the first thing that makes the field a home
+    const g = new THREE.Group();
+    for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2; const st = mesh(new THREE.DodecahedronGeometry(0.22 + R() * 0.08, 0), M(C.stone, null, { flatShading: true })); st.position.set(Math.cos(a) * 0.65, 0.12, Math.sin(a) * 0.65); st.scale.y = 0.7; g.add(st); }
+    const pit = new THREE.Object3D(); pit.position.y = 0.05; g.add(pit);
     out.fires.push({ obj: pit, small: true });
-    for (const u of b.upgrades || []) { const fix = mesh(box(2.4, 0.08, 2.0), M(0xffffff, "thatch")); fix.position.set(-0.6, h + 0.5, -0.3); fix.rotation.x = -0.22; g.add(fix); }
+    for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + 0.4; const log = mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.3, 7), M(C.trunk)); log.rotation.z = Math.PI / 2; log.rotation.y = -a; log.position.set(Math.cos(a) * 1.5, 0.2, Math.sin(a) * 1.5); g.add(log); }
+    for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; const leg = mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 4), M(C.timber)); leg.position.set(Math.cos(a) * 0.35, 0.65, Math.sin(a) * 0.35); leg.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25); g.add(leg); }
+    const pot = mesh(new THREE.SphereGeometry(0.22, 8, 6), M(C.iron)); pot.position.y = 0.75; g.add(pot);
+    return g;
+  },
+  prop(b, R, out) {
+    // the odds and ends of a homestead: a drying rack, a bench, a chopping block with its woodpile
+    const g = new THREE.Group(), n = (b.name || "").toLowerCase();
+    if (/rack|line|hide|dry/.test(n)) {
+      for (const s of [-1, 1]) for (const z of [-0.4, 0.4]) { const leg = mesh(box(0.1, 1.6, 0.1), M(C.timber)); leg.position.set(s * 1.0, 0.8, z * (s > 0 ? 1 : -1)); leg.rotation.x = z * 0.4; g.add(leg); }
+      const bar = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 5), M(C.timber)); bar.rotation.z = Math.PI / 2; bar.position.y = 1.5; g.add(bar);
+      for (let k = 0; k < 3; k++) { const c = mesh(box(0.5, 0.7, 0.04), M([C.canvas, C.thatch, C.plank][k])); c.position.set(-0.6 + k * 0.6, 1.15, 0); g.add(c); }
+    } else if (/bench|seat|stool|chair|table/.test(n)) {
+      const top = mesh(box(2.0, 0.12, 0.5), M(C.plank)); top.position.y = 0.5; g.add(top);
+      for (const s of [-1, 1]) { const l = mesh(box(0.14, 0.5, 0.4), M(C.plankDark)); l.position.set(s * 0.8, 0.25, 0); g.add(l); }
+    } else {
+      const block = mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.6, 8), M(C.trunk)); block.position.set(-0.6, 0.3, 0); g.add(block);
+      for (let k = 0; k < 8; k++) { const log = mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.2, 6), M(C.trunk)); log.rotation.x = Math.PI / 2; log.position.set(0.5 + (k % 4) * 0.3, 0.15 + Math.floor(k / 4) * 0.28, 0); g.add(log); }
+    }
     return g;
   },
   hut(b, R, out) {
@@ -356,7 +395,7 @@ export function buildingMesh(b, land, ctx) {
     });
     g.position.copy(V(x, z, 0));
   }
-  const tip = `<strong>${esc(b.name)}</strong><br>` + (b.state === "scaffold" ? `being built - ${Math.round((b.progress || 0) * 100)}%`
+  const tip = `<strong>${esc(b.name)}</strong>${b.owner ? ` <span class="muted">(built by @${esc(b.owner)})</span>` : ""}<br>` + (b.state === "scaffold" ? `being built - ${Math.round((b.progress || 0) * 100)}%`
     : b.state === "ruin" ? "collapsed" : [b.shape, b.capacity ? `room for ${b.capacity}` : null, b.quality].filter(Boolean).join(", "))
     + (b.residents && b.residents.length ? `<br>${b.residents.length} living here` : "") + (b.look ? `<br><span class="muted">${esc(b.look)}</span>` : "");
   g.traverse((o) => { o.userData.tip = tip; o.userData.building = b; });
