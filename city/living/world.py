@@ -399,7 +399,7 @@ class World:
         fn = available.get(tool, (None,))[0]
         m = None
         said = " ".join(str(args.get(k, "")) for k in ("text", "what", "question", "name")).strip().lower()[:80]
-        if said and said in me.get("recent_said", []):          # saying/doing the exact same thing again
+        if said and brain is not self.rules and said in me.get("recent_said", []):   # the model repeating itself
             self.stats["repeats_blocked"] = self.stats.get("repeats_blocked", 0) + 1
             me["nudge"] = "You just tried to repeat yourself word for word. Do something different."
             fn = None

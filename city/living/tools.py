@@ -516,7 +516,7 @@ def unlocked(world, who):
 
 # how long before a tool makes sense again (minutes) - stops letter spam and speech loops
 COOLDOWN = {"king": {"proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120},
-            "warlord": {"taunt": 480, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
+            "warlord": {"taunt": 720, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
 
 
 def _ready(world, who, name):
