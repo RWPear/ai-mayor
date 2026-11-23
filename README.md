@@ -185,3 +185,8 @@ then `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` there 
 3. **Episode video:** episode script -> kingdom view + the king's voice (CosyVoice) + captions
    (ffmpeg) -> sent to your phone for approval (n8n).
 4. **Public page** (static, on Cloudflare) for anyone who wants their subject's full story.
+
+## Credits
+
+3D models: KayKit Medieval Hexagon Pack and Character Pack: Adventures by Kay Lousberg (CC0),
+www.kaylousberg.com.

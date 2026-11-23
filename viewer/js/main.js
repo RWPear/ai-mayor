@@ -9,7 +9,8 @@ import { makeTextures, TEX, M } from "./materials.js";
 import { Land, V } from "./terrain.js";
 import { Nature } from "./nature.js";
 import { buildingMesh, tentsMesh, pilesMesh, cartMesh, WIN_LIT, FLAME, esc } from "./buildings.js";
-import { Person, Crowd } from "./people.js";
+import { Person, Crowd, KitCrowd, makePerson } from "./people.js";
+import { loadAssets, A as KIT } from "./assets.js";
 import { Rig, MODES } from "./camera.js";
 import { hash, rng, clamp } from "./noise.js";
 
@@ -84,7 +85,7 @@ async function showDay(i, keepTime = false) {
     land.recording = RECORD;
     nature = new Nature(scene, land, S);
     rig = new Rig(camera, renderer.domElement, land);
-    crowd = new Crowd(scene, QUALITY === "low" ? 220 : 600);
+    crowd = KIT.chars ? new KitCrowd(scene, QUALITY === "low" ? 220 : 600) : new Crowd(scene, QUALITY === "low" ? 220 : 600);
     setupPost();
     const kp = S.actors.king.start.pos;
     rig.lookAt(kp, 18);
@@ -178,16 +179,16 @@ function addPeople() {
   for (const p of people) town.remove(p.person.root);
   people = [];
   const placePos = Object.fromEntries(S.places.map((p) => [p.id, p.pos]));
-  king = new Person({ king: true, crowned: S.actors.king.crowned, name: "Aldric" + (S.actors.king.crowned ? ", King of Emberfall" : "") });
+  king = makePerson({ king: true, crowned: S.actors.king.crowned, name: "Aldric" + (S.actors.king.crowned ? ", King of Emberfall" : "") });
   king.root.traverse((o) => { o.userData.tip = `<strong>Aldric</strong>${S.actors.king.becoming ? `<br>${esc(S.actors.king.becoming)}` : ""}`; });
   town.add(king.root);
   for (const c of S.actors.court) {
-    const p = new Person({ role: c.id === "jester" ? "jester" : "steward", handle: c.id, name: c.name });
+    const p = makePerson({ role: c.id === "jester" ? "jester" : "steward", handle: c.id, name: c.name });
     town.add(p.root); people.push({ person: p, fixed: [c.pos[0] + 2.5, c.pos[1] - 2], anim: "talk", who: c, roam: c.id === "jester" });
   }
   const named = S.actors.settlers.slice(0, QUALITY === "low" ? 12 : 30);
   for (const s of named) {
-    const p = new Person({ role: s.role, handle: s.handle, name: `@${s.handle}` });
+    const p = makePerson({ role: s.role, handle: s.handle, name: `@${s.handle}` });
     p.root.traverse((o) => { o.userData.tip = `<strong>@${esc(s.handle)}</strong><br>${esc(s.name)}, ${esc(s.role)}${s.condition ? ` (${s.condition})` : ""}`; });
     town.add(p.root);
     const j = hash(s.handle), kings = S.projects.filter((x) => !x.owner), proj = kings.length && j % 3 === 0 ? kings[j % kings.length] : null;
@@ -298,7 +299,7 @@ function makePool(where, proj) {
     for (const st of (S.stones_all || S.stones).slice(Math.round(S.stones_hauled || 0)).slice(0, 160)) {
       const a = R() * 6.28, x = st[0] + Math.cos(a) * 1.3, z = st[1] + Math.sin(a) * 1.3, y = land.height(x, z);
       const slope = Math.max(Math.abs(land.height(x + 1.5, z) - y), Math.abs(land.height(x, z + 1.5) - y)) / 1.5;
-      if (slope < 0.55) out.push({ pos: [x, z], face: [st[0], st[1]], anim: "mine" });   // not halfway up a cliff
+      if (slope < 0.3) out.push({ pos: [x, z], face: [st[0], st[1]], anim: "mine" });   // not halfway up a cliff
       if (out.length >= 120) break;
     }
   } else if (where === "river") {
@@ -436,7 +437,8 @@ function step(dtReal) {
       const lean = st.walk ? -0.08 : st.anim === "chop" || st.anim === "mine" || st.anim === "hammer" ? -0.05 - swing * 0.22
         : st.anim === "forage" || st.anim === "dig" || st.anim === "cut" ? -0.3 - swing * 0.12 : st.anim === "fish" ? -0.05 : 0;
       return { x: st.pos[0], y: y + (st.sit || st.anim === "sit" ? -0.3 : 0), z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100, bob, lean, lie: st.lie,
-        stride: st.walk ? Math.sin(clock * 9 + p.j) * 0.7 : 0, sit: st.sit || st.anim === "sit" };
+        stride: st.walk ? Math.sin(clock * 9 + p.j) * 0.7 : 0, sit: st.sit || st.anim === "sit" || st.anim === "eat",
+        walkPose: !!st.walk, work: ["chop", "mine", "hammer"].includes(st.anim) ? "swing" : ["forage", "dig", "cut", "fish"].includes(st.anim) ? "stoop" : null };
     }));
   }
   // night: windows, fires, smoke
@@ -631,7 +633,8 @@ window.kingdom = {
 // ------------------------------------------------------------------ start
 (async () => {
   bindUi(); resize();
-  await loadIndex();
+  await Promise.all([loadIndex(), loadAssets((f) => { const el = document.getElementById("loading"); if (el) el.dataset.kit = Math.round(f * 100); })]);
+  window.__kit = { ready: KIT.ready, chars: KIT.chars };
   if (!index.days.length) { $("empty").classList.add("show"); $("doing").textContent = "No scene loaded yet."; requestAnimationFrame(frame); return; }
   await showDay(index.days.length - 1);
   if (LIVE) { liveShape = shapeOf(S); live = startLive({ onScene: (d) => liveScene(d), onState: liveState }); }

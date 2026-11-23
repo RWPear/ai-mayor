@@ -3,6 +3,7 @@
 // from each building's id so no two cottages are quite the same. Projects stand as scaffolding that rises
 // with their progress; collapses leave ruins.
 import * as THREE from "three";
+import { A as KIT, model as kitModel, geometryOf } from "./assets.js";
 import { C, M, TEX, box, mesh } from "./materials.js";
 import { rng, hash } from "./noise.js";
 import { V } from "./terrain.js";
@@ -371,11 +372,70 @@ function scaffold(b, R, out) {
   return g;
 }
 
+// ---------------------------------------------------------------- the KayKit buildings (when the models loaded)
+// what each kind of building looks like: by what it's called first, then by its shape
+const BY_NAME = [[/church|chapel|shrine|temple|abbey|monaster|cathedral/, "church"], [/tavern|inn\b|alehouse|brew/, "tavern"],
+  [/smith|forge|anvil|foundry/, "blacksmith"], [/water ?mill|water ?wheel/, "watermill"], [/mill/, "windmill"],
+  [/market|stall|shop|store\b|trading|bakery/, "market"], [/mine\b|quarry/, "mine"], [/castle|keep|citadel|fortress|palace/, "castle"],
+  [/barracks|garrison|armou?ry/, "barracks"], [/archer|range/, "archeryrange"], [/lumber|saw|timber ?yard|carpent|workshop/, "lumbermill"],
+  [/\bwell\b/, "well"], [/tower|watch|lookout/, "tower_A"]];
+const BY_SHAPE = { hut: ["home_A"], cottage: ["home_A", "home_B"], shed: ["home_A"], longhouse: ["barracks"], hall: ["tavern"],
+  storehouse: ["lumbermill"], workshop: ["blacksmith"], tower: ["tower_A", "tower_B"], well: ["well"], apartments: ["tavern"],
+  rowhouses: ["home_A", "home_B"] };
+const KEEP_OURS = new Set(["shack", "firepit", "prop", "wall_ring", "road", "bridge", "jetty", "fish_trap"]);
+
+function kitBuilding(b, R, out) {
+  if (!KIT.ready || KEEP_OURS.has(b.shape)) return null;
+  const [w, d, h] = b.size || [6, 5, 4];
+  const color = b.owner ? "red" : "blue";                  // people's own builds in their own colour
+  const fit = (m, W, D, H = h) => {                       // as big as the lot allows, standing on it, centred
+    const sz = m.userData.size;
+    const s = Math.min(W / sz.w, D / sz.d, (H * 1.9) / Math.max(0.2, sz.h)) * 0.98;
+    m.scale.setScalar(s); m.position.set(-sz.cx * s, -sz.minY * s, -sz.cz * s);
+    return m;
+  };
+  const g = new THREE.Group();
+  if (b.state === "ruin") { const m = kitModel("building_destroyed"); if (!m) return null; g.add(fit(m, w, d)); return g; }
+  if (b.state === "scaffold") {                              // the building stages, then the scaffolding round it
+    const p = b.progress || 0;
+    const stage = p < 0.06 ? "building_dirt" : p < 0.4 ? "building_stage_A" : p < 0.75 ? "building_stage_B" : "building_stage_C";
+    const m = kitModel(stage); if (!m) return null;
+    g.add(fit(m, w, d, Math.max(1.2, h * Math.min(1, p + 0.3))));
+    if (p > 0.15 && p < 0.97) { const sc = kitModel("building_scaffolding"); if (sc) g.add(fit(sc, w * 1.05, d * 1.05, h)); }
+    return g;
+  }
+  if (b.shape === "plot") {                                 // a field: the grain hex, fenced
+    const m = kitModel("building_grain"); if (!m) return null;
+    const sz = m.userData.size; m.scale.set(w / sz.w, 1.6, d / sz.d); m.position.set(-sz.cx * w / sz.w, 0, -sz.cz * d / sz.d); g.add(m);
+    return g;
+  }
+  const name = (b.name || "").toLowerCase();
+  const kind = (BY_NAME.find(([re]) => re.test(name)) || [null, null])[1]
+    || (BY_SHAPE[b.shape] || ["home_B"])[Math.floor(R() * (BY_SHAPE[b.shape] || ["home_B"]).length)];
+  if (b.shape === "rowhouses" || (b.shape === "apartments" && !BY_NAME.some(([re]) => re.test(name)))) {
+    const n = Math.max(2, Math.round(w / Math.max(3, d * 0.8))), cw = w / n;   // a terrace: several houses in a row
+    for (let k = 0; k < n; k++) {
+      const m = kitModel(`building_${b.shape === "apartments" ? (k % 2 ? "tavern" : "home_B") : ["home_A", "home_B"][k % 2]}_${color}`);
+      if (!m) return null;
+      const cell = new THREE.Group(); cell.add(fit(m, cw * 1.02, d, h)); cell.position.x = -w / 2 + cw * (k + 0.5); g.add(cell);
+    }
+    return g;
+  }
+  const m = kitModel(`building_${kind}_${color}`) || kitModel(`building_home_B_${color}`);
+  if (!m) return null;
+  g.add(fit(m, w, d));
+  if (/home|tavern|blacksmith/.test(kind) && out.smoke) {      // a chimney going in the evening
+    const top = new THREE.Object3D(); top.position.set(w * 0.2, m.userData.size.h * m.scale.y + 0.3, 0); g.add(top); out.smoke.push(top);
+  }
+  return g;
+}
+
 export function buildingMesh(b, land, ctx) {
   const R = rng(hash(b.id || b.name));
   const out = { smoke: ctx.smoke, fires: ctx.fires, flags: ctx.flags, lit: (b.residents && b.residents.length > 0) || b.shape === "hall", crowned: ctx.crowned };
-  let g;
-  if (b.state === "ruin") g = ruin(b, R);
+  let g = kitBuilding(b, R, out);
+  if (g) g.userData.kit = true;
+  else if (b.state === "ruin") g = ruin(b, R);
   else if (b.state === "scaffold") g = scaffold(b, R, out);
   else g = (SHAPES[b.shape] || SHAPES.shed)(b, R, out);
   const [x, z] = b.pos;
@@ -391,7 +451,7 @@ export function buildingMesh(b, land, ctx) {
     const f = mesh(box(w + 0.3, drop + 0.4, d + 0.3), M(C.stone)); f.position.y = -(drop + 0.4) / 2 + 0.05; g.add(f);
   }
   g.rotation.y = (b.rot || 0) * Math.PI / 180 + (b.shape === "wall_ring" ? 0 : (R() - 0.5) * 0.04);
-  if (b.quality === "shoddy" && b.state === "standing") g.rotation.z = 0.035;   // it leans
+  if (b.quality === "shoddy" && b.state === "standing" && !g.userData.kit) g.rotation.z = 0.035;   // it leans
   if (b.shape === "wall_ring") {                                                // posts follow the ground
     g.traverse((o) => {
       if (!o.isInstancedMesh) return;
@@ -416,15 +476,16 @@ export function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&"
 export function tentsMesh(tents, land, ctx) {
   const g = new THREE.Group();
   if (!tents.length) return g;
+  const kit = KIT.ready && geometryOf("tent");
   const shape = new THREE.Shape([new THREE.Vector2(-1.1, 0), new THREE.Vector2(1.1, 0), new THREE.Vector2(0, 1.5)]);
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: false }).translate(0, 0, -1.1);
-  const im = new THREE.InstancedMesh(geo, M(0xffffff, "canvas"), tents.length);
+  const geo = kit ? kit.geometry.clone().scale(4.6, 4.6, 4.6) : new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: false }).translate(0, 0, -1.1);
+  const im = new THREE.InstancedMesh(geo, kit ? kit.material : M(0xffffff, "canvas"), tents.length);
   const o = new THREE.Object3D(), col = new THREE.Color();
   tents.forEach(([x, z], i) => {
     const R = rng(i + 9);
     o.position.copy(V(x, z, land.height(x, z) - 0.05)); o.rotation.set(0, (R() - 0.5) * 0.4, (R() - 0.5) * 0.05); o.scale.setScalar(0.9 + R() * 0.2); o.updateMatrix();
     im.setMatrixAt(i, o.matrix);
-    im.setColorAt(i, col.setHex([0xe0d5b8, 0xd2c39c, 0xc9b28a, 0xb8a888, 0xd7cdb8][i % 5]));
+    if (!kit) im.setColorAt(i, col.setHex([0xe0d5b8, 0xd2c39c, 0xc9b28a, 0xb8a888, 0xd7cdb8][i % 5]));
   });
   im.castShadow = true; im.receiveShadow = true; g.add(im);
   for (let i = 0; i < tents.length; i += 10) {
@@ -438,7 +499,28 @@ export function tentsMesh(tents, land, ctx) {
 }
 
 // the stores as heaps: a log stack, a stone heap, clay, thatch bundles, food sacks and crates, iron
+const PILE_KIT = { wood: ["resource_lumber"], stone: ["resource_stone"], food: ["crate_A_big", "sack", "barrel", "crate_open"],
+  thatch: ["crate_long_A", "pallet"], rope: ["barrel", "crate_B_big"], clay: ["crate_open", "bucket_water"], iron: ["crate_B_big", "weaponrack"] };
+function kitPiles(piles, land) {
+  const g = new THREE.Group();
+  for (const p of piles) {
+    const kinds = PILE_KIT[p.material] || ["crate_A_big"], R = rng(hash(p.material));
+    const n = Math.min(8, Math.max(1, Math.ceil(Math.log2(p.amount + 1) * 1.2)));
+    const [x, z] = p.pos, y = land.height(x, z);
+    for (let k = 0; k < n; k++) {
+      const m = kitModel(kinds[k % kinds.length]); if (!m) return null;
+      const big = /resource/.test(kinds[0]) ? 3.2 : 4.2;           // their props are tiny: to our metres
+      m.scale.setScalar(big); m.position.set((k % 3 - 1) * 1.3 + (R() - 0.5) * 0.3, -m.userData.size.minY * big, (Math.floor(k / 3) - 1) * 1.2);
+      m.rotation.y = (R() - 0.5) * 0.6;
+      const holder = new THREE.Group(); holder.add(m); holder.position.copy(V(x, z, y)); g.add(holder);
+      holder.traverse((o) => { o.userData.tip = `<strong>${p.amount} ${p.material}</strong> in the stores`; });
+    }
+  }
+  return g;
+}
+
 export function pilesMesh(piles, land) {
+  if (KIT.ready) { const k = kitPiles(piles, land); if (k) return k; }
   const g = new THREE.Group();
   for (const p of piles) {
     const R = rng(hash(p.material));

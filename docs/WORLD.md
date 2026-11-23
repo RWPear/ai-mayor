@@ -30,6 +30,15 @@ to see what it is. Click a line in the feed to jump there.
 
 ## What you see
 
+**The models:** buildings, building stages and scaffolding, ruins, tents, store piles and the people come from
+two free KayKit packs by Kay Lousberg (CC0 - free for any use; www.kaylousberg.com): the *Medieval Hexagon
+Pack* and *Character Pack: Adventures*, in `viewer/assets/kaykit/` (about 10 MB, with their licences). The
+people are rigged and animated (walk, chop, pick up, sit, lie down, cheer...); the crowd uses the same people
+baked into a few poses so hundreds can be drawn at once. A house is picked by what it's called (a smithy,
+a tavern, a mill, a chapel...) and then by its shape, scaled to its lot; people's own builds use red roofs,
+the king's blue. The shack, fire pits, walls, roads and bridges are still hand-built. `?assets=off` shows
+the hand-built kit for everything.
+
 **The look:** in the spirit of Thronefall, but a world you can walk around in: clean flat colours, no
 textures, low-poly faceted ground, chunky trees (a few already turning orange), golden thatch and cream
 walls, turquoise water, a soft cyan sky, warm sun and soft blue shadows. Bushes, flowers, pebbles and lone

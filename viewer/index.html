@@ -70,7 +70,9 @@ label.cont { color: var(--muted); font-size: 13px; white-space: nowrap; display:
 #loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); letter-spacing: .08em; color: var(--muted); pointer-events: none; }
 body.ready #loading { display: none; }
 /* live (./kingdom play): the panel takes the right side; replay-only controls go away */
-#live { right: 16px; top: 16px; bottom: 16px; width: min(400px, calc(100vw - 32px)); display: grid; grid-template-rows: auto auto auto auto auto 1fr auto; gap: 9px; overflow: hidden; }
+#live { right: 16px; top: 16px; bottom: 16px; width: min(400px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 9px; overflow: hidden; }
+#live > * { flex: 0 0 auto; }
+#live > #lfeeds { flex: 1 1 auto; min-height: 0; }
 #live[hidden], body.live #feed, body.live #shots, body.live #prev, body.live #next, body.live #scrub, body.live #speed,
 body.live #play, body.live label.cont { display: none !important; }
 body.live #bar { right: 432px; }
@@ -177,7 +179,7 @@ body.live #bar .top { grid-template-columns: auto 1fr; }
     <button type="button" data-tab="mind" aria-pressed="false">Aldric's mind</button>
     <label class="muted" style="display:flex;gap:6px;align-items:center"><input id="lmine" type="checkbox"> only mine</label>
   </div>
-  <div style="min-height:0;display:grid"><div id="lreplies" class="lfeed"></div><div id="llog" class="lfeed" hidden></div><div id="lmind" class="lfeed" hidden></div></div>
+  <div id="lfeeds" style="display:grid"><div id="lreplies" class="lfeed"></div><div id="llog" class="lfeed" hidden></div><div id="lmind" class="lfeed" hidden></div></div>
   <div id="lerror" class="chip warn" hidden></div>
 </section>
 <div id="caption" class="panel"></div>
