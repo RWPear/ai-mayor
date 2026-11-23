@@ -111,7 +111,10 @@ def make_world(city, kind):
     from .living.agents import LLMBrain
     from .living.world import World
     if kind == "llm":
-        from .llm import LLM
+        from .llm import LLM, check
+        ok = check()
+        print(f"The model: {ok['model']} at {ok['url']}" if ok["ok"] else
+              f"\n!!! {ok['error']}\n!!! Every mind will fall back to rules until it answers.\n")
         main, crowd = LLM(), LLM(crowd=True)
         return World(city, LLMBrain(main), LLMBrain(main), crowd_llm=crowd, voice_llm=crowd, director_llm=main)
     return World(city)

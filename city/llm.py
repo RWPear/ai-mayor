@@ -36,9 +36,60 @@ def _caller():
     return names[0] if names else "?"
 
 
+_FOUND = {}
+
+
+def find_ollama():
+    """Where Ollama answers: OLLAMA_URL if set, else this machine (localhost, then its own network addresses -
+    Ollama is often bound to the LAN address only, e.g. OLLAMA_HOST=192.168.1.23)."""
+    if "url" in _FOUND:
+        return _FOUND["url"]
+    if os.environ.get("OLLAMA_URL"):
+        _FOUND["url"] = os.environ["OLLAMA_URL"].rstrip("/")
+        return _FOUND["url"]
+    import socket
+    hosts = ["localhost", "127.0.0.1"]
+    try:
+        hosts += [a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)    # the address this machine uses on the network
+        s.connect(("10.255.255.255", 1))
+        hosts.append(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    for h in dict.fromkeys(hosts):
+        try:
+            if httpx.get(f"http://{h}:11434/api/tags", timeout=1.5).status_code == 200:
+                _FOUND["url"] = f"http://{h}:11434"
+                return _FOUND["url"]
+        except httpx.HTTPError:
+            continue
+    _FOUND["url"] = "http://localhost:11434"
+    return _FOUND["url"]
+
+
+def check(url=None, model=None):
+    """Is the model there? -> {"ok", "url", "model", "error"}"""
+    url = (url or find_ollama()).rstrip("/")
+    model = model or os.environ.get("OLLAMA_MODEL", "qwen3:14b")
+    try:
+        r = httpx.get(f"{url}/api/tags", timeout=4)
+        r.raise_for_status()
+        names = [m.get("name", "") for m in r.json().get("models", [])]
+        if not any(n == model or n.split(":")[0] == model.split(":")[0] and model in n for n in names):
+            return {"ok": False, "url": url, "model": model,
+                    "error": f"Ollama is there, but it doesn't have {model} (it has: {', '.join(names[:6]) or 'nothing'})"
+                             f". Run: ollama pull {model}"}
+        return {"ok": True, "url": url, "model": model, "error": None}
+    except Exception as e:
+        return {"ok": False, "url": url, "model": model,
+                "error": f"Ollama isn't answering at {url} ({type(e).__name__}: {e}). Set OLLAMA_URL in .env "
+                         f"(e.g. OLLAMA_URL=http://192.168.1.23:11434)."}
+
+
 class LLM:
     def __init__(self, model=None, crowd=False):
-        self.url = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+        self.url = find_ollama()
         main = os.environ.get("OLLAMA_MODEL", "qwen3:14b")
         self.model = model or (os.environ.get("OLLAMA_CROWD_MODEL", main) if crowd else main)
         self.ctx = int(os.environ.get("OLLAMA_NUM_CTX", "6144"))

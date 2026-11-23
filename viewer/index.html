@@ -104,7 +104,8 @@ body.live #bar .top { grid-template-columns: auto 1fr; }
 .lm.secret { color: var(--muted); }
 .lm.d2 { border-left-color: var(--accent); }
 .lm.d3 { border-left-color: var(--danger); }
-#lerror { white-space: normal; }
+#lerror, #lmodel { white-space: normal; line-height: 1.35; padding: 5px 10px; border-radius: 9px; }
+#lmodel.ok { color: #9fd38a; border-color: rgba(159,211,138,.5); }
 .mcard { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 13.5px; display: grid; gap: 4px; }
 .mcard .k { color: var(--muted); }
 .dec { font-size: 13.5px; line-height: 1.35; border-left: 3px solid var(--line); padding-left: 8px; }
@@ -149,6 +150,7 @@ body.live #bar .top { grid-template-columns: auto 1fr; }
 <section id="live" class="panel" hidden aria-label="Live kingdom">
   <div class="lhead"><h2>Live</h2><span id="lclock"></span></div>
   <div id="lstatus"></div>
+  <div id="lmodel" class="chip warn" hidden></div>
   <div class="row" id="lctl">
     <button id="lpause" type="button" aria-pressed="false">Pause</button>
     <select id="lspeed" aria-label="How fast the game runs">

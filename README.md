@@ -120,7 +120,9 @@ Run a whole season in seconds with a fake audience. The newest run is always at 
 ./kingdom test --scenario scenarios/barbarian_war.yaml  # a hand-written war pack
 ```
 
-Add `--king llm` to use the real AI king (needs Ollama; set `OLLAMA_URL=http://192.168.1.23:11434`),
+Add `--king llm` to use the real AI king (needs Ollama). It finds Ollama on this machine by itself (localhost
+or the machine's own network address); if it's elsewhere, put `OLLAMA_URL=http://192.168.1.23:11434` in a
+`.env` file next to `./kingdom`. It says at startup whether the model answered,
 and `--reports` to write each day's report, episode script and STATUS replies into `runs/latest/days/`.
 
 **Season plans:** `seasons/season1.yaml` is the planned path through Season 1. See it as a calendar with

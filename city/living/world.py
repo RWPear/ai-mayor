@@ -41,6 +41,13 @@ def _llm_last():
     return llm.CALLS[-1]["n"] if llm.CALLS else -1
 
 
+def _llm_failed(after):
+    """The error of the model's last call since call `after`, if it failed."""
+    from .. import llm
+    bad = [c for c in list(llm.CALLS)[-6:] if c["n"] > after and c.get("error")]
+    return bad[-1]["error"].split(":")[0] if bad else None
+
+
 class World:
     def __init__(self, city, king_brain=None, warlord_brain=None, crowd_llm=None, voice_llm=None, director_llm=None):
         self.city = city
@@ -643,7 +650,8 @@ class World:
         tool, args = brain.choose(self, who, available)
         fn = available.get(tool, (None,))[0]
         self.decisions.append({"n": next(self._dn), "time": self.now_str(), "who": who,
-                               "brain": "model" if brain is not self.rules and _llm_last() > n_calls else
+                               "brain": ("model" if not _llm_failed(n_calls) else f"rules (model failed: {_llm_failed(n_calls)})")
+                               if brain is not self.rules and _llm_last() > n_calls else
                                ("rules (no model)" if brain is self.rules and self.brains[who] is self.rules else
                                 "rules (model out of budget)" if brain is self.rules else "rules (model failed)"),
                                "tool": tool, "args": {k: str(v)[:200] for k, v in args.items()},

@@ -89,6 +89,10 @@ export function startLive({ onScene, onState }) {
     if (sp && $("lspeed").value !== sp[0]) $("lspeed").value = sp[0];
     $("larrive").hidden = !state.frontier;
     $("lpending").textContent = state.pending ? `(${state.pending})` : "";
+    const m = state.model || {};
+    $("lmodel").hidden = !!m.off;
+    $("lmodel").classList.toggle("ok", !!m.ok);
+    $("lmodel").textContent = m.off ? "" : m.ok ? `Thinking with ${m.model}` : `⚠ ${m.error} Aldric is running on rules until it answers.`;
   }
 
   function render() {
@@ -145,7 +149,7 @@ export function startLive({ onScene, onState }) {
     const calls = mind.calls.slice().reverse();
     el.innerHTML = `
       <div class="mcard">
-        <div><strong>${esc(k.name)}</strong> <span class="k">· ${esc(k.brain === "llm" ? "thinking with the model" : "running on rules (no model)")} · at ${esc(k.location || "")}</span></div>
+        <div><strong>${esc(k.name)}</strong> <span class="k">· ${esc(k.brain === "model" ? "thinking with the model" : k.brain === "rules" ? "running on rules (started without --king llm)" : "the model isn't answering - running on rules")} · at ${esc(k.location || "")}</span></div>
         ${k.character ? `<div><span class="k">Who he was before:</span> ${esc(k.character)}</div>` : ""}
         <div><span class="k">Goal:</span> ${esc(k.goal || "")}${k.goals.length ? ` · <span class="k">his own:</span> ${esc(k.goals.join("; "))}` : ""}</div>
         ${k.who ? `<div><span class="k">Who he's becoming:</span> ${esc(k.who)}</div>` : ""}
@@ -161,7 +165,7 @@ export function startLive({ onScene, onState }) {
         <div><strong>${esc(c.who)}</strong> <span class="muted">· ${esc((c.time || "").split(", ")[1] || "")} · ${c.ms} ms · ${esc(c.model)} · temp ${c.temperature}</span></div>
         <details data-k="u${c.n}" ${openState.has(`u${c.n}`) ? "open" : ""}><summary>What it was told (${(c.system.length + c.user.length).toLocaleString()} characters)</summary><pre>${esc(c.system)}</pre><pre>${esc(c.user)}</pre></details>
         <details data-k="r${c.n}" ${openState.has(`r${c.n}`) ? "" : "open"}><summary>What it said</summary><pre>${esc(c.error || c.response)}</pre></details>
-      </div>`).join("") : `<p class="muted">No calls to the model yet. ${k.brain === "llm" ? "" : "Start it with --king llm to see them."}</p>`}`;
+      </div>`).join("") : `<p class="muted">No calls to the model yet. ${k.brain === "rules" ? "Start it with --king llm to see them." : ""}</p>`}`;
     el.scrollTop = top;
   }
 

@@ -58,6 +58,11 @@ class Play:
                                           "engagement": 0.35, "free_text": 0.5}, seed=seed or 7)
         from . import llm
         llm.CLOCK = self.world.now_str
+        self.model = llm.check() if mayor == "llm" else {"ok": False, "off": True, "error": None}
+        if mayor == "llm":
+            print(("The model: " + self.model["model"] + " at " + self.model["url"]) if self.model["ok"] else
+                  "\n!!! " + self.model["error"] + "\n!!! Aldric will run on rules until it answers.\n")
+        self._model_checked = time.time()
         self.inbox = queue.Queue()
         self.lock = threading.Lock()
         self.tick_s = SPEEDS.get(speed, 30)
@@ -262,7 +267,11 @@ class Play:
         c = city.citizens
         self.handles = sorted(c.handles)[-400:] if hasattr(c, "handles") else []
         pack = city.pack or {}
-        state = {"day": city.day + 1, "clock": w.clock, "time": w.now_str(), "post_closes": w.now_str(w.next_post_clock()),
+        if not self.model.get("off") and time.time() - self._model_checked > 30:     # check again now and then
+            from . import llm
+            self.model = llm.check(self.model["url"], self.model["model"])
+            self._model_checked = time.time()
+        state = {"day": city.day + 1, "model": self.model, "clock": w.clock, "time": w.now_str(), "post_closes": w.now_str(w.next_post_clock()),
                  "paused": self.paused, "tick_s": self.tick_s, "tick_min": self.W.TICK, "version": self.version,
                  "speeds": SPEEDS, "error": self.error, "frontier": w.frontier,
                  "words": list((pack.get("commands") or {}).keys())[:8],
@@ -289,7 +298,8 @@ class Play:
             card = {"name": ("King Aldric" if crowned else "Aldric") if fr else k.get("name"),
                     "goal": k.get("frontier_goal") if fr else k.get("goal"), "goals": k.get("goals", []),
                     "character": k.get("character"), "who": life.who_am_i(k), "thought": k.get("last_thought", ""),
-                    "brain": self.world.brains["king"].name if hasattr(self.world.brains["king"], "name") else "rules",
+                    "brain": ("model" if self.model.get("ok") else "model, but it isn't answering")
+                    if getattr(self.world.brains["king"], "name", "") == "llm" else "rules",
                     "needs": {a: round(b, 2) for a, b in k.get("life", {}).get("needs", {}).items()},
                     "location": k.get("location")}
             dec = [d for d in self.world.decisions if d["n"] >= since][-150:]

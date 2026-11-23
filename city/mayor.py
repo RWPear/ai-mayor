@@ -283,7 +283,8 @@ class LLMMayor:
     name = "llm"
 
     def __init__(self):
-        self.url = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+        from .llm import find_ollama
+        self.url = find_ollama()
         self.model = os.environ.get("OLLAMA_MODEL", "qwen3:14b")
         self.ctx = int(os.environ.get("OLLAMA_NUM_CTX", "6144"))
         self.fallback = RuleMayor()
