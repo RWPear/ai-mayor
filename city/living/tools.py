@@ -19,7 +19,7 @@ import numpy as np
 
 from .. import effects, storyteller
 from ..roles import JOB_NAMES
-from . import life, warcamp
+from . import life, things, warcamp
 from . import town as T
 
 # what an invented decree's (or project's) options can do: small, fixed packages
@@ -133,9 +133,41 @@ def do(world, me, args):
     if out.get("made"):
         lf["creations"] = (lf.get("creations", []) + [{"title": out["made"], "kind": act, "day": world.city.day + 1}])[-60:]
     me["next_act"] = world.clock + int(out.get("minutes", 30))
+    things.use_stock(world, me, what)
     _used_gifts(world, me, f"{what} {out['outcome']}", out["outcome"])
     drama = int(out.get("drama", 1))
     return world.moment("king", out["outcome"], drama, public=drama >= 1, place=me.get("location"))
+
+
+def want(world, me, args):
+    """He wants something that isn't in front of him. The world decides once how it could happen."""
+    from .town import PLACES
+    thing = str(args.get("thing") or "").strip()
+    res = things.want(world, me, thing, args.get("why", ""))
+    if not res:
+        return None
+    w, how = res
+    name = w.get("label") or w["name"]
+    if how == "already":
+        me["nudge"] = f"You're already waiting for {name} ({w['how']})."
+        return None
+    if how == "known":
+        me["nudge"] = f"You already know: {w['how']}."
+        return None
+    if how == "here":
+        me["nudge"] = f"About {name}: {w['how']}."
+        return world.moment("king", f"The king had a craving for {name} - and {w['how']}.", 0, public=False)
+    if how == "impossible":
+        return world.moment("king", f"The king asked for {name}. The court explained, gently, that {w['how']}.",
+                            1, public=True)
+    if how == "delivery":
+        return world.moment("king", f"The king sent for {name}: {w['how']}.", 1, public=True)
+    if how == "made":
+        return world.moment("king", f"The king wants {name}, and it's being made: {w['how']}.", 2, public=True,
+                            handles=[w["maker"]] if w.get("maker") else [])
+    world.notify(f"The king wants {name} - followers can bring it")
+    return world.moment("king", f"The king let it be known he wants {name}. Whoever brings it will be rewarded.",
+                        2, public=True)
 
 
 def _used_gifts(world, me, text, outcome):
@@ -502,7 +534,8 @@ def sabotage(world, me, args):
 
 ARG = {"place": "where to walk: " + ", ".join(p["name"] for p in T.PLACES.values()),
        "person": "'steward', 'captain', 'jester', or a subject's @handle", "text": "the words, in your voice",
-       "what": "what you do, in your own words",
+       "what": "what you do, in your own words (you can use anything that's here)",
+       "thing": "what you want, in a few words",
        "name": "your idea for this place, in your own words",
        "size": "small (2 days), medium (4) or large (7) - bigger is riskier",
        "purpose": "what it's mainly for: " + ", ".join(BUILD_FLAVORS),
@@ -523,6 +556,8 @@ TOOLS = {
         "start_work": (start_work, "start a project of your own right where you are (it costs gold and might fail)",
                        ["name", "size", "purpose"], None),
         "work_on":    (work_on, "roll up your sleeves and help build the project where you are", [], None),
+        "want":       (want, "wish for something that isn't here (the world works out how you might get it)",
+                       ["thing", "why"], None),
         "hold_court": (hold_court, "in the throne room: rule on the next case on the docket", ["case", "verdict", "words"], None),
         "proclaim":   (proclaim, "make a public proclamation to the kingdom", ["text"], None),
         "summon":     (summon, "summon a subject (a real person) to the castle", ["handle", "why"], None),
@@ -560,7 +595,7 @@ def unlocked(world, who):
 
 
 # how long before a tool makes sense again (minutes) - stops letter spam and speech loops
-COOLDOWN = {"king": {"proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120},
+COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120},
             "warlord": {"taunt": 720, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
 
 

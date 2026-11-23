@@ -120,6 +120,7 @@ def episode_script(city, r):
         "featured": r["featured"][:3],
         "last_24_hours": (r.get("chronicle") or {}).get("top", []),
         "your_doing_today": shoutouts(r),
+        "the_king_wants": r.get("wanted", []),
         "meanwhile_in_the_north": (r.get("chronicle") or {}).get("meanwhile"),
         "tallies": r["tallies"],
         "stats": {k: r["stats"][k] for k in ("population", "approval", "treasury", "tax_rate")},
@@ -147,6 +148,8 @@ def caption(r):
     thanks = shoutouts(r)
     return (f"Day {r['day']}: {headline(r)}\n\n"
             + (("Your doing today: " + " · ".join(thanks) + "\n\n") if thanks else "")
+            + (("👑 The king is looking for: " + ", ".join(r["wanted"]) + ". Bring it to him (comment: I bring the "
+                "king ...) and be rewarded.\n\n") if r.get("wanted") else "")
             + f"Comment to act (one per post, latest counts): {words} - or tell your character what to do in your "
               f"own words. Send the king a gift. Suggest an idea.\n"
               f"Comment STATUS to see your subject. Follow to move in. 🏰\n"
@@ -173,6 +176,8 @@ def markdown(city, r):
     thanks = shoutouts(r, 5)
     if thanks:
         out += ["## Your doing today"] + [f"- {t}" for t in thanks] + [""]
+    if r.get("wanted"):
+        out += ["## The king is looking for", ", ".join(r["wanted"]), ""]
     out += ["## The people", "Today's comments: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
     out += [f"- {n}" for n in r["sim"]["notes"]]
     if r["events_started"] or r["events_ended"] or r["events_active"]:

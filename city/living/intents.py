@@ -239,6 +239,10 @@ def resolve(world, r, hostile_today):
         inv.append({"item": item, "from": u, "day": city.day + 1, "used": 0})
         del inv[:-20]
         r["facts"] = f"sent the king a gift: {item}. It's waiting for him at the castle gate"
+        from .things import _fulfil
+        if _fulfil(world, item, u):
+            r["facts"] += " - and it's exactly what he'd been wanting"
+            r["drama_floor"] = 2
         world.moment("world", f"A gift arrived at the castle from @{u}: {item}.", 1, public=True, handles=[u])
         r["drama_floor"] = 1
     elif act == "none":

@@ -243,6 +243,7 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
               "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,
               "chronicle": chron,
               "credits": (city.living.get("credits_today", []) if world else []),
+              "wanted": (__import__("city.living.things", fromlist=["wanted"]).wanted(city) if world else []),
               "outbox": (city.living.get("outbox", []) if world else []),
               "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)) if world else [],
               "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}

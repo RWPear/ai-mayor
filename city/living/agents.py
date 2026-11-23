@@ -41,7 +41,12 @@ def king_sections(world, me):
     S["here"].append(f"It is {world.now_str()}, {city.living.get('weather', 'a mild day')}. You are in "
                      f"{T.place_of(loc, t)}. You see: {T.describe(t, loc)}.")
     if T.PLACES[loc].get("offers"):
-        S["here"].append(f"Here there's {T.PLACES[loc]['offers']}.")
+        S["here"].append(f"This is a place with {T.PLACES[loc]['offers']}.")
+    from . import things
+    if things.stock_line(city, loc):
+        S["here"].append(things.stock_line(city, loc))
+    if things.wants_line(city):
+        S["me"].append(things.wants_line(city))
     S["me"].append(life.feeling(me))
     me_now = life.who_am_i(me)
     S["me"].append(f"Who you are so far ({'your own words' if me_now else 'you have not figured that out yet'})"
@@ -117,12 +122,12 @@ def king_view(world, me):
 # The king decides in two steps: first what he wants to focus on (a few clear choices), then - seeing only
 # what's relevant to that - exactly what to do. "I'm hungry" -> "myself" -> "a bowl of the cooks' stew".
 FOCUS = {
-    "myself":   ("look after yourself or do something you enjoy (eat, rest, a pastime, anything)", ["do", "walk"],
+    "myself":   ("look after yourself or do something you enjoy (eat, rest, a pastime, anything)", ["do", "want", "walk"],
                  ["here", "me", "places"]),
     "people":   ("spend time with people: your subjects or your court", ["talk", "summon", "walk"],
                  ["here", "people", "places"]),
     "court":    ("hear the people waiting at court", ["hold_court", "walk"], ["here", "court"]),
-    "building": ("build, fix or fund something", ["start_work", "work_on", "spend", "walk"],
+    "building": ("build, fix or fund something", ["start_work", "work_on", "spend", "want", "walk"],
                  ["here", "building", "places"]),
     "ruling":   ("rule: decrees, proclamations, feasts, the kingdom's affairs", ["decree", "proclaim", "feast", "spend"],
                  ["kingdom", "people"]),
@@ -244,8 +249,11 @@ class RuleBrain:
         low = min(n, key=n.get) if n else None
         if low and n[low] < 0.3:
             if low == "hunger":
-                return ("do", {"what": "eat something hot"}) if loc in ("kitchens", "great_hall", "tavern") \
-                    else ("walk", {"place": "kitchens"})
+                if loc in ("kitchens", "great_hall", "tavern"):
+                    from .things import state
+                    food = [it["name"] for it in state(city)["stock"].get(loc, []) if it["kind"] == "food"]
+                    return "do", {"what": f"eat the {rng.choice(food)}" if food else "eat something hot"}
+                return "walk", {"place": "kitchens"}
             if low == "energy":
                 return ("do", {"what": "take a nap"}) if loc == "bedchamber" else ("walk", {"place": "bedchamber"})
             if low == "company":
@@ -273,6 +281,9 @@ class RuleBrain:
             idea = rng.choice(TEST_IDEAS)
             return "start_work", {"name": idea[0], "size": idea[1], "purpose": idea[2]}
         r = rng.random()
+        if r < 0.04 and "want" in available:
+            return "want", {"thing": rng.choice(["carrots", "a new sword", "a warm cloak", "oranges", "a dragon egg",
+                                                 "a telescope"]), "why": "he just does"}
         if r < 0.08 and "spy" in available:
             return "spy", {"target": "north"}
         if r < 0.15 and city.living.get("last_decree_day", -9) < city.day - 3:

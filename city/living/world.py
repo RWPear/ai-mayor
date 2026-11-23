@@ -24,7 +24,7 @@ import numpy as np
 
 from .. import packs, storyteller
 from ..roles import JOB_NAMES
-from . import agents, chronicle, intents, life, tools, warcamp
+from . import agents, chronicle, intents, life, things, tools, warcamp
 from . import town as T
 
 TICK = 30            # minutes per tick
@@ -68,6 +68,9 @@ class World:
         lv = self.city.living
         lv.setdefault("town", T.new_town())
         lv.setdefault("docket", [])
+        if "things" not in lv:
+            lv["things"] = things.new_state()
+            things.restock(self)
         lv.setdefault("budget", {"hour": None, "left": 0, "size": 0})
         king = lv["agents"]["king"]
         king.setdefault("life", life.new_life())
@@ -250,7 +253,8 @@ class World:
                     "something he actually learned, or "". found: an object he ended up with, or "". made: a title "
                     "if he made something, or "". drama: 0 nothing to tell, 1 nice moment, 2 people would talk, "
                     "3 the whole kingdom would hear about it.",
-                    f"Where: {where}. When: {self.now_str()}, {self.city.living.get('weather', 'a mild day')}. "
+                    f"Where: {where}. {things.stock_line(self.city, loc)} When: {self.now_str()}, "
+                    f"{self.city.living.get('weather', 'a mild day')}. "
                     f"How he feels: {life.feeling(me)}\nWhat he does: {what}", self.NARRATE, max_tokens=220,
                     temperature=0.9)
                 out = {k: out.get(k) for k in self.NARRATE["properties"]}
@@ -380,6 +384,9 @@ class World:
         if self.director_llm and self.clock % 1440 in (6 * 60, 14 * 60):
             from . import director
             director.consider(self, self.director_llm)
+        if self.clock % 1440 == 6 * 60:
+            things.restock(self)
+        things.tick(self)
         if self.clock % 1440 == 6 * 60 or "weather" not in lv:
             lv["weather"] = self.city.rng.choice(["clear and cold", "grey drizzle", "a warm sunny day", "thick fog",
                                                   "a windy day", "heavy rain", "a crisp bright morning", "muggy heat"])

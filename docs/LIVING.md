@@ -86,6 +86,29 @@ On top of that, the menu only ever offers things that make sense right now (no c
 room, no raid while a raid is on), tools have cooldowns, he can only talk to the same person twice a day,
 and word-for-word repeats are blocked. Skarn still decides in one step - his life is simpler.
 
+## Things: what's lying around, and what he wants
+
+**Stock that changes.** Every place has actual things in it (`city/living/things.py`), restocked each
+morning from what that kind of place would have: the kitchens nearly always have bread and stew, sometimes
+carrots or honey, very rarely a jar of pickled eels. Leftovers mostly stay. New arrivals are marked
+**new today!** in what he sees. Now and then a surprise turns up somewhere - with a model it can be anything
+(a barrel of herring at the river, a peddler with strange blue eggs). Whatever he does with things in his own
+words uses them: "eat the carrots" eats them, "take the map" puts it in his bag.
+
+**Wants, without rerolling.** If he wants something that isn't in front of him ("I want a carrot"), the
+world decides **once** how it could happen, and it becomes a want with a path and a wait:
+
+| Path | What happens |
+|---|---|
+| it's somewhere in town today | he's told where - go and get it |
+| traders bring it | it comes in on the farmers' cart (1 day) or a caravan (a few days) - or the cart breaks down on the north road (decided up front, not rerolled) |
+| someone can make it | a **commission** from a real follower with that trade - the blacksmith makes the sword, the tailor the cloak. They hear about it, and get the credit when it's done |
+| nobody here has it | it goes in the post: **"👑 The king is looking for: a telescope"** - a follower who brings it gets a reward and the credit |
+| it doesn't exist here | the court gently explains (no dragons, no magic). He remembers, so he won't ask again |
+
+Asking again just tells him where it stands. A follower sending the thing ("I bring the king a carrot")
+fulfils any want, which beats waiting. Wants he never gets go stale after a week.
+
 ## Followers hear what they did (Instagram)
 
 Like sending things to Pino - but through the comments. Everything that happens to or because of a
@@ -100,6 +123,8 @@ to hang off a comment, so this only goes to people who commented in the last 7 d
 | their case was heard at court (or they waited 2 days for nothing) | the verdict |
 | they sent the king a gift ("I send the king a lute") | it arrives at the gate; when he **uses** it, they hear how |
 | they suggested something ("I suggest the king builds a bridge") | if he later starts something that matches, they get the credit |
+| they brought something the king wanted | a reward, the credit, and "He won't forget" |
+| the king commissioned something from their character | the order, then the credit when it's delivered |
 | they helped beat a crisis or a raid | "You helped: ..." |
 | their house burned in a raid | a note from the neighbours |
 

@@ -470,3 +470,74 @@ def test_no_reply_to_people_who_never_commented():
     w.reply("u7", "something happened", "done_to_you", credit="was there")
     assert not any(x["to"] == "u7" for x in city.living.get("outbox", []))   # nothing to reply to
     assert city.living["impact"]["u7"]                                        # but it's on their record
+
+
+# ---------------------------------------------------------------- things: stock that changes, wants with a path
+def test_stock_changes_and_new_things_pop_up():
+    from city.living import things
+    city, w = _world(30)
+    seen = set()
+    for _ in range(12):
+        things.restock(w)
+        seen |= {it["name"] for it in things.state(city)["stock"]["kitchens"]}
+    assert {"bread", "stew"} <= seen and len(seen) > 5
+    things.restock(w)
+    line = things.stock_line(city, "kitchens")
+    assert "Here right now" in line
+
+
+def test_wanting_carrots_is_decided_once():
+    from city.living import things, tools
+    city, w = _world(30)
+    for items in things.state(city)["stock"].values():            # no carrots anywhere today
+        items[:] = [it for it in items if "carrot" not in it["name"]]
+    king = w.agent("king")
+    m = tools.want(w, king, {"thing": "a carrot"})
+    want_ = things.state(city)["wants"][-1]
+    assert want_["path"] == "delivery" and "due" in want_ and "sent for a carrot" in m["text"]
+    assert tools.want(w, king, {"thing": "carrots"}) is None      # asking again doesn't reroll...
+    assert "already waiting for a carrot" in king["nudge"]          # ...it tells him where it stands
+
+
+def test_a_sword_is_commissioned_from_a_real_blacksmith():
+    from city.living import things, tools
+    from city.roles import JOB_NAMES
+    city, w = _world(80)
+    smith = next(h for h in city.citizens.handles if JOB_NAMES[int(city.citizens.job[city.citizens.index[h]])] == "blacksmith")
+    w.note_comment({"username": smith, "id": "c1", "post": 1})
+    tools.want(w, w.agent("king"), {"thing": "a fine sword with a red hilt"})
+    wnt = things.state(city)["wants"][-1]
+    assert wnt["path"] == "made" and wnt["job"] == "blacksmith"
+    for _ in range(3 * 48):
+        w.tick()
+    inv = w.agent("king")["life"]["inventory"]
+    assert any("sword" in g["item"] and g["from"] == wnt["maker"] for g in inv)
+
+
+def test_followers_can_bring_what_he_wants():
+    from city.living import intents, things, tools
+    city, w = _world(30)
+    tools.want(w, w.agent("king"), {"thing": "a telescope"})
+    assert "a telescope" in things.wanted(city)
+    w.note_comment({"username": "u2", "id": "c2", "post": 1})
+    intents.process(w, {"u2": "I bring the king a telescope I found in my attic"}, None, 0)
+    assert "a telescope" not in things.wanted(city)
+    assert any(x["kind"] == "want_fulfilled" and x["to"] == "u2" for x in city.living["outbox"])
+
+
+def test_dragons_dont_exist_and_he_remembers():
+    from city.living import tools
+    city, w = _world(30)
+    m = tools.want(w, w.agent("king"), {"thing": "a dragon egg"})
+    assert "no such thing" in m["text"]
+    assert tools.want(w, w.agent("king"), {"thing": "dragon eggs"}) is None
+
+
+def test_eating_whats_there_uses_it_up():
+    from city.living import things
+    city, w = _world(30)
+    king = w.agent("king")
+    king["location"] = "kitchens"
+    things.state(city)["stock"]["kitchens"] = [{"name": "carrots", "kind": "food", "new": True}]
+    things.use_stock(w, king, "eat the carrots raw")
+    assert not things.state(city)["stock"]["kitchens"]
