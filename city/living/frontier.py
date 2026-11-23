@@ -51,7 +51,7 @@ UNIT = {"wood": "wood", "stone": "stone", "clay": "clay", "thatch": "bundles of 
 
 # the land at the start. walk = minutes from the shack
 PLACES = {
-    "shack": {"name": "your shack", "walk": 2, "resources": [],
+    "shack": {"name": "the shack", "walk": 2, "resources": [],
               "offers": "a straw mat to sleep on and a cold fire pit"},
     "field": {"name": "the field", "walk": 4, "resources": ["thatch", "food"],
               "offers": "tall grass for thatch, wild onions, room to build"},
@@ -364,8 +364,11 @@ def start_project(world, idea, place=None):
          "needs": dict(d["needs"]), "used": {m: 0 for m in d["needs"]}, "kind": d["kind"], "scale": d["scale"],
          "capacity": d["capacity"], "know": d["know"], "boosts": d["boosts"], "look": d["look"],
          "missing": [k for k in d["know"] if k not in L["know"]], "started": world.city.day + 1, "helpers": [],
+         "material": d.get("material"),
          "king_hours": 0.0}
     L["projects"].append(p)
+    from . import scene
+    scene.place(world, p)                   # its lot: the scaffolding stands where the building will
     return p, None
 
 
@@ -427,6 +430,11 @@ def finish(world, p):
     place_name = place_of(world, p["place"])
     if result == "failed":
         feats[f"ruin_{p['id']}"] = f"the collapsed remains of {p['name']}"
+        if p.get("lot"):
+            L.setdefault("ruins", []).append({"id": f"r_{p['id']}", "name": f"the collapsed {bare(p['name'])}",
+                                              "shape": "ruin", "of": p["lot"]["shape"], "pos": p["lot"]["pos"],
+                                              "size": p["lot"]["size"], "rot": p["lot"]["rot"],
+                                              "kind": p["kind"], "day": city.day + 1})
         world.moment("king", f"{p['name']} collapsed before it was finished. Days of work, gone."
                      + (f" At least he learned something about {', '.join(learned)}." if learned else ""),
                      2, public=True, place=p["place"])
@@ -436,7 +444,8 @@ def finish(world, p):
     cap = p["capacity"] if result == "success" else int(p["capacity"] * 0.7)
     b = {"id": f"b{len(L['buildings'])}", "name": p["name"], "kind": p["kind"], "scale": p["scale"], "capacity": cap,
          "place": p["place"], "quality": "good" if result == "success" else "shoddy", "day": city.day + 1,
-         "by": "the king", "look": p.get("look", ""), "boosts": p.get("boosts", ""), "material": p.get("material")}
+         "by": "the king", "look": p.get("look", ""), "boosts": p.get("boosts", ""), "material": p.get("material"),
+         "lot": p.get("lot")}
     L["buildings"].append(b)
     feats[f"b_{b['id']}"] = p["name"] + ("" if result == "success" else " (shoddy - it leans)")
     q = 1.0 if result == "success" else 0.6
@@ -634,10 +643,13 @@ def arrive(world):
 
 
 def c_home(world, i):
-    occ = land(world)["occupancy"]
-    for b in land(world)["buildings"]:
+    """Which house they get (and the 3D view draws them going home to it)."""
+    L = land(world)
+    occ = L["occupancy"]
+    for b in L["buildings"]:
         if b.get("kind") == "housing" and occ.get(b["id"], 0) < b.get("capacity", 0):
             occ[b["id"]] = occ.get(b["id"], 0) + 1
+            L.setdefault("homes", {})[world.city.citizens.handles[int(i)]] = b["id"]
             return roles_the(b["name"])
     return "a house"
 
@@ -708,6 +720,8 @@ def labor(world, share):
         s[m] = s.get(m, 0) + got
         done[m] = done.get(m, 0) + got
         day_log(world, "settlers", m, got)
+        h = L.setdefault("harvested", {})
+        h[m] = h.get(m, 0) + got
 
     for crew in [x for x in L.get("crews", []) if x["until"] >= city.day + 1]:
         hrs = min(H, crew["people"] * total / max(1, n) * share)
@@ -963,7 +977,7 @@ def peddler_here(world):
 def gift(world, item, who):
     """A follower sent something. Tools make him faster; materials go in the stores."""
     L, t = land(world), str(item).lower()
-    for pat, mat, x in GIFT_TOOLS:
+    for pat, mat, x in GIFT_TOOLS:  # noqa: B007
         if re.search(pat, t):
             if any(_norm(x_.get("name")) == _norm(item) for x_ in L["tools"]):
                 return "(he already has one - it went on the shelf)"

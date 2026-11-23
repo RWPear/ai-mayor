@@ -12,7 +12,7 @@ and `city/living/frontier_tools.py` (what he can do, what he sees, his rule-base
 
 | Place | What's there |
 |---|---|
-| your shack | a straw mat, a cold fire pit, a roof that leaks |
+| the shack | a straw mat, a cold fire pit, a roof that leaks |
 | the field | grass for thatch, wild onions, room to build |
 | the woods | wood, vines and bark for rope, mushrooms |
 | the river | clay, reeds, fish |

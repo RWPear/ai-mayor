@@ -578,6 +578,7 @@ class World:
         if self.clock % 1440 == 6 * 60 or "weather" not in lv:
             lv["weather"] = self.city.rng.choice(["clear and cold", "grey drizzle", "a warm sunny day", "thick fog",
                                                   "a windy day", "heavy rain", "a crisp bright morning", "muggy heat"])
+            lv["weather_log"] = (lv.get("weather_log", []) + [{"t": self.clock, "weather": lv["weather"]}])[-14:]
         self.announce_works(life.advance_works(self, TICK))
         self._check_unlocks()
         king = self.agent("king")
@@ -586,7 +587,12 @@ class World:
             if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
                 life.reflect(self, king, getattr(self.brains["king"], "llm", None))
                 king["talks_today"] = {}
-            king["location"] = "bedchamber"
+                if self.frontier:
+                    from . import scene
+                    king["location"] = "shack"
+                    king["next_act"] = max(king.get("next_act", 0), self.clock + 8 * 60)
+                    scene.record(self, "king", "sleep", {"what": "sleep"}, None)
+            king["location"] = "shack" if self.frontier else "bedchamber"
         if self.clock % 1440 == 10 * 60 and warcamp.camp(self.city).get("arrived"):   # the warlord turns in at dawn
             life.reflect(self, self.agent("warlord"), getattr(self.brains["warlord"], "llm", None))
         for who in ("king", "warlord"):
@@ -637,6 +643,9 @@ class World:
                 self.stats["last_error"] = f"{who}.{tool}: {type(e).__name__}: {e}"[:200]
         self._doing = None
         self.stats[f"{who}.{tool}"] = self.stats.get(f"{who}.{tool}", 0) + 1
+        if fn and self.frontier:                  # the 3D view's track of where he was and what he did
+            from . import scene
+            scene.record(self, who, tool, args, m)
         return m
 
     def announce_works(self, finished):

@@ -377,6 +377,8 @@ def resolve(world, r, hostile_today):
             r["drama_floor"] = 2
         if world.frontier:
             from . import frontier
+            if not re.match(r"(a|an|the|my|some|his|her|their|\d+)\b", item, re.I):
+                item = trades.a_(item)
             note = frontier.gift(world, item, u)
             r["facts"] = (f"sent Aldric a gift: {item}. It was waiting at his door" + (f" {note}" if note else ""))
             r["reply_rule"] = f"Your {item} reached Aldric's door." + (f" {note[1:-1].capitalize()}." if note else "")

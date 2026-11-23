@@ -274,6 +274,8 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
               "chronicle": chron,
               "frontier": (__import__("city.living.frontier", fromlist=["summary"]).summary(world)
                            if world is not None and world.frontier else None),
+              "scene": (__import__("city.living.scene", fromlist=["export"]).export(world)
+                        if world is not None and world.frontier else None),
               "credits": (city.living.get("credits_today", []) if world else []),
               "wanted": (__import__("city.living.things", fromlist=["wanted"]).wanted(city) if world else []),
               "outbox": (city.living.get("outbox", []) if world else []),

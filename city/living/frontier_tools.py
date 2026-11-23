@@ -43,6 +43,8 @@ def gather(world, me, args):
     L["stock"][m] = L["stock"].get(m, 0) + got
     L["practice"][m] = practice + 1
     F.day_log(world, "king", m, got)
+    from . import scene
+    scene.harvested(world, m, got)
     out = world.narrate_activity(me, f"gather {m} by hand" + (f": {how}" if how else ""))
     for need in life.NEEDS:
         life.satisfy(me, need, out.get(need, 0.0))
@@ -438,7 +440,7 @@ def rule_king(world, me, available):
                 return "gather", {"material": "food", "how": "foraging"}
             return "walk", {"place": "the woods"}
         if low == "energy":
-            return ("do", {"what": "sleep on the straw mat"}) if loc == "shack" else ("walk", {"place": "your shack"})
+            return ("do", {"what": "sleep on the straw mat"}) if loc == "shack" else ("walk", {"place": "the shack"})
         if low == "company" and n[low] < 0.12:
             people = world.people_here(loc, 1)
             if people and "talk" in available:

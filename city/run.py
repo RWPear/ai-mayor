@@ -277,6 +277,26 @@ def cmd_check(args):
     print("\nAll good.")
 
 
+def cmd_view(args):
+    """Builds a page that plays one day in 3D (viewer/index.html with that day's scene inside it)."""
+    from .config import ROOT
+    days = Path(args.days)
+    files = sorted(days.glob("day*.scene.json"))
+    if args.day:
+        files = [f for f in files if f.name == f"day{args.day:03d}.scene.json"]
+    if not files:
+        print(f"No scene files in {days} - run a frontier scenario with --reports first.")
+        return
+    src = files[-1]
+    data = src.read_text().replace("</", "<\\/")
+    page = (ROOT / "viewer" / "index.html").read_text().replace(
+        '<script id="scene-data" type="application/json">null</script>',
+        f'<script id="scene-data" type="application/json">{data}</script>')
+    out = src.with_name(src.name.replace(".scene.json", ".view.html"))
+    out.write_text(page)
+    print(f"{out}  (open it in a browser - it plays {src.name})")
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # keep the day table readable
@@ -319,11 +339,14 @@ def main():
     e.add_argument("--state")
     e.add_argument("--hold", "--ward", dest="hold")
     e.add_argument("--day", type=int)
+    v = sub.add_parser("view", help="build a page that plays a day in 3D (from a run's scene files)")
+    v.add_argument("--days", default="runs/latest/days", help="a run's days folder")
+    v.add_argument("--day", type=int, help="which day (default: the last one)")
     c = sub.add_parser("check", help="validate events, projects, milestones, packs and plans")
     c.add_argument("--plan", default="seasons")
     args = p.parse_args()
     {"test": cmd_test, "day": cmd_day, "status": cmd_status, "plan": cmd_plan, "event": cmd_event,
-     "check": cmd_check, "live": cmd_live}[args.cmd](args)
+     "check": cmd_check, "live": cmd_live, "view": cmd_view}[args.cmd](args)
 
 
 if __name__ == "__main__":

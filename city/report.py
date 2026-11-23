@@ -264,6 +264,8 @@ def save(city, r, outdir):
         (outdir / f"day{r['day']:03d}.replies.json").write_text(json.dumps(r["status_replies"], indent=1))
     if r.get("moderation"):
         (outdir / f"day{r['day']:03d}.moderation.json").write_text(json.dumps(r["moderation"], indent=1))
+    if r.get("scene"):     # the 24 hours as a timeline with coordinates, for the 3D view (docs/SCENE.md)
+        (outdir / f"day{r['day']:03d}.scene.json").write_text(json.dumps(r["scene"], separators=(",", ":")))
     if r.get("outbox"):    # replies to followers' comments: what happened to their character because of them
         (outdir / f"day{r['day']:03d}.outbox.json").write_text(json.dumps(r["outbox"], indent=1))
     if r.get("moments"):   # the full log of the living world, for you - the post only gets the chronicle
