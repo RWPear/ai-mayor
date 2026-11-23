@@ -70,6 +70,47 @@ No personality, no hobbies, no plans. Who he becomes is his:
 - **The docket**: petitions from real comments, criminals the guards caught, visitors at the gate. In the
   throne room he rules: grant, deny, reward, pardon, fine or jail.
 
+## How the king decides (two steps)
+
+Showing a model every tool at once confuses it, so the king decides like a person:
+
+1. **What do I want to focus on?** He sees the big picture (where he is, how he feels, who he is, the
+   kingdom, what's waiting) and a short menu of focuses that make sense right now: *myself* (eat, rest,
+   enjoy something), *people*, *court* (only if someone's waiting), *building*, *ruling*, *defense* (only once
+   Skarn has arrived), *wander*. He says what he intends in his own words.
+2. **What exactly?** He then sees only what matters for that focus and only its tools. Hungry in the
+   kitchens: he sees "the cooks' stew pot, fresh bread, and whatever's in the larder" and decides what to
+   eat. At the river with a building focus: costs, his past projects, the ruins.
+
+On top of that, the menu only ever offers things that make sense right now (no court outside the throne
+room, no raid while a raid is on), tools have cooldowns, he can only talk to the same person twice a day,
+and word-for-word repeats are blocked. Skarn still decides in one step - his life is simpler.
+
+## Followers hear what they did (Instagram)
+
+Like sending things to Pino - but through the comments. Everything that happens to or because of a
+follower is queued as a **reply to their latest comment** (`dayNNN.outbox.json`; Instagram replies have
+to hang off a comment, so this only goes to people who commented in the last 7 days):
+
+| What happened | They get |
+|---|---|
+| their own-words move played out | the result ("@x tried to steal from @y and got caught...") |
+| someone stole from / fought / gifted them | "Meanwhile: ..." |
+| the king stopped to talk to their character, or summoned them | what he said and what they answered |
+| their case was heard at court (or they waited 2 days for nothing) | the verdict |
+| they sent the king a gift ("I send the king a lute") | it arrives at the gate; when he **uses** it, they hear how |
+| they suggested something ("I suggest the king builds a bridge") | if he later starts something that matches, they get the credit |
+| they helped beat a crisis or a raid | "You helped: ..." |
+| their house burned in a raid | a note from the neighbours |
+
+The best of it also goes **on their record** (STATUS shows "Your mark on Emberfall") and **into the post**:
+the report and caption have a "Your doing today" line naming up to 3 followers whose doing made the story
+(ideas taken up first, then gifts used, then heroes). The caption tells people they can send the king a gift
+or suggest an idea.
+
+Sending the replies to Instagram is the next piece (the API can reply to a comment, or send one private DM
+per comment within 7 days); for now they're written to the outbox file.
+
 ## Subjects acting on each other (the viral path)
 
 Own-words comments can name another subject:
@@ -81,7 +122,8 @@ Own-words comments can name another subject:
 | "I give @someone 20 gold" | gold moves, both get happier |
 | "I buy @someone a drink" | they become friends |
 | "I mock @someone" | their mood drops, a grudge starts |
-| "I beg the king for..." | goes on the king's docket |
+| "I beg the king for..." / "I suggest the king..." | goes on the king's docket (and counts as an idea) |
+| "I send the king a lute" | a gift: it arrives at the castle; he may use it (and the sender hears about it) |
 
 The model reads what people meant, **the game rolls the result**, then the model narrates it - so it can't
 be talked into a win. Arrested people go to the dungeon (or the stocks) and onto the docket; the jailed and

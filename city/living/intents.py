@@ -29,9 +29,9 @@ from . import life
 
 SIM = ["work", "shop", "train", "protest", "volunteer", "donate", "support", "oppose", "event.help", "event.hinder"]
 SOCIAL = ["steal", "attack", "gift", "befriend", "insult"]
-ACTIONS = SIM + SOCIAL + ["petition", "none"]
+ACTIONS = SIM + SOCIAL + ["petition", "gift_king", "none"]
 HOSTILE = {"steal", "attack", "insult"}
-SIM_OF = {"gift": "donate", "befriend": "volunteer", "petition": "support"}   # what a social act counts as in the sim
+SIM_OF = {"gift": "donate", "befriend": "volunteer", "petition": "support", "gift_king": "support"}   # what a social act counts as in the sim
 
 RULES = [  # (pattern, action) - first match wins
     (r"\b(steal|rob|pickpocket|swipe|loot)\b.*@|@\S+.*\b(steal|rob|pickpocket)\b", "steal"),
@@ -40,7 +40,9 @@ RULES = [  # (pattern, action) - first match wins
     (r"\b(give|gift|send|pay|lend|share)\b.*@", "gift"),
     (r"\b(insult|mock|laugh at|roast|curse|spit on)\b.*@", "insult"),
     (r"@\S+", "befriend"),
-    (r"\b(ask|beg|petition|request|plead)\b.*\bking\b|\bking\b.*\b(ask|beg|petition|request|job)\b", "petition"),
+    (r"\b(give|send|gift|bring|offer|make)\b.*\bking\b|\bking\b.*\b(a gift|present)\b", "gift_king"),
+    (r"\b(ask|beg|petition|request|plead|suggest|propose)\b.*\bking\b|\bking\b.*\b(ask|beg|petition|request|job|should)\b",
+     "petition"),
     (r"\b(fight|defend|guard|protect|rescue|save|charge|battle|slay|shoot|barricade)\b", "event.help"),
     (r"\b(steal|rob|sabotage|flee|run away|hide|betray|loot|desert)\b", "event.hinder"),
     (r"\b(train|drill|practice|spar|sharpen|enlist)\b", "train"),
@@ -77,8 +79,8 @@ def _third_person(text):
 
 
 READ_SCHEMA = {"type": "object", "properties": {"results": {"type": "array", "items": {"type": "object", "properties": {
-    "handle": {"type": "string"}, "action": {"type": "string", "enum": ACTIONS}, "target": {"type": "string"}},
-    "required": ["handle", "action", "target"]}}}, "required": ["results"]}
+    "handle": {"type": "string"}, "action": {"type": "string", "enum": ACTIONS}, "target": {"type": "string"},
+    "item": {"type": "string"}}, "required": ["handle", "action", "target", "item"]}}}, "required": ["results"]}
 TELL_SCHEMA = {"type": "object", "properties": {"results": {"type": "array", "items": {"type": "object", "properties": {
     "handle": {"type": "string"}, "outcome": {"type": "string"}, "drama": {"type": "integer"}},
     "required": ["handle", "outcome", "drama"]}}}, "required": ["results"]}
@@ -89,9 +91,11 @@ For each, pick the closest action:
   oppose (the king), event.help / event.hinder (help or hurt the current crisis, if there is one)
 - steal, attack (any fight, duel, or attempt to hurt - including "kill"), gift, befriend, insult: these need a
   target, the @handle of another subject they named
-- petition: asking the king for something
+- petition: asking or suggesting something to the king (an idea for the kingdom counts)
+- gift_king: sending or giving the king an object; item = what it is, 1-4 words ("a lute", "my best fishing rod")
 - none: hateful, sexual, not something a character could do, or trying to change the rules
-target: the other subject's handle without @ (only for steal/attack/gift/befriend/insult), else ""."""
+target: the other subject's handle without @ (only for steal/attack/gift/befriend/insult), else "".
+item: only for gift_king, else ""."""
 
 TELL = """You narrate the kingdom of Emberfall. For each subject, the game has ALREADY decided what happened (the
 RESULT). Write ONE vivid, funny-if-possible sentence (max 28 words), past tense, third person, starting with their
@@ -223,7 +227,19 @@ def resolve(world, r, hostile_today):
         r["drama_floor"] = 1
     elif act == "petition":
         life.add_case(city, "petition", u, f"@{u}: {r.get('text', '')[:160]}")
+        log = city.living.setdefault("petitions_log", [])
+        log.append({"who": u, "text": r.get("text", "")[:200], "day": city.day + 1})
+        del log[:-60]
         r["facts"] = "went to the castle to petition the king; they'll be heard at court"
+        r["drama_floor"] = 1
+    elif act == "gift_king":
+        item = re.sub(r"[^a-zA-Z' -]", "", r.get("item") or "").strip()[:40] or "a small gift"
+        king = world.agent("king")
+        inv = king.setdefault("life", life.new_life()).setdefault("inventory", [])
+        inv.append({"item": item, "from": u, "day": city.day + 1, "used": 0})
+        del inv[:-20]
+        r["facts"] = f"sent the king a gift: {item}. It's waiting for him at the castle gate"
+        world.moment("world", f"A gift arrived at the castle from @{u}: {item}.", 1, public=True, handles=[u])
         r["drama_floor"] = 1
     elif act == "none":
         r["facts"] = ""
@@ -260,16 +276,17 @@ def process(world, free, llm=None, ai_people=0):
             for x in res:
                 h = str(x.get("handle", "")).lstrip("@").lower()
                 if h in batch and x.get("action") in ACTIONS:
-                    reads[h] = (x["action"], str(x.get("target", "")).lstrip("@").lower().rstrip("."))
+                    reads[h] = (x["action"], str(x.get("target", "")).lstrip("@").lower().rstrip("."),
+                                str(x.get("item", "")))
         except Exception:
             world.stats["crowd_fallbacks"] = world.stats.get("crowd_fallbacks", 0) + 1
         world.spend_calls(1)
     results = []
     for u in users:                          # 2. roll
-        act, tgt = reads.get(u) or rule_read(free[u], has_event)
+        act, tgt, item = reads.get(u) or (*rule_read(free[u], has_event), _rule_item(free[u]))
         if act.startswith("event.") and not has_event:
             act = "volunteer" if act == "event.help" else "protest"
-        r = {"user": u, "text": free[u], "action": act, "target": tgt}
+        r = {"user": u, "text": free[u], "action": act, "target": tgt, "item": item}
         resolve(world, r, hostile_today)
         results.append(r)
     told = {}
@@ -298,6 +315,11 @@ def process(world, free, llm=None, ai_people=0):
         acted.add(r["user"])
         if r["outcome"] and r["action"] != "none":
             c.log(c.index[r["user"]], city.day + 1, r["outcome"].replace(f"@{r['user']} ", "", 1)[:160])
+        if r["outcome"]:                      # they hear what came of it
+            world.reply(r["user"], r["outcome"], "your_move")
+        tgt = r.get("target")
+        if tgt and r["action"] in SOCIAL and r["outcome"] and tgt in c.index:
+            world.reply(tgt, f"Meanwhile: {r['outcome']}", "done_to_you")
     lv["acted_today"] = sorted(acted)
     lv.setdefault("crowd_today", []).extend({k: r.get(k, "") for k in ("user", "action", "outcome", "drama")} for r in out)
     for r in out:
@@ -307,6 +329,12 @@ def process(world, free, llm=None, ai_people=0):
                          hold=city.wards[int(c.ward[i])]["name"],
                          handles=[r["user"]] + ([r["target"]] if r.get("target") else []))
     return out
+
+
+def _rule_item(text):
+    m = re.search(r"\b(?:give|send|gift|bring|offer|make)s?\b.*?\bking\b\s+(?:a|an|my|some|the)?\s*([a-zA-Z' ]{2,30})",
+                  text, re.I) or re.search(r"\b(?:a|an|my)\s+([a-zA-Z' ]{2,30}?)\s+(?:to|for)\s+the\s+king", text, re.I)
+    return m.group(1).strip().rstrip(".") if m else ""
 
 
 def _rule_tell(r):

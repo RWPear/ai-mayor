@@ -125,6 +125,29 @@ class World:
         return any(m["kind"] == "world" and "feud" in m["text"] and a in m["handles"] and b in m["handles"]
                    for m in self.moments_since(self.clock - 7 * 1440))
 
+    # ------------------------------------------------------------------ talking back to followers
+    def note_comment(self, cm):
+        """Remembers each follower's latest comment, so replies can go to it (Instagram replies need a comment)."""
+        u = str(cm.get("username", "")).lower()
+        if u:
+            self.city.living.setdefault("last_comment", {})[u] = {"id": cm.get("id"), "post": cm.get("post"),
+                                                                   "day": self.city.day + 1}
+
+    def reply(self, handle, text, kind, credit=None):
+        """Something happened to/with a follower's character. They hear about it (a reply to their latest comment,
+        if they commented in the last 7 days), and if it's their doing it goes on their record and maybe the post."""
+        lv = self.city.living
+        handle = str(handle).lstrip("@").lower()
+        last = lv.get("last_comment", {}).get(handle)
+        if last and last["day"] >= self.city.day + 1 - 7:
+            lv.setdefault("outbox", []).append({"to": handle, "text": text[:600], "kind": kind, "time": self.now_str(),
+                                                "comment_id": last.get("id"), "post": last.get("post")})
+        if credit:
+            rec = lv.setdefault("impact", {}).setdefault(handle, [])
+            rec.append({"day": self.city.day + 1, "text": credit[:140]})
+            del rec[:-10]
+            lv.setdefault("credits_today", []).append({"to": handle, "text": credit[:140], "kind": kind})
+
     def notify(self, text):
         """Anything surprising the AI did: kept in the save, printed live, and sent to NOTIFY_URL if set."""
         note = {"time": self.now_str(), "text": text}
@@ -313,6 +336,8 @@ class World:
         self.pending = [(at, cm) for at, cm in self.pending if at > self.clock]
         if not due:
             return
+        for cm in due:
+            self.note_comment(cm)
         free = {}
         packs.parse(due, self.city.pack or {"commands": {}}, None, free)
         self._hour_free.update(free)
@@ -388,6 +413,8 @@ class World:
     def act(self, who):
         me = self.agent(who)
         available = tools.available(self, who)
+        if not available:
+            return None
         brain = self.brains[who]
         if brain is not self.rules:
             if self.can_think():
@@ -484,6 +511,7 @@ class World:
         self.live_until_post()
         r = run_day(self.city, mayor, followers, comments, pack, world=self)
         self.city.living["last_post_clock"] = self.clock
+        self.city.living["outbox"], self.city.living["credits_today"] = [], []   # handed over in r
         self.pending = []
         return r
 

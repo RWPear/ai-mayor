@@ -124,16 +124,43 @@ class FakeLLM:
         return "Your majesty, the bread is stale."
 
 
-def test_llm_mind_uses_its_tool_and_falls_back_when_confused():
+class SeqLLM(FakeLLM):
+    """Answers in order (for multi-step decisions)."""
+    def __init__(self, answers):
+        self.answers, self.calls, self.prompts = list(answers), 0, []
+
+    def json(self, system, user, schema, max_tokens=900, temperature=0.8):
+        self.prompts.append((system, user))
+        self.calls += 1
+        return self.answers.pop(0)
+
+
+def test_the_king_decides_in_two_steps():
     city, w = _world()
-    brain = LLMBrain(FakeLLM({"thought": "x", "tool": "proclaim", "args": {"text": "Kneel, peasants!"},
-                              "new_goal": "be adored"}))
-    tool, args = brain.choose(w, "king", tools.unlocked(w, "king"))
-    assert tool == "proclaim" and args["text"] == "Kneel, peasants!"
-    assert "be adored" in w.agent("king")["goals"]
+    w.city.living["budget"]["left"] = 99
+    king = w.agent("king")
+    king["location"] = "kitchens"
+    king["life"]["needs"]["hunger"] = 0.1
+    mind = SeqLLM([{"thought": "My stomach growls.", "focus": "myself", "intention": "eat something warm",
+                    "new_goal": "be adored"},
+                   {"tool": "do", "args": {"what": "eat a bowl of the cooks' stew by the hearth"}}])
+    tool, args = LLMBrain(mind).choose(w, "king", tools.available(w, "king"))
+    assert tool == "do" and "stew" in args["what"]
+    first, second = mind.prompts
+    assert "- myself:" in first[0] and "- court:" not in first[0]         # no docket -> no court choice
+    assert "stew pot" in second[1]                                        # step 2 sees what the kitchens offer
+    assert "garrison" not in second[0]                                    # ...and only the tools for that focus
+    assert "be adored" in king["goals"] and w.stats["focus.myself"] == 1
+
+
+def test_llm_mind_falls_back_when_confused():
+    city, w = _world()
     bad = LLMBrain(FakeLLM({"thought": "x", "tool": "nuke_the_north", "args": {}, "new_goal": ""}))
-    tool, _ = bad.choose(w, "warlord", tools.unlocked(w, "warlord"))
+    tool, _ = bad.choose(w, "warlord", tools.unlocked(w, "warlord") or {"hunt": tools.TOOLS["warlord"]["hunt"][:3]})
     assert tool in tools.TOOLS["warlord"]
+    w.city.living["budget"]["left"] = 99
+    tool, _ = LLMBrain(FakeLLM({"focus": "flying"})).choose(w, "king", tools.available(w, "king"))
+    assert tool in tools.TOOLS["king"] and w.stats["fallbacks"] >= 1
 
 
 def test_chronicle_is_a_summary():
@@ -327,7 +354,7 @@ def test_he_can_do_anything_and_the_world_answers():
     m = tools.do(w, king, {"what": "go for a long run around the town"})
     assert "threw up" in m["text"] and m["drama"] == 2
     assert king["life"]["needs"]["energy"] < before
-    assert "a muddy coin" in king["life"]["inventory"]
+    assert any(g["item"] == "a muddy coin" for g in king["life"]["inventory"])
     assert king["next_act"] == w.clock + 240                    # the world's numbers are clamped (300 -> 240)
 
 
@@ -403,3 +430,43 @@ def test_ignored_petitioners_give_up():
     gone = life.age_docket(w)
     assert gone and not city.living["docket"]
     assert float(city.citizens.loyalty[city.citizens.index["u3"]]) < before
+
+
+# ---------------------------------------------------------------- followers hear what they did
+def test_send_the_king_a_gift_and_hear_when_he_uses_it():
+    from city.living import intents, tools
+    city, w = _world(30)
+    w.note_comment({"username": "u4", "id": "c123", "post": 1})
+    intents.process(w, {"u4": "I send the king a lute so he can learn to play"}, None, 0)
+    inv = w.agent("king")["life"]["inventory"]
+    assert any(g["item"].startswith("lute") and g["from"] == "u4" for g in inv)
+    tools.do(w, w.agent("king"), {"what": "try to play the lute in the garden"})
+    out = [x for x in city.living["outbox"] if x["to"] == "u4"]
+    assert any(x["kind"] == "your_move" for x in out) and any(x["kind"] == "gift_used" for x in out)
+    assert out[-1]["comment_id"] == "c123"                     # replies go to their comment
+    assert city.living["impact"]["u4"][-1]["text"].startswith("the king used their gift")
+
+
+def test_the_king_takes_up_a_followers_idea():
+    from city.living import intents, tools
+    city, w = _world(30)
+    city.treasury = 10 ** 6
+    w.note_comment({"username": "u5", "id": "c9", "post": 1})
+    intents.process(w, {"u5": "I suggest the king builds a bridge over the river"}, None, 0)
+    king = w.agent("king")
+    king["location"] = "river"
+    tools.start_work(w, king, {"name": "a stone bridge across the river", "size": "large"})
+    assert any(x["kind"] == "idea_used" and x["to"] == "u5" for x in city.living["outbox"])
+    r = w.post(RuleMayor(), [], [])
+    from city import report
+    assert any(t.startswith("@u5 the king took up their idea") for t in report.shoutouts(r))
+    assert "Your doing today" in report.caption(r)
+    card = report.status_card(city, city.citizens.index["u5"])
+    assert "Your mark on Emberfall" in card
+
+
+def test_no_reply_to_people_who_never_commented():
+    city, w = _world(30)
+    w.reply("u7", "something happened", "done_to_you", credit="was there")
+    assert not any(x["to"] == "u7" for x in city.living.get("outbox", []))   # nothing to reply to
+    assert city.living["impact"]["u7"]                                        # but it's on their record

@@ -102,6 +102,9 @@ def talk(world, me, args):
                                 if said else "The king stops to talk to you.")
     c.loyalty[i] = float(np.clip(c.loyalty[i] + 0.04, 0, 1))
     c.log(int(i), world.city.day + 1, "talked with the king himself")
+    world.reply(c.handles[i], f'👑 The king stopped your character at {T.PLACES[me["location"]]["name"]} and said: '
+                              f'"{said or "Hello there."}" You answered: "{reply}"', "king_talked",
+                credit="talked with the king")
     return world.moment("king", f'The king stopped to talk with @{c.handles[i]}: "{said or "Hello there."}" - '
                                 f'"{reply}"', 2, public=True, place=me.get("location"), handles=[c.handles[i]])
 
@@ -126,12 +129,46 @@ def do(world, me, args):
     if out.get("learned"):
         lf["knowledge"] = (lf.get("knowledge", []) + [out["learned"]])[-20:]
     if out.get("found"):
-        lf["inventory"] = (lf.get("inventory", []) + [out["found"]])[-20:]
+        lf["inventory"] = (lf.get("inventory", []) + [{"item": out["found"], "from": None, "day": world.city.day + 1}])[-20:]
     if out.get("made"):
         lf["creations"] = (lf.get("creations", []) + [{"title": out["made"], "kind": act, "day": world.city.day + 1}])[-60:]
     me["next_act"] = world.clock + int(out.get("minutes", 30))
+    _used_gifts(world, me, f"{what} {out['outcome']}", out["outcome"])
     drama = int(out.get("drama", 1))
     return world.moment("king", out["outcome"], drama, public=drama >= 1, place=me.get("location"))
+
+
+def _used_gifts(world, me, text, outcome):
+    """If he used something a follower sent him, they hear about it - and get the credit."""
+    t = text.lower()
+    for g in me.get("life", {}).get("inventory", []):
+        if not isinstance(g, dict) or not g.get("from"):
+            continue
+        noun = (re.findall(r"[a-z]{3,}", g["item"].lower()) or [""])[-1]
+        if noun and noun in t:
+            g["used"] = g.get("used", 0) + 1
+            if g.get("told_day") != world.city.day:          # at most one message a day per gift
+                g["told_day"] = world.city.day
+                world.reply(g["from"], f"🎁 The king used the {g['item']} you sent him: {outcome}", "gift_used",
+                            credit=f"the king used their gift ({g['item']})")
+            return g
+    return None
+
+
+def _credit_ideas(world, text):
+    """If what the king just started matches something a follower suggested, they get the credit."""
+    stop = {"king", "with", "that", "this", "should", "would", "could", "your", "majesty", "please", "build", "make"}
+    words = {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in stop}
+    out = []
+    for p in world.city.living.get("petitions_log", [])[::-1]:
+        if p["day"] < world.city.day + 1 - 7 or p.get("credited"):
+            continue
+        if words & {w for w in re.findall(r"[a-z]{4,}", p["text"].lower()) if w not in stop}:
+            p["credited"] = True
+            world.reply(p["who"], f"💡 The king took up your idea: {text}", "idea_used",
+                        credit=f"the king took up their idea ({text[:60]})")
+            out.append(p["who"])
+    return out
 
 
 def start_work(world, me, args):
@@ -158,6 +195,7 @@ def start_work(world, me, args):
         return world.moment("king", f"The king wanted {name}, but the treasury can't pay {cost:,.0f} gold.",
                             1, public=False, place=pid)
     world.notify(f"The king started his own project at {T.PLACES[pid]['name']}: {name}")
+    _credit_ideas(world, name)
     return world.moment("king", f"The king ordered {name} ({cost:,.0f} gold, about {work['days']} days of work).",
                         2, public=True, place=pid)
 
@@ -216,6 +254,10 @@ def hold_court(world, me, args):
                 city.treasury += fine
                 effect = f" - fined {fine:.0f} gold"
         c.log(i, city.day + 1, f"was judged by the king: {verdict}")
+        world.reply(case["who"], f"⚖️ At court, the king heard your case ({case['text'][:120]}). Verdict: "
+                                 f"{verdict.upper()}{effect}."
+                    + (f' He said: "{words}"' if words else ""), "court",
+                    credit=f"had their case heard at court ({verdict})" if verdict in ("grant", "reward") else None)
     return world.moment("king", f"At court: {case['text']}. The king's verdict: {verdict.upper()}{effect}."
                         + (f' "{words}"' if words else ""), 2, public=True, place="throne_room",
                         handles=[case["who"]])
@@ -260,6 +302,8 @@ def summon(world, me, args):
     good = float(c.mood[i]) > 0.5
     c.loyalty[i] = float(np.clip(c.loyalty[i] + (0.06 if good else -0.03), 0, 1))
     c.log(int(i), world.city.day, "was summoned before the king")
+    world.reply(c.handles[i], "👑 The king summoned your character to the castle" + (f" ({why})" if why else "")
+                + f'. You told him: "{reply}"', "king_talked", credit="was summoned by the king")
     return world.moment("king", f"The king summoned @{c.handles[i]} ({JOB_NAMES[int(c.job[i])]} of "
                                 f"{world.city.wards[int(c.ward[i])]['name']})"
                                 + (f" ({why.rstrip('.')})" if why else "") + f'. They said: "{reply}"',
@@ -294,6 +338,7 @@ def decree(world, me, args):
     if a and side in (a_w, b_w):
         a["side"] = side
     city.living["last_decree_day"] = city.day
+    _credit_ideas(world, q)
     world.notify(f"The king invented a decree: {q} [{a_w} / {b_w}]")
     return world.moment("king", f"The king issued a new decree: {q} {a_w} or {b_w}?"
                         + (f" He wants {side}." if side in (a_w, b_w) else ""), 2, public=True)

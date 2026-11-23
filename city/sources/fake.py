@@ -39,6 +39,11 @@ FREE_TEXT = [
     "I buy {target} a drink and become friends",
     "I loudly mock {target}'s terrible singing in the tavern",
     "I try to kill {target} for stealing my goat",
+    "I send the king a lute so he can learn to play",
+    "I give the king my best fishing rod",
+    "I bring the king a basket of fresh apples",
+    "I suggest the king builds a bridge over the river",
+    "I ask the king to fix the mud on King's Street",
 ]
 
 ARCHETYPES = {

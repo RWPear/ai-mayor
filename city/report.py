@@ -45,6 +45,9 @@ def status_card(city, i):
     nxt = _next_rank(c, i)
     if nxt and not lord:
         lines.append(nxt)
+    mark = ((city.living or {}).get("impact") or {}).get(c.handles[i], [])
+    if mark:
+        lines.append("Your mark on Emberfall: " + "; ".join(m["text"] for m in mark[-2:]))
     story = c.story.get(int(i))
     if story:
         lines.append("Latest: " + story[-1])
@@ -116,6 +119,7 @@ def episode_script(city, r):
                        + [e["title"] for e in r["events_started"]] + r["sim"]["notes"])[:6],
         "featured": r["featured"][:3],
         "last_24_hours": (r.get("chronicle") or {}).get("top", []),
+        "your_doing_today": shoutouts(r),
         "meanwhile_in_the_north": (r.get("chronicle") or {}).get("meanwhile"),
         "tallies": r["tallies"],
         "stats": {k: r["stats"][k] for k in ("population", "approval", "treasury", "tax_rate")},
@@ -125,12 +129,28 @@ def episode_script(city, r):
     }
 
 
+def shoutouts(r, n=3):
+    """The followers whose doing made today's story (one line each, different people)."""
+    seen, out = set(), []
+    order = {"idea_used": 0, "gift_used": 1, "helped": 2, "court": 3, "king_talked": 4}
+    for x in sorted(r.get("credits") or [], key=lambda x: order.get(x["kind"], 9)):
+        if x["to"] not in seen:
+            seen.add(x["to"])
+            out.append(f"@{x['to']} {x['text']}")
+        if len(out) == n:
+            break
+    return out
+
+
 def caption(r):
     words = " · ".join(r["next_pack"]["commands"]) if r.get("next_pack") else ""
+    thanks = shoutouts(r)
     return (f"Day {r['day']}: {headline(r)}\n\n"
-            f"Comment to act (one per post, latest counts): {words}\n"
-            f"Comment STATUS to see your subject. BECOME <JOB> to change trade. Follow to move in. 🏰\n"
-            f"An AI rules this kingdom. You live in it.")
+            + (("Your doing today: " + " · ".join(thanks) + "\n\n") if thanks else "")
+            + f"Comment to act (one per post, latest counts): {words} - or tell your character what to do in your "
+              f"own words. Send the king a gift. Suggest an idea.\n"
+              f"Comment STATUS to see your subject. Follow to move in. 🏰\n"
+              f"An AI rules this kingdom. You live in it.")
 
 
 def markdown(city, r):
@@ -150,6 +170,9 @@ def markdown(city, r):
         if ch["meanwhile"]:
             out.append(f"- *Meanwhile in the north:* {ch['meanwhile']}")
         out.append("")
+    thanks = shoutouts(r, 5)
+    if thanks:
+        out += ["## Your doing today"] + [f"- {t}" for t in thanks] + [""]
     out += ["## The people", "Today's comments: " + (", ".join(f"{w} {n}" for w, n in r["tallies"].items()) or "none")]
     out += [f"- {n}" for n in r["sim"]["notes"]]
     if r["events_started"] or r["events_ended"] or r["events_active"]:
@@ -196,6 +219,8 @@ def save(city, r, outdir):
     (outdir / f"day{r['day']:03d}.episode.json").write_text(json.dumps(episode_script(city, r), indent=1))
     if r["status_replies"]:
         (outdir / f"day{r['day']:03d}.replies.json").write_text(json.dumps(r["status_replies"], indent=1))
+    if r.get("outbox"):    # replies to followers' comments: what happened to their character because of them
+        (outdir / f"day{r['day']:03d}.outbox.json").write_text(json.dumps(r["outbox"], indent=1))
     if r.get("moments"):   # the full log of the living world, for you - the post only gets the chronicle
         (outdir / f"day{r['day']:03d}.log.txt").write_text(
             "\n".join(f"{m['time']}  {'' if m['public'] else '(secret) '}[{m['who']}] {m['text']}"

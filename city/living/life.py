@@ -251,6 +251,8 @@ def age_docket(world):
         else:
             c.loyalty[i] = float(np.clip(c.loyalty[i] - 0.06, 0, 1))
             c.log(i, city.day + 1, "gave up waiting for the king's court")
+            world.reply(k["who"], "You waited two days at the castle, but the king never heard your case. You went "
+                                  "home.", "court")
             world.moment("world", f"@{k['who']} gave up waiting for the king's court and went home annoyed.", 1,
                          public=True, handles=[k["who"]])
     return gone

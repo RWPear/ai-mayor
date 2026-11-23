@@ -32,7 +32,9 @@ rebuilds castle ruins (which quietly unlocks powers), talks with his court and j
 night he rewrites who he is. He can do anything in his own words ("go for a run", "sit and read") and the
 world narrates what comes of it. Events come from a director that invents consequences of what actually
 happened, tame at first and nastier as the season goes on. Followers get houses (outside the walls, if any);
-raids burn the ones outside. Skarn shows up on day 4. Every post stays live. **Skarn the Red** (the barbarian warlord,
+raids burn the ones outside. Skarn shows up on day 4. Every post stays live. The king decides in two steps
+(what to focus on, then exactly what). Followers hear what their character did and what came of it - replies to
+their comments, gifts the king used, ideas he took up - and the post names whose doing it was. **Skarn the Red** (the barbarian warlord,
 antagonist) runs his war camp and decides when to raid. Comments in people's own words give their
 character a turn - including stealing from, fighting, or befriending other followers (nobody dies).
 One GPU budget per hour: the crowd gets first claim, the king gets the rest - so a quiet day is about the

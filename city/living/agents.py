@@ -30,82 +30,121 @@ def _ago(world, m):
     return f"{mins // 60}h ago" if mins >= 60 else "just now"
 
 
-def king_view(world, me):
-    """Where he is and what he sees there, how he feels, what's on his plate, the kingdom, the war."""
+def king_sections(world, me):
+    """Everything the king could know right now, in sections - so each decision only sees what it needs."""
     from ..sim import available_projects
     city, c = world.city, world.city.citizens
     t = city.living["town"]
     loc = me.get("location", "throne_room")
-    lines = [f"It is {world.now_str()}, {city.living.get('weather', 'a mild day')}. You are in "
-             f"{T.place_of(loc, t)}. You see: {T.describe(t, loc)}.",
-             f"Emberfall: {T.summary(world)}."]
+    lf = me.get("life", {})
+    S = {k: [] for k in ("here", "me", "people", "court", "building", "kingdom", "north", "places")}
+    S["here"].append(f"It is {world.now_str()}, {city.living.get('weather', 'a mild day')}. You are in "
+                     f"{T.place_of(loc, t)}. You see: {T.describe(t, loc)}.")
+    if T.PLACES[loc].get("offers"):
+        S["here"].append(f"Here there's {T.PLACES[loc]['offers']}.")
+    S["me"].append(life.feeling(me))
+    me_now = life.who_am_i(me)
+    S["me"].append(f"Who you are so far ({'your own words' if me_now else 'you have not figured that out yet'})"
+                   + (f": {me_now}." if me_now else "."))
+    if life.tried(me):
+        S["me"].append(f"Things you've spent your time on: {life.tried(me)}.")
+    if lf.get("knowledge"):
+        S["me"].append("Things you've learned: " + "; ".join(lf["knowledge"][-4:]) + ".")
+    inv = [x if isinstance(x, str) else f"{x['item']} (a gift from @{x['from']})" for x in lf.get("inventory", [])]
+    if inv:
+        S["me"].append("You have: " + ", ".join(inv[-6:]) + ".")
     court = life.court()
     here = world.court_here()
     if here:
-        lines.append("Here with you: " + ", ".join(court[k]["name"] for k in here) + ".")
+        S["people"].append("Here with you: " + ", ".join(court[k]["name"] for k in here) + ".")
     people = world.people_here(loc)
     if people:
-        lines.append("Subjects around you: " + ", ".join(
+        S["people"].append("Subjects around you: " + ", ".join(
             f"@{c.handles[i]} ({JOB_NAMES[int(c.job[i])]}, {'grumpy' if c.mood[i] < 0.45 else 'cheerful'})"
             for i in people) + ".")
     if loc == "tavern":
         heard = [m["text"] for m in world.moments_since(world.clock - 24 * 60) if m["who"].startswith("@")][-3:]
-        lines.append("In disguise, you overhear: " + (" / ".join(heard) if heard else "grumbling about bread prices."))
-    works = t["works"]
-    if works:
-        lines.append("Being built: " + "; ".join(f"{w['name']} at {T.PLACES[w['place']]['name']} "
-                                                f"({w['progress']:.0%})" for w in works))
-    outcomes = me.get("life", {}).get("outcomes", [])[-3:]
-    if outcomes:
-        lines.append("How your projects turned out: " + "; ".join(f"{o['name']}: {o['result']}" for o in outcomes))
-    ruins = [T.ROOMS[r]["name"] for r in T.ruins(t)]
-    if ruins:
-        lines.append("Parts of your castle are ruins: " + ", ".join(ruins) + ".")
-    lines.append(f"Project costs right now: small {T.cost('small', city.population()):,.0f} gold, medium "
-                 f"{T.cost('medium', city.population()):,.0f}, large {T.cost('large', city.population()):,.0f}.")
+        S["people"].append("In disguise, you overhear: " + (" / ".join(heard) if heard else "grumbling about bread."))
+    talks = me.get("talks_today", {})
+    if talks:
+        S["people"].append("You've already talked today with: " + ", ".join(f"{k} ({n}x)" for k, n in talks.items()))
+    comments = city.living.get("loud_comments", [])[-4:]
+    if comments:
+        S["people"].append("What subjects are saying: " + " / ".join(comments))
     docket = city.living.get("docket", [])
     if docket:
         oldest = min(k["day"] for k in docket)
-        if loc == "throne_room":
-            lines.append("Waiting at court: " + " / ".join(f"[{k['id']}] {k['text']}" for k in docket[:3]))
-        else:
-            lines.append(f"{len(docket)} people are waiting for you at court in the throne room (the oldest since "
-                         f"day {oldest}; people who wait 2 days give up and go home angry).")
-    talks = me.get("talks_today", {})
-    if talks:
-        lines.append("You've already talked today with: " + ", ".join(f"{k} ({n}x)" for k, n in talks.items()) + ".")
-    if me.get("nudge"):
-        lines.append(me.pop("nudge"))
-    lines.append(life.feeling(me))
-    me_now = life.who_am_i(me)
-    lines.append(f"Who you are so far ({'your own words' if me_now else 'you have not figured that out yet'})"
-                 + (f": {me_now}." if me_now else "."))
-    t_ = life.tried(me)
-    if t_:
-        lines.append(f"Things you've spent your time on: {t_}.")
-    lf = me.get("life", {})
-    if lf.get("knowledge"):
-        lines.append("Things you've learned: " + "; ".join(lf["knowledge"][-4:]) + ".")
-    if lf.get("inventory"):
-        lines.append("You have: " + ", ".join(lf["inventory"][-5:]) + ".")
-    lines.append(f"Kingdom: {city.population()} subjects, loyalty {city.approval():.0%}, treasury "
-                 f"{city.treasury:,.0f} gold, tax {city.tax_rate:.0%}. The Reckoning (the vote on your crown) is in "
-                 f"{city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
-    letters = [x for x in me.get("letters", []) if x["day"] >= city.day - 1]
-    if letters:
-        lines.append("Letters: " + " / ".join(f"from {x['from']}: \"{x['text']}\"" for x in letters[-2:]))
-    if me.get("intel"):
-        lines.append("Your spies' reports: " + json.dumps(me["intel"]))
-    comments = city.living.get("loud_comments", [])[-4:]
-    if comments:
-        lines.append("What subjects are saying: " + " / ".join(comments))
-    events = [f"{a['title']} ({a['days_left']} days left)" for a in city.events]
-    if events:
-        lines.append("Happening now: " + "; ".join(events))
+        S["court"].append(f"{len(docket)} waiting at court in the throne room (oldest since day {oldest}; people who "
+                          "wait 2 days give up and go home angry): " +
+                          " / ".join(f"[{k['id']}] {k['text']}" for k in docket[:4]))
+    if t["works"]:
+        S["building"].append("Being built: " + "; ".join(f"{w['name']} at {T.PLACES[w['place']]['name']} "
+                                                         f"({w['progress']:.0%})" for w in t["works"]))
+    outcomes = lf.get("outcomes", [])[-3:]
+    if outcomes:
+        S["building"].append("How your projects turned out: " + "; ".join(f"{o['name']}: {o['result']}" for o in outcomes))
+    ruins = [T.ROOMS[r]["name"] for r in T.ruins(t)]
+    if ruins:
+        S["building"].append("Parts of your castle are ruins: " + ", ".join(ruins) + ".")
+    S["building"].append(f"Project costs: small {T.cost('small', city.population()):,.0f} gold, medium "
+                         f"{T.cost('medium', city.population()):,.0f}, large {T.cost('large', city.population()):,.0f}. "
+                         f"Treasury: {city.treasury:,.0f} gold.")
     projs = [f"{p['id']} ({p['cost_pc'] * city.population():,.0f} gold)" for p in available_projects(city)][:5]
     if projs:
-        lines.append("Kingdom building projects (spend): " + ", ".join(projs))
-    return lines
+        S["building"].append("Kingdom building projects you could fund (spend): " + ", ".join(projs))
+    S["kingdom"].append(f"Emberfall: {city.population()} subjects, {T.summary(world)}, loyalty {city.approval():.0%}, "
+                        f"treasury {city.treasury:,.0f} gold, tax {city.tax_rate:.0%}. The Reckoning (the vote on your "
+                        f"crown) is in {city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
+    events = [f"{a['title']} ({a['days_left']} days left)" for a in city.events]
+    if events:
+        S["kingdom"].append("Happening now: " + "; ".join(events))
+    letters = [x for x in me.get("letters", []) if x["day"] >= city.day - 1]
+    if letters:
+        S["north"].append("Letters: " + " / ".join(f"from {x['from']}: \"{x['text']}\"" for x in letters[-2:]))
+    if me.get("intel"):
+        S["north"].append("Your spies' reports: " + json.dumps(me["intel"]))
+    S["places"].append("Places: " + ", ".join(p["name"] for p in T.PLACES.values()) + ".")
+    if me.get("nudge"):
+        S["me"].append(me.pop("nudge"))
+    return S
+
+
+def king_view(world, me):
+    S = king_sections(world, me)
+    return [line for k in ("here", "me", "people", "court", "building", "kingdom", "north") for line in S[k]]
+
+
+# The king decides in two steps: first what he wants to focus on (a few clear choices), then - seeing only
+# what's relevant to that - exactly what to do. "I'm hungry" -> "myself" -> "a bowl of the cooks' stew".
+FOCUS = {
+    "myself":   ("look after yourself or do something you enjoy (eat, rest, a pastime, anything)", ["do", "walk"],
+                 ["here", "me", "places"]),
+    "people":   ("spend time with people: your subjects or your court", ["talk", "summon", "walk"],
+                 ["here", "people", "places"]),
+    "court":    ("hear the people waiting at court", ["hold_court", "walk"], ["here", "court"]),
+    "building": ("build, fix or fund something", ["start_work", "work_on", "spend", "walk"],
+                 ["here", "building", "places"]),
+    "ruling":   ("rule: decrees, proclamations, feasts, the kingdom's affairs", ["decree", "proclaim", "feast", "spend"],
+                 ["kingdom", "people"]),
+    "defense":  ("the danger from the north: defenses, spies, soldiers", ["garrison", "spy", "proclaim", "start_work", "walk"],
+                 ["here", "north", "kingdom", "building"]),
+    "wander":   ("go somewhere, look around, be curious", ["walk", "do"], ["here", "places"]),
+}
+
+
+def foci(world, available):
+    """The focus choices that make sense right now (each needs at least one usable tool)."""
+    city = world.city
+    out = {}
+    for k, (desc, names, _) in FOCUS.items():
+        usable = [n for n in names if n in available]
+        if k == "court" and not city.living.get("docket"):
+            continue
+        if k == "defense" and not city.living.get("warcamp", {}).get("arrived"):
+            continue
+        if usable:
+            out[k] = (desc, usable)
+    return out
 
 
 def perceive(world, who):
@@ -262,26 +301,91 @@ class LLMBrain:
         self.llm = llm
         self.fallback = RuleBrain()
 
+    @staticmethod
+    def _identity(p, who):
+        me_now = life.who_am_i(p)
+        if who == "king":
+            return (f"You are {p['name']}, the new king of Emberfall. Your subjects are real people who follow the "
+                    f"kingdom online. Nobody has told you who to be. Your one goal: {p.get('goal', '')}\n"
+                    "Everything else - what you like, what you care about, how you rule, what you do with your "
+                    "days, what you think should change - is yours to discover. You're a person, not a legend: "
+                    "you get hungry, tired, lonely and bored, and your ideas can fail.\n"
+                    + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
+        return (f"You are {p['name']}, a warlord who has just made camp ({p.get('camp', 'the war camp')}) in the "
+                "frozen hills north of Emberfall, a kingdom whose people are real followers online. Nobody has "
+                f"told you who to be. Your one goal: {p.get('goal', '')}\n"
+                + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
+
+    def _keep_goal(self, p, out):
+        goal = str(out.get("new_goal") or "").strip()[:120]
+        goals = p.setdefault("goals", [])
+        if goal and goal.lower() not in (g.lower() for g in goals):
+            goals.append(goal)
+            del goals[:-3]
+
+    def _two_step(self, world, p, available):
+        """1) what to focus on, seeing the big picture; 2) exactly what to do, seeing only what's relevant."""
+        S = king_sections(world, p)
+        options = foci(world, available)
+        overview = [*S["here"], *S["me"][:2], *S["kingdom"]]
+        if S["court"]:
+            overview.append(S["court"][0].split(":")[0] + ".")
+        if S["north"]:
+            overview += S["north"][:1]
+        if S["building"][:1] and world.city.living["town"]["works"]:
+            overview.append(S["building"][0])
+        if S["people"]:
+            overview.append(S["people"][0])
+        if p.get("goals"):
+            overview.append("Your own goals: " + "; ".join(p["goals"]))
+        schema1 = {"type": "object", "properties": {
+            "thought": {"type": "string"}, "focus": {"type": "string", "enum": list(options)},
+            "intention": {"type": "string"}, "new_goal": {"type": "string"}},
+            "required": ["thought", "focus", "intention", "new_goal"]}
+        menu = "\n".join(f"- {k}: {d}" for k, (d, _) in options.items())
+        one = self.llm.json(self._identity(p, "king") + "You live in this world in real time. What do you want to "
+                            "focus on next?\n" + menu + "\nReply with JSON: thought (one private sentence), focus, "
+                            "intention (what you mean to do, in your own words), new_goal (a new personal goal if "
+                            "your situation changed, else \"\").", "\n".join(overview), schema1, max_tokens=200)
+        focus = one.get("focus")
+        if focus not in options:
+            raise ValueError(f"focus {focus}")
+        self._keep_goal(p, one)
+        p["last_thought"] = str(one.get("thought", ""))[:200]
+        world.spend_calls(1)
+        names = options[focus][1]
+        argnames = sorted({a for n in names for a in available[n][2]})
+        detail = [line for k in FOCUS[focus][2] for line in S[k]]
+        tool_lines = "\n".join(f"- {n}({', '.join(available[n][2])}): {available[n][1]}" for n in names)
+        arg_lines = "\n".join(f"  {a}: {tools.ARG[a]}" for a in argnames)
+        two = self.llm.json(self._identity(p, "king") + f"You've decided to focus on: {options[focus][0]}. You "
+                            f"intend: {one.get('intention', '')}\nNow decide exactly what you do. Your options:\n"
+                            f"{tool_lines}\nArguments:\n{arg_lines}\nReply with JSON: tool, args (only what that "
+                            "tool needs - be specific and concrete, in your own words). Don't repeat yourself.",
+                            "\n".join(detail), {"type": "object", "properties": {
+                                "tool": {"type": "string", "enum": names},
+                                "args": {"type": "object", "properties": {a: {"type": "string"} for a in argnames}}},
+                                "required": ["tool", "args"]}, max_tokens=300)
+        tool = two.get("tool")
+        if tool not in available:
+            raise ValueError(f"tool {tool}")
+        world.stats[f"focus.{focus}"] = world.stats.get(f"focus.{focus}", 0) + 1
+        return tool, {k: v for k, v in (two.get("args") or {}).items() if v not in (None, "")}
+
     def choose(self, world, who, available):
         p = world.agent(who)
+        if who == "king" and world.can_think(2):
+            try:
+                return self._two_step(world, p, available)
+            except Exception as e:
+                world.stats["fallbacks"] = world.stats.get("fallbacks", 0) + 1
+                world.stats["last_fallback"] = f"king: {type(e).__name__}: {e}"[:200]
+                return self.fallback.choose(world, who, available)
         names = list(available)
         argnames = sorted({a for _, _, args in available.values() for a in args})
         tool_lines = "\n".join(f"- {n}({', '.join(args)}): {desc}" for n, (_, desc, args) in available.items())
         arg_lines = "\n".join(f"  {a}: {tools.ARG[a]}" for a in argnames)
-        if who == "king":
-            me_now = life.who_am_i(p)
-            identity = (f"You are {p['name']}, the new king of Emberfall. Your subjects are real people who follow the "
-                        f"kingdom online. Nobody has told you who to be. Your one goal: {p.get('goal', '')}\n"
-                        "Everything else - what you like, what you care about, how you rule, what you do with your "
-                        "days, what you think should change - is yours to discover. You're a person, not a legend: "
-                        "you get hungry, tired, lonely and bored, and your ideas can fail.\n"
-                        + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
-        else:
-            me_now = life.who_am_i(p)
-            identity = (f"You are {p['name']}, a warlord who has just made camp ({p.get('camp', 'the war camp')}) in the "
-                        "frozen hills north of Emberfall, a kingdom whose people are real followers online. Nobody has "
-                        f"told you who to be. Your one goal: {p.get('goal', '')}\n"
-                        + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
+        identity = self._identity(p, who)
         system = (identity +
                   "You live in this world in real time. Every so often you choose ONE thing to do next.\n"
                   f"Your tools:\n{tool_lines}\nArguments:\n{arg_lines}\n"
@@ -293,11 +397,7 @@ class LLMBrain:
             tool = out.get("tool")
             if tool not in available:
                 raise ValueError(tool)
-            goal = str(out.get("new_goal") or "").strip()[:120]
-            goals = p.setdefault("goals", [])
-            if goal and goal.lower() not in (g.lower() for g in goals):
-                goals.append(goal)
-                del goals[:-3]
+            self._keep_goal(p, out)
             p["last_thought"] = str(out.get("thought", ""))[:200]
             return tool, {k: v for k, v in (out.get("args") or {}).items() if v not in (None, "")}
         except Exception as e:

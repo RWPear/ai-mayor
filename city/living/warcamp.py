@@ -85,6 +85,10 @@ def settle(city, world=None):
         from .town import burn_houses
         hit = burn_houses(world, done["ward"], sent)
         if hit:
+            for h in hit:
+                world.reply(h, f"🔥 Skarn's raiders burned your character's house outside the walls of "
+                               f"{city.wards[done['ward']]['name']}. Neighbours say they'll help rebuild in a few days.",
+                            "house_burned")
             names = ", ".join("@" + h for h in hit[:3]) + (f" and {len(hit) - 3} more" if len(hit) > 3 else "")
             world.moment("world", f"{len(hit)} houses outside the walls of {city.wards[done['ward']]['name']} burned "
                                   f"to the ground - {names}.", 3, public=True, handles=hit[:10])
