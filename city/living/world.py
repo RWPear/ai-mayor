@@ -22,7 +22,7 @@ import os
 import httpx
 import numpy as np
 
-from .. import packs, storyteller
+from .. import packs, storyteller, trades
 from ..roles import JOB_NAMES
 from . import agents, chronicle, intents, life, things, tools, warcamp
 from . import town as T
@@ -151,12 +151,93 @@ class World:
         spammy = kind in ("your_move", "your_story") and lv.get("comment_counts", {}).get(handle, 0) > 15
         if last and last["day"] >= self.city.day + 1 - 7 and not spammy and not intents.muted(self, handle):
             lv.setdefault("outbox", []).append({"to": handle, "text": text[:600], "kind": kind, "time": self.now_str(),
-                                                "comment_id": last.get("id"), "post": last.get("post")})
+                                                "day": self.city.day + 1, "comment_id": last.get("id"),
+                                                "post": last.get("post"), "status": "pending"})
+            lv.setdefault("welcomed", {}).setdefault(handle, self.city.day + 1)
         if credit:
             rec = lv.setdefault("impact", {}).setdefault(handle, [])
             rec.append({"day": self.city.day + 1, "text": credit[:140]})
             del rec[:-10]
             lv.setdefault("credits_today", []).append({"to": handle, "text": credit[:140], "kind": kind})
+
+    def take_role(self, handle, how, label, day=None, quiet_same=False):
+        """'BECOME THIEF' / 'i am a thief!': the role is theirs (or the kingdom laughs). They hear about it."""
+        c = self.city.citizens
+        i = c.index.get(str(handle).lstrip("@").lower())
+        if i is None or c.status[i] != 0:
+            return None
+        llm = None
+        if self.crowd_llm and trades.normalize(label) not in c.role_book and self.can_think():
+            llm = self.crowd_llm                       # a role nobody's had before: one short call to map it
+            self.spend_calls(1)
+        day = self.city.day + 1 if day is None else day
+        out = trades.take(self.city, i, how, label, day, llm, quiet_same)
+        if out["text"]:
+            self.reply(c.handles[i], out["text"], "your_role")
+        if out["changed"]:
+            lab = c.label(i)
+            drama = 1 if c.role(i) and (c.role(i).get("illegal") or c.role(i).get("homeless")) else 0
+            self.moment("@" + c.handles[i], f"@{c.handles[i]} took up the life of {trades.a_(lab)}.", drama,
+                        public=bool(drama), hold=self.city.wards[int(c.ward[i])]["name"], handles=[c.handles[i]])
+        return out
+
+    def welcome(self, users):
+        """Default reply #1: someone who's never heard from the kingdom, and whose comment did nothing,
+        gets one welcome - who their character is and how to play."""
+        c, lv = self.city.citizens, self.city.living
+        seen = lv.setdefault("welcomed", {})
+        n = 0
+        for u in dict.fromkeys(users):
+            i = c.index.get(u)
+            if i is None or u in seen or c.status[i] != 0 or intents.muted(self, u):
+                continue
+            hold = self.city.wards[int(c.ward[i])]["name"]
+            home = "with no roof over your head" if c.homeless(i) else (
+                "in a house inside the walls" if int(c.walled[i]) == 1 else "in a house in the hold")
+            self.reply(u, f"👋 Welcome to Emberfall! You're {c.names[i]}, {trades.a_(c.label(i))} of {hold}, living "
+                          f"{home}. Tell your character what to do in your own words - \"I steal a pie from the "
+                          f"market\", \"I challenge @a_friend to a duel\" - or be anyone you like: \"I become a "
+                          f"thief\". Comment STATUS to see your life.", "welcome")
+            seen[u] = self.city.day + 1
+            n += 1
+        return n
+
+    def counted(self, actions, tallies):
+        """Default reply #2 for keywords: people who used today's word and heard nothing else get a short line."""
+        lv = self.city.living
+        day = self.city.day
+        heard = {x["to"] for x in lv.get("outbox", []) if x.get("day") in (day, day + 1)}
+        for u, w in actions.items():
+            if u in heard:
+                continue
+            n = int(tallies.get(w, 1))
+            self.reply(u, f"Counted: {w}" + (f" - you and {n - 1:,} others." if n > 1 else " - you were the only one!"),
+                       "counted")
+
+    def _role_night(self):
+        """At dusk: illegal work catches up with some people, and nights without a roof wear people down."""
+        city, c = self.city, self.city.citizens
+        for i, lab in list(c.roles.items()):
+            rec = c.role_book.get(lab) or {}
+            if c.status[i] != 0:
+                continue
+            u = c.handles[i]
+            if rec.get("illegal") and not intents.condition(city, u):
+                known = int(c.counts["steal"][i]) >= 3
+                p = 0.03 + 0.08 * known + 0.08 * max(0.0, city.quality["defense"] - 0.8)
+                if city.rng.random() < p:
+                    fine = round(min(float(c.wealth[i]) * 0.3, 100.0))
+                    c.wealth[i] -= fine
+                    intents.set_condition(city, u, "jailed", 1, f"caught at their trade ({lab})")
+                    life.add_case(city, "crime", u, f"@{u}, {trades.a_(lab)}, was caught at it by the guards")
+                    c.log(i, city.day + 1, f"was caught by the guards and fined {fine} gold")
+                    self.reply(u, f"The guards finally caught up with your line of work. {fine} gold gone, and a "
+                                  f"night in {'the dungeon' if city.living['town']['rooms'].get('dungeon') else 'the stocks'}"
+                                  f" - the king will hear your case.", "your_role")
+                    self.moment("world", f"The guards caught @{u}, {trades.a_(lab)}, red-handed.", 2, public=True,
+                                handles=[u])
+        out = c.active() & (c.walled == -1)
+        c.mood[out] = np.maximum(0.25, c.mood[out] - 0.01)
 
     def notify(self, text):
         """Anything surprising the AI did: kept in the save, printed live, and sent to NOTIFY_URL if set."""
@@ -197,13 +278,14 @@ class World:
     def voice_subject(self, i, situation):
         """A subject's reply to the king, in character (one call), or a line from their mood."""
         c, city = self.city.citizens, self.city
-        job, hold = JOB_NAMES[int(c.job[i])], city.wards[int(c.ward[i])]["name"]
+        job, hold = c.label(i), city.wards[int(c.ward[i])]["name"]
         if self.voice_llm and self.can_think():
             self.spend_calls(1)
             story = "; ".join((c.story.get(int(i)) or [])[-3:])
             try:
                 return self.voice_llm.chat(
-                    f"You are {c.names[i]}, {job} of {hold} in the kingdom of Emberfall. Mood {float(c.mood[i]):.2f} "
+                    f"You are {c.names[i]}, {trades.a_(job)} of {hold} in the kingdom of Emberfall"
+                    f"{' (you have no house and sleep at the chapel)' if c.homeless(i) else ''}. Mood {float(c.mood[i]):.2f} "
                     f"(0 miserable - 1 thrilled), loyalty to the king {float(c.loyalty[i]):.2f}. Recently: {story}. "
                     "Answer in one or two short sentences, in character, plain words. Don't mention numbers.",
                     situation, max_tokens=80).strip().strip('"')[:200]
@@ -308,10 +390,16 @@ class World:
     def people_here(self, pid, n=3):
         """A few real subjects you'd find at this place at this hour."""
         jobs = T.jobs_here(pid, self.hour())
-        if not jobs:
-            return []
         c = self.city.citizens
-        mask = c.active() & np.isin(c.job, [JOB_NAMES.index(j) for j in jobs])
+        mask = c.active() & np.isin(c.job, [JOB_NAMES.index(j) for j in jobs]) if jobs else np.zeros(len(c), bool)
+        if c.roles:                       # people with their own roles are wherever their role takes them
+            own = np.array(list(c.roles), np.int64)
+            mask[own] = False
+            awake = 7 <= self.hour() < 23 or pid in ("tavern", "chapel", "kings_street")
+            here = np.array([i for i in own if awake and (c.role_book.get(c.roles[int(i)]) or {}).get("place") == pid],
+                            np.int64)
+            mask[here] = True
+            mask &= c.active()
         idx = np.where(mask)[0]
         if not len(idx):
             return []
@@ -358,12 +446,17 @@ class World:
         due = [cm for cm in due if not intents.muted(self, str(cm.get("username", "")).lower())]
         for cm in due:
             self.note_comment(cm)
-        free, story, flagged = {}, {}, []
-        packs.parse(due, self.city.pack or {"commands": {}}, None, free, story, flagged)
+        free, story, flagged, jobs = {}, {}, [], {}
+        actions, _, _ = packs.parse(due, self.city.pack or {"commands": {}}, jobs, free, story, flagged)
         for f in flagged:
             intents.flag(self, f["user"], f["kind"], f["text"])
+        for u, label in jobs.items():                 # BECOME <ANYTHING>: right away, not at the close
+            self.take_role(u, "become", label)
         self._hour_free.update(free)
         self._hour_story.update(story)
+        bad = {f["user"] for f in flagged}
+        self.welcome([u for u in (str(cm.get("username", "")).lstrip("@").lower() for cm in due)
+                      if u not in free and u not in story and u not in jobs and u not in bad])
 
     def finish_crowd(self, free, story=None, flagged=None):
         """At the close: anyone whose own-words move hasn't been played out yet gets it now."""
@@ -410,6 +503,7 @@ class World:
             self._steward_skims()
         if self.clock % 1440 == 18 * 60:
             life.age_docket(self)
+            self._role_night()
         if self.director_llm and self.clock % 1440 in (6 * 60, 14 * 60):
             from . import director
             director.consider(self, self.director_llm)

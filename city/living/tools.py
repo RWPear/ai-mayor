@@ -18,7 +18,6 @@ import re
 import numpy as np
 
 from .. import effects, storyteller
-from ..roles import JOB_NAMES
 from . import life, things, warcamp
 from . import town as T
 
@@ -336,7 +335,7 @@ def summon(world, me, args):
     c.log(int(i), world.city.day, "was summoned before the king")
     world.reply(c.handles[i], "👑 The king summoned your character to the castle" + (f" ({why})" if why else "")
                 + f'. You told him: "{reply}"', "king_talked", credit="was summoned by the king")
-    return world.moment("king", f"The king summoned @{c.handles[i]} ({JOB_NAMES[int(c.job[i])]} of "
+    return world.moment("king", f"The king summoned @{c.handles[i]} ({c.label(i)} of "
                                 f"{world.city.wards[int(c.ward[i])]['name']})"
                                 + (f" ({why.rstrip('.')})" if why else "") + f'. They said: "{reply}"',
                         2, public=True, place=me.get("location"), handles=[c.handles[i]])

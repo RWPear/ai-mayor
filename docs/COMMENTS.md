@@ -11,7 +11,7 @@ No "Action:" prefix. People comment however they like; `city/comments.py` works 
 | `i fight off the raiders with my pitchfork` (longer, no capitals) | their own words: the model reads it (here: helping with the raid) and plays it out |
 | `walls, obviously` / `GRANARY not walls` | votes count in any case, anywhere; if both choices appear, the one in capitals (or the first) |
 | `status`, `STATUS?`, `what's my status` | their subject card. "my status as the best fisher..." in a story is not |
-| `become a blacksmith` | change of trade. "I want to become a blacksmith one day" in a story is not |
+| `become a blacksmith`, `BECOME RAT CATCHER`, `i am a thief!` | a new life - any role at all (see [ROLES.md](ROLES.md)). In a longer comment ("I become a monk and pray for @sam") the role changes and the rest plays out as their move |
 | `lol`, `😂`, `nice`, keyboard mash, `AAAAAAA` | ignored |
 | several comments | one action per person per post - the latest wins |
 | a 2,000-word essay | read up to 700 characters |
@@ -35,6 +35,26 @@ Big claims ("I'm the king now", "I have a million gold") are just things they tr
 | 15+ comments in a day | they stop getting replies for their moves that day |
 | attacking the king | always fails: the guards tackle them and they go to the dungeon (and onto the docket) |
 | piling onto one person | a target can only be hit by a couple of hostile acts a day |
-| @mentioning someone who isn't a subject | nothing happens |
+| @mentioning someone who isn't a subject | they're told nobody in Emberfall answers to that name |
+| claiming a title (`i am the king`, `I become a knight`) | laughed at, nothing changes; the reply says how it's really earned |
 
 The model also double-checks every own-words comment for abuse and attempts to change its rules.
+
+
+## Everyone hears something
+
+Every reply goes into the day's `outbox.json` with `"status": "pending"` - nothing is posted. The plan is a
+human-in-the-loop step before anything reaches Instagram: a workflow (n8n) sends the pending replies to your
+phone, you approve, edit or skip each one, and only approved ones get posted.
+
+| Who | What they get (`kind`) |
+|---|---|
+| someone whose move played out | what happened next (`your_move`, `your_story`) |
+| someone who took up a role | what the role gives them, or the laugh (`your_role`) |
+| the other person in a theft, fight, gift, heal... | `done_to_you` |
+| someone whose own-words move came to nothing | a short in-world shrug ("A pigeon stole your bread while you thought.") |
+| a first-time commenter whose comment did nothing (`😂`, `first`) | one welcome, ever: who their character is and how to play (`welcome`) |
+| someone who used today's word and heard nothing else | `Counted: FIGHT - you and 41 others.` (`counted`) |
+
+Kinds make bulk approval easy later: `counted` and `welcome` are safe to approve in one tap; `your_move` and
+`your_role` are the ones worth reading.

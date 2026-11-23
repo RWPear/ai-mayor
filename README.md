@@ -11,7 +11,7 @@ Reckoning: the people KNEEL or REVOLT.
 - **One brain, many people.** Only the king uses a language model (about 2 calls a day). Subjects are
   numpy arrays: 100,000 of them simulate a day in well under a second.
 - **Comments are commands.** Each post gets a *command pack* - 2-4 words and what they do. Packs are
-  YAML, no code. Always available: `STATUS` (your subject card), `JOIN`, and `BECOME <JOB>`.
+  YAML, no code. Always available: `STATUS` (your subject card), `JOIN`, and `BECOME <ANYTHING>`.
 - **Roles and ranks.** Commoners, guilds and the army want different things. Soldiers count double in
   battles. Deeds raise your rank (Peasant -> Freeman -> Squire -> Knight); the king names a Lord for
   each hold every week.
@@ -56,6 +56,8 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
   sim.py         economy, services, moods, angry crowds, projects, milestones, lords, petitions
   citizens.py    the subjects (numpy arrays), ranks, job changes
   roles.py       trades, factions, ranks, epithets
+  trades.py      open roles: any role at all, knacks, skills, reputation, claims (docs/ROLES.md)
+  comments.py    how comments are read (docs/COMMENTS.md)
   packs.py       comment parsing + command packs
   effects.py     what commands do + declarative kingdom effects
   storyteller.py events, decree votes, follow-ups, scheduling and pacing
@@ -73,6 +75,7 @@ content/         events, projects, milestones, ruler persona, balance overrides 
 seasons/         season plans: season1.yaml (written), season2.yaml (outline)
 seeds/           season plans for the living world (only the bones - the minds do the rest)
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going), LIVING.md (the living world),
+                 ROLES.md (anyone can be anything), COMMENTS.md (reading comments, default replies),
                  COMMENTS.md (how comments are read: keywords, stories, trolls)
 packs/           command packs for posts
 scenarios/       test scenarios

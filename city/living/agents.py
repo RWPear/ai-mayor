@@ -15,7 +15,6 @@ from pathlib import Path
 import yaml
 
 from ..config import CONTENT
-from ..roles import JOB_NAMES
 from . import life, tools, warcamp
 from . import town as T
 
@@ -65,7 +64,7 @@ def king_sections(world, me):
     people = world.people_here(loc)
     if people:
         S["people"].append("Subjects around you: " + ", ".join(
-            f"@{c.handles[i]} ({JOB_NAMES[int(c.job[i])]}, {'grumpy' if c.mood[i] < 0.45 else 'cheerful'})"
+            f"@{c.handles[i]} ({c.label(i)}{', no roof' if c.homeless(i) else ''}, {'grumpy' if c.mood[i] < 0.45 else 'cheerful'})"
             for i in people) + ".")
     if loc == "tavern":
         heard = [m["text"] for m in world.moments_since(world.clock - 24 * 60) if m["who"].startswith("@")][-3:]

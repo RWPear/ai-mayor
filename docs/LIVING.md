@@ -14,7 +14,7 @@ Comment a word to act, or tell your character what to do in your own words. Once
         │   - works get built, the steward skims, visitors turn up at the gate, the camp eats at midnight
         │   - new tools unlock when the world allows it (that's a moment too)
 19:00  today's post closes ─────┘
-        comments are read: keywords, STATUS, BECOME <JOB>, and people's own words
+        comments are read: keywords, STATUS, BECOME <ANYTHING>, and people's own words
         the kingdom simulates the day; the king sets policy and writes his journal
         the chronicle picks what goes in the post: 3 moments + "meanwhile in the north"
 ```
@@ -149,6 +149,11 @@ Own-words comments can name another subject:
 | "I mock @someone" | their mood drops, a grudge starts |
 | "I beg the king for..." / "I suggest the king..." | goes on the king's docket (and counts as an idea) |
 | "I send the king a lute" | a gift: it arrives at the castle; he may use it (and the sender hears about it) |
+| "I heal @someone" / "I bless @someone" | healers get the wounded back on their feet; priests lift spirits. Anyone else makes it worse (or just sweet) |
+| "BECOME THIEF" / "i am a thief!" | a new life - any role at all. Claims with nothing behind them get laughed at. See [ROLES.md](ROLES.md) |
+
+**Who they are matters**: a role's knack bends the dice (a thief steals better, a mercenary hits harder),
+and a craft their role doesn't know goes wrong - a thief who tries to forge a sword burns his hand.
 
 The model reads what people meant, **the game rolls the result**, then the model narrates it - so it can't
 be talked into a win. Arrested people go to the dungeon (or the stocks) and onto the docket; the jailed and

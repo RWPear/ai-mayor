@@ -162,12 +162,14 @@ def rebuild(world):
 def summary(world):
     c = world.city.citizens
     a = c.active()
-    houses = int(a.sum())
+    houses = int((a & (c.walled >= 0)).sum())
+    homeless = int((a & (c.walled < 0)).sum())
     inside = int((a & (c.walled == 1)).sum())
     burned = int((a & (c.burned > 0)).sum())
     t = world.city.living["town"]
     walls = "no walls" if not t["walls"]["capacity"] else f"{inside} inside the walls, {houses - inside} outside"
-    return f"{houses} houses ({walls}" + (f", {burned} burned down" if burned else "") + ")"
+    return (f"{houses} houses ({walls}" + (f", {burned} burned down" if burned else "") + ")"
+            + (f", {homeless} sleeping rough" if homeless else ""))
 
 
 def ruins(town):

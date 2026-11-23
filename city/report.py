@@ -28,7 +28,7 @@ def status_card(city, i):
     """A short, personal reply to a STATUS comment (fits a comment reply or a private-reply DM)."""
     c = city.citizens
     w = city.wards[int(c.ward[i])]
-    job = JOB_NAMES[int(c.job[i])]
+    job = c.label(i)
     lord = w.get("councilor") == i
     rank = "Lord" if lord else c.rank(i)
     title = c.title(i)
@@ -40,6 +40,17 @@ def status_card(city, i):
              f"Toward the king: {loyalty_word(float(c.loyalty[i]))}",
              f"Subject since day {int(c.joined[i])} · {int(c.counts['commands'][i])} deeds"
              + (f" · {battles} battles" if battles else "")]
+    from . import trades
+    perk = trades.perk_line(c.role(i), JOB_NAMES[int(c.job[i])])
+    if perk:
+        lines.append(f"🎭 {perk}")
+    known = trades.reputation(c.counts_of(i))
+    if known:
+        lines.append("Known as: " + ", ".join(known))
+    if c.homeless(i):
+        lines.append("🏚️ No roof - sleeps at the chapel")
+    elif city.living and int(c.burned[i]):
+        lines.append("🔥 Your house burned down - the neighbours are helping rebuild")
     if lord:
         lines.append(f"👑 Lord of {w['name']}, named by the king")
     nxt = _next_rank(c, i)

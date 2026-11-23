@@ -2,7 +2,7 @@
 
 A new subject's job comes from their handle (same handle, same job, every time),
 so following is enough to get a life in the kingdom. Anyone can change job by
-commenting BECOME <JOB> (e.g. "BECOME BLACKSMITH") on any post.
+commenting BECOME <ANYTHING> (e.g. "BECOME BLACKSMITH", "BECOME RAT CATCHER") on any post - see city/trades.py.
 
 Rank is earned by deeds: Peasant -> Freeman -> Squire -> Knight. Lords are
 appointed by the king (one per hold). Epithets come from what you actually do:

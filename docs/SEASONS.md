@@ -10,7 +10,7 @@ actually does). The plan decides *what the story is about*; the audience decides
 ## Why a kingdom
 
 - **Roles that mean something.** Everyone gets a trade when they follow (farmer, blacksmith, soldier...)
-  and can change it any day with `BECOME <JOB>`. Soldiers' FIGHT counts double in battles, so there's a
+  and can change it any day with `BECOME <ANYTHING>`. Soldiers' FIGHT counts double in battles, so there's a
   reason to enlist before a war.
 - **Ranks to earn.** Peasant -> Freeman -> Squire -> Knight (Knight needs battles). The king names a
   **Lord** for each hold every week from its most active, most loyal subjects. Rank shows on your

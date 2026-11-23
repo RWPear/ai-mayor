@@ -10,8 +10,9 @@ break it. Every comment goes through two steps here:
      abusive                               -> slurs, sexual content, harassment (also checked by the model later)
      ok
 2. route - what does it mean on this post?
-     STATUS / JOIN / BECOME <JOB>          -> only when it's short or typed in capitals ("my status as a knight"
-                                              in a story is not a STATUS request)
+     STATUS / JOIN / BECOME <ANYTHING>     -> only when it's short or typed in capitals ("my status as a knight"
+                                              in a story is not a STATUS request). BECOME takes any role at all:
+                                              BECOME THIEF, become a rat catcher (city/trades.py)
      a vote (decree, Reckoning)            -> the choice word anywhere, any case ("walls, obviously")
      a keyword                             -> short comments ("fight", "FIGHT!!", "i fight") match in any case;
                                               in longer text only a word typed in CAPITALS counts
@@ -82,10 +83,12 @@ def route(cm, commands):
 
     out["status"] = said("STATUS")
     out["join"] = said("JOIN") or said("MOVE IN") or " MOVEIN " in up
-    m = re.search(r" BECOME (?:AN? )?([A-Z]+) ", up)
-    if m and (short or "BECOME" in caps):
+    m = re.search(r" BECOME ((?:[A-Z]+ ?){1,4})", up)
+    if m and (short or "BECOME" in caps or (s["words"] <= 7 and re.match(r"\W*(i )?become\b", clean, re.I))):
         from .roles import job_from_word
-        out["job"] = job_from_word(m.group(1))
+        from .trades import normalize
+        label = normalize(m.group(1))
+        out["job"] = job_from_word(label) or label or None
     votes = {w: e for w, e in commands.items() if str(e).startswith(("event.choice", "vote."))}
     found = [w for w in votes if f" {w} " in up]          # votes: the word anywhere, any case
     if found:

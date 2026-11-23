@@ -2,7 +2,7 @@
 live kingdom, so what you test is exactly what runs.
 
   1. new followers move in (from an export, or the fake audience)
-  2. the post's comments are read: actions, STATUS requests, JOINs, BECOME <JOB>
+  2. the post's comments are read: actions, STATUS requests, JOINs, BECOME <ANYTHING>
   3. command effects hit the subjects who commented
   4. events tick (help/hinder and decree votes from comments count here)
   5. the whole kingdom simulates a day
@@ -15,7 +15,7 @@ import numpy as np
 
 from . import packs, plan, report, sim, storyteller
 from .effects import DayContext
-from .roles import JOB_NAMES, a_job
+from .roles import a_job
 
 BASICS = {"WORK": "work", "TRADE": "shop", "TRAIN": "train", "GRUMBLE": "protest"}
 
@@ -58,7 +58,7 @@ def feature(city, actions, jobs=None):
             return
         picked.add(i)
         w = city.wards[int(c.ward[i])]
-        job, rank = JOB_NAMES[int(c.job[i])], c.rank(i)
+        job, rank = c.label(i), c.rank(i)
         lines.append(f"@{c.handles[i]} ({c.names[i]}, {rank} {job} of {w['name']}) {why} - "
                      f"now {report.mood_word(float(c.mood[i]))}")
         people.append(f"@{c.handles[i]}, {a_job(job)} ({rank.lower()}) of {w['name']}, {why}")
@@ -130,10 +130,15 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
         from .living import town as _town
         _town.settle(world, n_before)
     joined = city.population() - before
-    for u, job in jobs.items():      # BECOME <JOB>
+    from . import trades
+    for u, label in jobs.items():      # BECOME <ANYTHING>
         i = c.index.get(u)
-        if i is not None:
-            c.set_job(i, job, city.day)
+        if i is None:
+            continue
+        if world is not None:          # usually already done when the comment came in; then this is a no-op
+            world.take_role(u, "become", label, day=city.day, quiet_same=True)
+        else:
+            trades.take(city, i, "become", label, city.day)
     ctx = DayContext(city)
     ctx.actions = actions
 
@@ -220,6 +225,12 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
             big = e.get("source") == "warlord" or e["id"].startswith("decree_") or e.get("result") not in ("timed_out",)
             world.moment("world", e["outcome"], 3 if e.get("source") == "warlord" else (2 if big else 1),
                          public=True, hold=city.wards[e["ward"]]["name"] if e.get("ward") is not None else "")
+    if world is not None:          # default replies: a first-time welcome, and "counted" for a keyword
+        bad = {f["user"] for f in flagged or []}
+        today = [str(cm.get("username", "")).strip().lstrip("@").lower() for cm in comments]
+        heard = {x["to"] for x in city.living.get("outbox", []) if x.get("day") in (city.day, city.day + 1)}
+        world.welcome([u for u in today if u not in bad and u not in heard])
+        world.counted({u: w for u, w in actions.items() if u not in bad}, tallies)
     chron = world.chronicle() if world is not None else None
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
                + ([m["text"] for m in chron["top"]] if chron else [])

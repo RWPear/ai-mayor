@@ -44,6 +44,19 @@ FREE_TEXT = [
     "I bring the king a basket of fresh apples",
     "I suggest the king builds a bridge over the river",
     "I ask the king to fix the mud on King's Street",
+    # roles: becoming someone, claiming to be someone, and trying things outside your trade
+    "i am a thief!",
+    "I become a rat catcher",
+    "I'm going to be a fortune teller at the tavern",
+    "i am the king",
+    "I give up farming and become a monk",
+    "I sneak into the smithy at night and forge myself a sword",
+    "I brew a potion to make the baker fall in love with me",
+    "I cast a fireball at the warlord's camp",
+    "I heal {target} after their fight",
+    "I bless {target} at the chapel",
+    "I bake a pie for the whole street",
+    "I become a beggar and sit outside the chapel",
 ]
 
 ARCHETYPES = {
@@ -145,7 +158,8 @@ class FakeAudience:
                 out.append({"username": h, "text": "STATUS", "timestamp": ts})
             war = "FIGHT" in pack["commands"]
             if self.rng.random() < (0.06 if war else 0.015):
-                job = "soldier" if war else self.rng.choice(JOB_NAMES)
+                job = "soldier" if war else self.rng.choice(JOB_NAMES + ["thief", "healer", "priest", "smuggler",
+                                                                          "hunter", "jester", "beekeeper"])
                 out.append({"username": h, "text": f"BECOME {job.upper()}", "timestamp": ts})
             if word is None:
                 if self.rng.random() < 0.3:

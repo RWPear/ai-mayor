@@ -179,7 +179,24 @@ def happenings(world):
         "Who the king is becoming: " + (king.get("self", {}).get("becoming") or "nobody knows yet"),
         ("The war camp in the north: " + (f"{c['warriors']} warriors" if c.get("arrived") else "nobody there yet")),
         "Happening right now: " + ("; ".join(a["title"] for a in city.events) or "nothing"),
+        "Who lives here: " + _who_lives_here(city),
         "Recently:\n- " + "\n- ".join(lines or ["a quiet stretch"])])
+
+
+def _who_lives_here(city):
+    """The roles people chose: lots of thieves means a crime wave, lots of beggars means hard times."""
+    c = city.citizens
+    from collections import Counter
+    own = Counter(lab for i, lab in c.roles.items() if c.status[i] == 0)
+    known = int(((c.counts["steal"] >= 3) & c.active()).sum())
+    rough = int((c.active() & (c.walled == -1)).sum())
+    from .. import trades
+    bits = [f"{n} {trades.plural(lab) if n > 1 else lab}" for lab, n in own.most_common(6)]
+    if known:
+        bits.append(f"{known} known thie{'ves' if known > 1 else 'f'}")
+    if rough:
+        bits.append(f"{rough} sleeping rough")
+    return (", ".join(bits) + " - and the rest farm, fish, trade and soldier") if bits else "ordinary farmers, crafters and soldiers"
 
 
 def consider(world, llm):

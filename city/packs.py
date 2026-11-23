@@ -12,7 +12,7 @@
 Always available on every post (not one of the post's actions):
   STATUS            - get your subject card
   JOIN / MOVE IN    - move into the kingdom (or come back after leaving)
-  BECOME <JOB>      - change trade, e.g. BECOME BLACKSMITH (see city/roles.py)
+  BECOME <ANYTHING> - take up any life, e.g. BECOME BLACKSMITH, BECOME THIEF (see city/trades.py)
 One action counts per person per post - their latest valid comment wins. How comments are read (short vs
 long, capitals, votes, people's own words, trolls) is in city/comments.py.
 """
@@ -25,7 +25,7 @@ import yaml
 from .effects import COMMAND_EFFECTS
 from .roles import job_from_word
 
-ALWAYS = {"STATUS": "status", "JOIN": "join", "MOVE IN": "join", "MOVEIN": "join", "BECOME <JOB>": "job"}
+ALWAYS = {"STATUS": "status", "JOIN": "join", "MOVE IN": "join", "MOVEIN": "join", "BECOME <ANYTHING>": "job"}
 # everyday words added to event posts, so people who don't care about the event still have something to do
 EVENT_EXTRA = {"WORK": "work", "GRUMBLE": "protest"}
 
@@ -103,7 +103,7 @@ def with_old_posts(pack, posts, today, active_events):
 def parse(comments, pack, jobs=None, free=None, story=None, flagged=None):
     """comments: [{username, text, timestamp}] -> ({username: word}, {status users}, {join users}).
     Latest valid action per user wins. How each comment is read is in city/comments.py.
-    jobs:    filled with BECOME <JOB> requests ({username: job})
+    jobs:    filled with BECOME <ANYTHING> requests ({username: role label})
     free:    filled with comments in people's own words ({username: text}) - their move for the day
     story:   filled with the story around a keyword ({username: text}) - so the reply can build on it
     flagged: filled with comments that were abusive or tried to talk to the machine ([{user, kind, text}])"""
