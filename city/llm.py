@@ -96,12 +96,22 @@ class LLM:
         self.calls = 0
 
     def chat(self, system, user, schema=None, max_tokens=900, temperature=0.8):
+        """max_tokens is how long an answer is expected to be, not a guillotine: the model gets plenty of room
+        (the prompt and the schema keep it short), and if it still runs out, it's asked again with more."""
+        room = max(max_tokens * 3, 1536) if schema else max(max_tokens * 2, 400)
         rec = {"n": next(_N), "who": _caller(), "model": self.model, "time": CLOCK() if CLOCK else "",
                "system": system, "user": user, "temperature": temperature, "response": None, "error": None}
         t0 = time.time()
         try:
-            text = self._chat(system, user, schema, max_tokens, temperature)
+            text, why = self._chat(system, user, schema, room, temperature)
+            if why == "length" and schema:            # ran out of room mid-answer: once more, with lots
+                rec["retried"] = f"ran out of room at {room} tokens; asked again with {room * 3}"
+                text, why = self._chat(system, user, schema, room * 3, temperature)
+            if why == "length" and not schema:        # prose: end on the last whole sentence
+                cut = max(text.rfind(". "), text.rfind("! "), text.rfind("? "), text.rfind(".\n"))
+                text = text[:cut + 1] if cut > 20 else text
             rec["response"] = text
+            rec["done"] = why
             return text
         except Exception as e:
             rec["error"] = f"{type(e).__name__}: {e}"[:300]
@@ -122,16 +132,21 @@ class LLM:
                 body.pop("think", None)
                 r = cl.post(f"{self.url}/api/chat", json=body)
             r.raise_for_status()
-            text = r.json()["message"]["content"]
+            j = r.json()
+            text = j["message"]["content"]
         self.calls += 1
-        return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip(), j.get("done_reason", "stop")
 
     def json(self, system, user, schema, max_tokens=900, temperature=0.8):
-        text = self.chat(system, user, schema, max_tokens, temperature)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:            # usually cut off: say so where people look (the mind tab)
-            if CALLS and CALLS[-1].get("response") == text:
-                CALLS[-1]["error"] = (f"the answer isn't valid JSON - probably cut off at max_tokens={max_tokens} "
-                                      f"(so the game fell back to rules for this)")
-            raise
+        """A structured answer. If it doesn't come back as valid JSON, the model gets one more go before anyone
+        falls back to rules."""
+        for attempt in (1, 2):
+            text = self.chat(system, user, schema, max_tokens, temperature)
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError as e:
+                if CALLS and CALLS[-1].get("response") == text:
+                    CALLS[-1]["error"] = ("the answer wasn't valid JSON" + (" - asking again" if attempt == 1 else
+                                          " twice - the game falls back to rules for this one") + f" ({e})")
+                if attempt == 2:
+                    raise

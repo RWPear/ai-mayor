@@ -618,7 +618,10 @@ def process(world, free, llm=None, ai_people=0):
             c.log(c.index[r["user"]], city.day + 1, r["outcome"].replace(f"@{r['user']} ", "", 1)[:160])
         text = r.get("reply") or r["outcome"]
         if text:                              # they hear what came of it - continuing their story, not repeating it
-            world.reply(r["user"], text, "your_move")
+            read_by = "model" if r["user"] in reads else "rules"
+            told_by = "model" if r["user"] in told else "rules"
+            world.reply(r["user"], text, "your_move", by=f"read by {read_by}, written by {told_by}"
+                        if "action" in r and r.get("user") in free else None)
         tgt = r.get("target")
         if tgt and r["action"] in SOCIAL and r["outcome"] and tgt in c.index:
             told_by_model = r["user"] in told

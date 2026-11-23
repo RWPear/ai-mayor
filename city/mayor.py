@@ -291,19 +291,11 @@ class LLMMayor:
         self.p = persona()
 
     def _chat(self, system, user, schema=None, max_tokens=900):
-        body = {"model": self.model, "stream": False, "think": False, "keep_alive": "30m",
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "options": {"temperature": 0.8, "num_ctx": self.ctx, "num_predict": max_tokens}}
-        if schema:
-            body["format"] = schema
-        with httpx.Client(timeout=300) as cl:
-            r = cl.post(f"{self.url}/api/chat", json=body)
-            if r.status_code == 400:
-                body.pop("think", None)
-                r = cl.post(f"{self.url}/api/chat", json=body)
-            r.raise_for_status()
-            text = r.json()["message"]["content"]
-        return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+        """Through city.llm, so it gets room to finish and shows up in the mind tab like every other call."""
+        from .llm import LLM
+        if not hasattr(self, "_llm"):
+            self._llm = LLM(model=self.model)
+        return self._llm.chat(system, user, schema, max_tokens, 0.8)
 
     def _identity(self, city):
         p = self.p

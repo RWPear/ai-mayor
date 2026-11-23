@@ -45,3 +45,23 @@ def test_closing_the_post_runs_the_day_and_starts_the_next(tmp_path):
     assert p.city.day == 1
     assert (tmp_path / "play" / "days" / "day001.scene.json").exists()
     assert any(m["who"] == "post" for m in p.log)
+
+
+def test_the_model_gets_room_to_finish_and_another_go_before_rules_step_in():
+    from city import llm
+    m = llm.LLM.__new__(llm.LLM)
+    m.model, m.ctx, m.calls, m.url = "fake", 4096, 0, "http://x"
+    asked = []
+
+    def fake(system, user, schema=None, max_tokens=900, temperature=0.8):
+        asked.append(max_tokens)
+        if len(asked) == 1:
+            return '{"results": [{"handle": "wes", "act', "length"      # ran out of room
+        if len(asked) == 2:
+            return '{"results": [oops', "stop"                           # finished, but not JSON
+        return '{"results": []}', "stop"
+    m._chat = fake
+    assert m.json("s", "u", {"type": "object"}, max_tokens=60) == {"results": []}
+    assert asked[0] >= 1536 and asked[1] > asked[0]                       # plenty of room, then more
+    calls = list(llm.CALLS)[-2:]
+    assert calls[0].get("retried") and "asking again" in calls[0]["error"]

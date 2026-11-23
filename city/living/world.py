@@ -180,7 +180,7 @@ class World:
                 counts["_day"] = self.city.day + 1
             counts[u] = counts.get(u, 0) + 1
 
-    def reply(self, handle, text, kind, credit=None):
+    def reply(self, handle, text, kind, credit=None, by=None):
         """Something happened to/with a follower's character. They hear about it (a reply to their latest comment,
         if they commented in the last 7 days), and if it's their doing it goes on their record and maybe the post."""
         lv = self.city.living
@@ -191,7 +191,8 @@ class World:
         if last and last["day"] >= self.city.day + 1 - 7 and not spammy and not intents.muted(self, handle):
             lv.setdefault("outbox", []).append({"to": handle, "text": text[:600], "kind": kind, "time": self.now_str(),
                                                 "day": self.city.day + 1, "comment_id": last.get("id"),
-                                                "post": last.get("post"), "status": "pending"})
+                                                "post": last.get("post"), "status": "pending",
+                                                **({"by": by} if by else {})})
             lv.setdefault("welcomed", {}).setdefault(handle, self.city.day + 1)
         if credit:
             rec = lv.setdefault("impact", {}).setdefault(handle, [])

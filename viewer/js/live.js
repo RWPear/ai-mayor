@@ -106,7 +106,7 @@ export function startLive({ onScene, onState }) {
       list.sort((a, b) => order[a.status] - order[b.status]);
       $("lreplies").innerHTML = list.length ? list.map((r) => `
         <article class="reply ${r.status}" data-id="${r.id}">
-          <header><strong>@${esc(r.to)}</strong> <span class="muted">${esc(r.kind)} · ${esc((r.time || "").split(", ")[1] || "")}</span>
+          <header><strong>@${esc(r.to)}</strong> <span class="muted">${esc(r.kind)} · ${esc((r.time || "").split(", ")[1] || "")}${r.by ? ` · <span title="Who understood the comment and who wrote this reply" style="${/rules/.test(r.by) ? "color:var(--danger)" : ""}">${esc(r.by)}</span>` : ""}</span>
             <span class="badge">${r.status}${r.edited ? ", edited" : ""}</span></header>
           <p>${esc(r.text)}</p>
           ${r.status === "pending" ? `<div class="row"><button type="button" data-act="approved">Approve</button><button type="button" data-act="rejected">Reject</button><button type="button" data-act="edit">Edit</button></div>` : `<div class="row"><button type="button" data-act="pending">Undo</button></div>`}
@@ -154,6 +154,7 @@ export function startLive({ onScene, onState }) {
         <div><span class="k">Goal:</span> ${esc(k.goal || "")}${k.goals.length ? ` · <span class="k">his own:</span> ${esc(k.goals.join("; "))}` : ""}</div>
         ${k.who ? `<div><span class="k">Who he's becoming:</span> ${esc(k.who)}</div>` : ""}
         ${k.thought ? `<div><span class="k">Last thought:</span> <em>${esc(k.thought)}</em></div>` : ""}
+        <div class="k">Choices so far: <strong>${mind.tally.model}</strong> by the model, <strong style="${mind.tally.rules ? "color:var(--danger)" : ""}">${mind.tally.rules}</strong> by rules${mind.tally.rules ? ` (${esc(mind.tally.why)})` : ""} · model calls that failed: ${mind.tally.failed}</div>
         <div class="k">Needs: ${Object.entries(k.needs).map(([a, b]) => `${esc(a)} ${Math.round(b * 100)}%`).join(" · ")}</div>
       </div>
       <h3>What he chose</h3>

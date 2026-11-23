@@ -314,7 +314,13 @@ class Play:
                     "location": k.get("location")}
             dec = [d for d in list(self.world.decisions) if d["n"] >= since][-150:]
             calls = [c for c in list(llm.CALLS) if c["n"] >= since][-60:]
-            return {"king": card, "decisions": dec, "calls": calls,
+            mine = [d for d in list(self.world.decisions) if d["who"] == "king"]
+            ruled = [d["brain"] for d in mine if d["brain"] != "model"]
+            from collections import Counter
+            tally = {"model": len(mine) - len(ruled), "rules": len(ruled),
+                     "why": ", ".join(f"{n}x {w}" for w, n in Counter(ruled).most_common(3)),
+                     "failed": sum(1 for c in list(llm.CALLS) if c.get("error"))}
+            return {"king": card, "decisions": dec, "calls": calls, "tally": tally,
                     "stats": {a: b for a, b in self.world.stats.items() if not a.startswith("focus.")}}
 
 
