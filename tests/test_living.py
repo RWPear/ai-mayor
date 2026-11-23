@@ -355,3 +355,51 @@ def test_old_posts_stay_live():
                                  {"username": "u2", "text": "FIGHT", "timestamp": 2, "post": old_day}])
     assert r["tallies"].get("WORK", 0) >= 1
     assert any(x["username"] == "u2" and "over" in x["reply"] for x in r["status_replies"])
+
+
+# ---------------------------------------------------------------- lessons from the first real run
+def test_no_talking_in_circles():
+    from city.living import tools
+    city, w = _world(60)
+    king = w.agent("king")
+    outs = [tools.talk(w, king, {"person": "@u1", "text": f"Question {k}?"}) for k in range(4)]
+    assert "excused themselves" in outs[2]["text"] and "excused themselves" in outs[3]["text"]
+
+
+def test_the_menu_only_offers_what_makes_sense():
+    from city.living import tools
+    city, w = _world(80)
+    city.day = 6
+    city.living["warcamp"]["arrived"] = 3
+    assert "raid" in tools.available(w, "warlord")
+    tools.raid(w, w.agent("warlord"), {"hold": city.wards[0]["name"], "warriors": "20"})
+    assert "raid" not in tools.available(w, "warlord")            # one raid at a time - don't even offer it
+    w.agent("warlord").setdefault("last_used", {})["taunt"] = w.clock
+    assert "taunt" not in tools.available(w, "warlord")           # no letter spam
+    w.agent("king")["location"] = "kings_street"
+    assert "hold_court" not in tools.available(w, "king") and "work_on" not in tools.available(w, "king")
+
+
+def test_a_meal_fills_him_up_even_if_the_narrator_is_stingy():
+    from city.living import tools
+    city, w = _world(60)
+    king = w.agent("king")
+    king["life"]["needs"]["hunger"] = 0.1
+    w.voice_llm = FakeLLM({"outcome": "The king ate a bowl of stew.", "activity": "eating stew", "minutes": 30,
+                           "hunger": 0.05, "energy": 0, "company": 0, "fun": 0, "learned": "", "found": "",
+                           "made": "", "drama": 0})
+    w.city.living["budget"]["left"] = 99
+    tools.do(w, king, {"what": "eat some stew"})
+    assert king["life"]["needs"]["hunger"] >= 0.6
+
+
+def test_ignored_petitioners_give_up():
+    from city.living import life
+    city, w = _world(60)
+    city.living["docket"] = []
+    life.add_case(city, "petition", "u3", "@u3 wants a new roof")
+    before = float(city.citizens.loyalty[city.citizens.index["u3"]])
+    city.day += 2
+    gone = life.age_docket(w)
+    assert gone and not city.living["docket"]
+    assert float(city.citizens.loyalty[city.citizens.index["u3"]]) < before

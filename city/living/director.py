@@ -76,6 +76,10 @@ Rules:
 - consequences come from the fixed list; size 1-{tier}.
 - king_options: 0-2 things the king could do about it (cost none/small/large; helps=true if it pushes toward
   solving it).
+- title: a specific headline that says what happened, to whom, where - like "Rats chewed through the granary in
+  Millbrook overnight" or "The king's new archery targets collapsed on a soldier during practice". Never a vague
+  title like "A Test of Strength" or "The King's First Steps".
+- Don't repeat recent events: {recent}
 - If nothing should happen right now (things are busy enough, or it would feel random), set happen=false."""
 
 
@@ -189,12 +193,18 @@ def consider(world, llm):
     t = tier(city)
     world.spend_calls(1)
     try:
-        d = llm.json(SYSTEM.format(tier=t, holds=", ".join(w["name"] for w in city.wards)), happenings(world),
+        recent = [e["title"] for e in city.living.get("custom_events", {}).values()
+                  if e.get("invented_by") == "director"][-6:]
+        d = llm.json(SYSTEM.format(tier=t, holds=", ".join(w["name"] for w in city.wards),
+                                   recent="; ".join(recent) or "none yet"), happenings(world),
                      SCHEMA, max_tokens=700, temperature=0.95)
     except Exception:
         world.stats["director_fallbacks"] = world.stats.get("director_fallbacks", 0) + 1
         return None
     ev = build(city, d, t)
+    recent = {e["title"].lower() for e in city.living.get("custom_events", {}).values()}
+    if ev and ev["title"].lower() in recent:
+        ev = None
     if not ev:
         world.stats["director_passed"] = world.stats.get("director_passed", 0) + 1
         return None
@@ -204,6 +214,8 @@ def consider(world, llm):
     a = storyteller.start(city, ev["id"], hold, source="director", extra={"started": city.day + 1})
     if a:
         world.notify(f"New event (tier {t}): {a['title']}")
-        world.moment("world", a["title"], 2 + (t == 3), public=True, hold=ev.get("hold_name") or "")
+        first = str((d.get("at_start") or {}).get("text") or "").strip()
+        world.moment("world", a["title"] + (f" {first}" if first and first not in a["title"] else ""),
+                     2 + (t == 3), public=True, hold=ev.get("hold_name") or "")
         world.stats["director_events"] = world.stats.get("director_events", 0) + 1
     return a

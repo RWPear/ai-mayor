@@ -233,6 +233,29 @@ def add_case(city, kind, who, text):
     return case
 
 
+def age_docket(world):
+    """People don't wait forever. Cases left unheard for 2 days drop off - and the petitioners remember."""
+    city, c = world.city, world.city.citizens
+    keep, gone = [], []
+    for k in city.living.get("docket", []):
+        (gone if k["day"] <= city.day - 1 else keep).append(k)
+    city.living["docket"] = keep
+    for k in gone:
+        i = c.index.get(k["who"])
+        if i is None:
+            continue
+        if k["kind"] == "crime":
+            city.living.get("conditions", {}).pop(k["who"], None)
+            world.moment("world", f"@{k['who']} was let go - the king never got around to hearing the case.", 1,
+                         public=True, handles=[k["who"]])
+        else:
+            c.loyalty[i] = float(np.clip(c.loyalty[i] - 0.06, 0, 1))
+            c.log(i, city.day + 1, "gave up waiting for the king's court")
+            world.moment("world", f"@{k['who']} gave up waiting for the king's court and went home annoyed.", 1,
+                         public=True, handles=[k["who"]])
+    return gone
+
+
 def visitors(world):
     """Now and then someone turns up at the gate on their own (cheap, no model call)."""
     city = world.city

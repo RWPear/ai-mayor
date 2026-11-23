@@ -95,9 +95,16 @@ def cmd_test(args):
         for k in ("last_error", "last_fallback"):
             if world.stats.get(k):
                 print(f"{k.replace('_', ' ')}: {world.stats[k]}")
-        inv = [e for e in city.living["custom_events"].values()]
-        if inv:
-            print(f"decrees the king invented ({len(inv)}): " + " | ".join(e["title"] for e in inv[:6]))
+        evs = list(city.living["custom_events"].values())
+        decrees = [e["title"] for e in evs if e["id"].startswith("decree_")]
+        stories = [e["title"] for e in evs if e.get("invented_by") == "director"]
+        if decrees:
+            print(f"decrees the king wrote ({len(decrees)}): " + " | ".join(decrees[:6]))
+        if stories:
+            print(f"events the director invented ({len(stories)}): " + " | ".join(stories[:8]))
+        king = city.living["agents"]["king"]
+        if king.get("self", {}).get("becoming"):
+            print(f"who the king is becoming: {king['self']['becoming']}")
 
 
 def make_world(city, kind):

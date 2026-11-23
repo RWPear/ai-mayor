@@ -40,6 +40,15 @@ FLAVORS = {
 BUILD_FLAVORS = [f for f in FLAVORS if f not in ("tax_cut", "tax_raise")]
 
 
+def _clip(text, n):
+    """Cut at a sentence end if the text is too long, never mid-word."""
+    if len(text) <= n:
+        return text
+    cut = text[:n]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    return cut[:end + 1] if end > n // 2 else cut.rsplit(" ", 1)[0] + "..."
+
+
 def _hold_names(world):
     return [w["name"] for w in world.city.wards]
 
@@ -69,8 +78,15 @@ def walk(world, me, args):
 def talk(world, me, args):
     """Talk to a member of the court (steward, captain, jester) or to any subject (@handle)."""
     who = str(args.get("person") or "").strip()
-    said = str(args.get("text") or "").strip()[:200]
+    said = _clip(str(args.get("text") or "").strip(), 300)
     court = life.court()
+    talks = me.setdefault("talks_today", {})
+    key_ = who.lstrip("@").lower()
+    if talks.get(key_, 0) >= 2:      # they've said what they had to say today
+        talks[key_] += 1
+        return world.moment("king", f"The king tried to talk to {who} again, but they bowed and excused themselves - "
+                                    "they'd already spoken with him twice today.", 0, public=False)
+    talks[key_] = talks.get(key_, 0) + 1
     key = next((k for k, v in court.items() if k in who.lower() or v["name"].lower().split()[-1] in who.lower()), None)
     life.satisfy(me, "company", 0.35)
     if key:
@@ -98,6 +114,11 @@ def do(world, me, args):
         return None
     out = world.narrate_activity(me, what)
     lf = me.setdefault("life", life.new_life())
+    label = f"{out.get('activity', '')} {what}".lower()
+    if re.search(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|feast|snack|food)", label):
+        out["hunger"] = max(out.get("hunger", 0.0), 0.5)          # a meal is a meal
+    if re.search(r"\b(nap|sleep|doze|lie down)", label):
+        out["energy"] = max(out.get("energy", 0.0), 0.3)
     for need in life.NEEDS:
         life.satisfy(me, need, out.get(need, 0.0))
     act = life._slug(out.get("activity") or what)
@@ -483,7 +504,7 @@ TOOLS = {
 
 
 def unlocked(world, who):
-    """The tools this mind can use right now."""
+    """The powers this mind has (unlocks are announced as they happen)."""
     out = {}
     if who == "warlord" and not warcamp.camp(world.city).get("arrived"):
         return out                                    # he hasn't come yet
@@ -491,3 +512,49 @@ def unlocked(world, who):
         if cond is None or world.condition(cond):
             out[name] = (fn, desc, args)
     return out
+
+
+# how long before a tool makes sense again (minutes) - stops letter spam and speech loops
+COOLDOWN = {"king": {"proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120},
+            "warlord": {"taunt": 480, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
+
+
+def _ready(world, who, name):
+    city, me = world.city, world.agent(who)
+    if world.clock - me.get("last_used", {}).get(name, -10 ** 9) < COOLDOWN.get(who, {}).get(name, 0):
+        return False
+    t = city.living["town"]
+    loc = me.get("location")
+    pop = city.population()
+    if who == "king":
+        if name == "hold_court":
+            return loc == "throne_room" and bool(city.living.get("docket"))
+        if name == "work_on":
+            return any(w["place"] == loc for w in t["works"])
+        if name == "start_work":
+            return not any(w["place"] == loc for w in t["works"]) and city.treasury >= T.cost("small", pop)
+        if name == "decree":
+            return (not any(a["id"].startswith("decree_") for a in city.events)
+                    and city.living.get("last_decree_day", -9) < city.day)
+        if name == "spend":
+            from ..sim import available_projects
+            return any(city.treasury >= p["cost_pc"] * max(1, pop) for p in available_projects(city))
+        if name == "feast":
+            return city.treasury >= 1.5 * max(1, pop)
+        if name == "garrison":
+            return any(w.get("garrison_until", -1) < city.day for w in city.wards) and city.treasury >= 2 * max(1, pop)
+        return True
+    c = warcamp.camp(city)
+    busy = c.get("active_raid") or any(a["id"] in ("warlord_raid", "warlord_horde") for a in city.events)
+    if name in ("raid", "march"):
+        return not busy and c["warriors"] >= 20
+    if name == "recruit":
+        return c["food"] >= 15 and c["warriors"] < warcamp.cap(c, city.day)
+    if name == "feast":
+        return c["food"] >= 20
+    return True
+
+
+def available(world, who):
+    """What this mind can sensibly do right now: its powers, minus what's on cooldown or makes no sense here."""
+    return {n: v for n, v in unlocked(world, who).items() if _ready(world, who, n)}

@@ -65,10 +65,17 @@ def king_view(world, me):
                  f"{T.cost('medium', city.population()):,.0f}, large {T.cost('large', city.population()):,.0f}.")
     docket = city.living.get("docket", [])
     if docket:
+        oldest = min(k["day"] for k in docket)
         if loc == "throne_room":
             lines.append("Waiting at court: " + " / ".join(f"[{k['id']}] {k['text']}" for k in docket[:3]))
         else:
-            lines.append(f"{len(docket)} people are waiting for you at court (the throne room).")
+            lines.append(f"{len(docket)} people are waiting for you at court in the throne room (the oldest since "
+                         f"day {oldest}; people who wait 2 days give up and go home angry).")
+    talks = me.get("talks_today", {})
+    if talks:
+        lines.append("You've already talked today with: " + ", ".join(f"{k} ({n}x)" for k, n in talks.items()) + ".")
+    if me.get("nudge"):
+        lines.append(me.pop("nudge"))
     lines.append(life.feeling(me))
     me_now = life.who_am_i(me)
     lines.append(f"Who you are so far ({'your own words' if me_now else 'you have not figured that out yet'})"

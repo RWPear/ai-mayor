@@ -350,6 +350,8 @@ class World:
                 self.moment("warlord", hungry, 1, public=False)
         if self.clock % 1440 == 12 * 60:
             self._steward_skims()
+        if self.clock % 1440 == 18 * 60:
+            life.age_docket(self)
         if self.director_llm and self.clock % 1440 in (6 * 60, 14 * 60):
             from . import director
             director.consider(self, self.director_llm)
@@ -363,6 +365,7 @@ class World:
         if not AWAKE["king"](hour):
             if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
                 life.reflect(self, king, getattr(self.brains["king"], "llm", None))
+                king["talks_today"] = {}
             king["location"] = "bedchamber"
         if self.clock % 1440 == 10 * 60 and warcamp.camp(self.city).get("arrived"):   # the warlord turns in at dawn
             life.reflect(self, self.agent("warlord"), getattr(self.brains["warlord"], "llm", None))
@@ -384,7 +387,7 @@ class World:
 
     def act(self, who):
         me = self.agent(who)
-        available = tools.unlocked(self, who)
+        available = tools.available(self, who)
         brain = self.brains[who]
         if brain is not self.rules:
             if self.can_think():
@@ -395,7 +398,15 @@ class World:
         tool, args = brain.choose(self, who, available)
         fn = available.get(tool, (None,))[0]
         m = None
+        said = " ".join(str(args.get(k, "")) for k in ("text", "what", "question", "name")).strip().lower()[:80]
+        if said and said in me.get("recent_said", []):          # saying/doing the exact same thing again
+            self.stats["repeats_blocked"] = self.stats.get("repeats_blocked", 0) + 1
+            me["nudge"] = "You just tried to repeat yourself word for word. Do something different."
+            fn = None
+        elif said:
+            me["recent_said"] = (me.get("recent_said", []) + [said])[-8:]
         if fn:
+            me.setdefault("last_used", {})[tool] = self.clock
             self._doing = f"{who}.{tool}"
             try:
                 m = fn(self, me, args)
