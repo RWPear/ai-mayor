@@ -16,6 +16,8 @@ different days. Rule-based minds/crowd fill in wherever the budget runs out.
 
 Everything lives in city.living, so it saves and loads with the kingdom.
 """
+import collections
+import itertools
 import copy
 import os
 
@@ -33,6 +35,12 @@ POST_HOUR = 19       # the daily post closes at 19:00
 AWAKE = {"king": lambda h: 7 <= h < 23, "warlord": lambda h: not (10 <= h < 16)}
 
 
+def _llm_last():
+    """The number of the model's latest call (to tell whether a choice came from the model)."""
+    from .. import llm
+    return llm.CALLS[-1]["n"] if llm.CALLS else -1
+
+
 class World:
     def __init__(self, city, king_brain=None, warlord_brain=None, crowd_llm=None, voice_llm=None, director_llm=None):
         self.city = city
@@ -42,6 +50,8 @@ class World:
         self.voice_llm = voice_llm        # subjects and the court answering the king, the world narrating
         self.director_llm = director_llm  # invents events from what's going on (else: the hand-written list)
         self.stats = {}
+        self.decisions = collections.deque(maxlen=300)   # what each mind chose, and how (for the live view)
+        self._dn = itertools.count()
         self.pending = []                 # comments that arrived but haven't been played out yet
         self._hour_free, self._hour_story = {}, {}
         if city.living is None:
@@ -70,6 +80,12 @@ class World:
                                    "next_act": start + 60}},
             "warcamp": camp, "moments": [], "custom_events": {}, "unlocked": {"king": [], "warlord": []},
             "loud_comments": [], "notifications": [], "last_post_clock": start}
+        if frontier:                    # a different man in every kingdom: who he was before, what he loves
+            from . import flavor
+            text, know = flavor.character(self.city.rng)
+            self.city.living["agents"]["king"]["character"] = text
+            if know:
+                self.city.living["town"]["land"]["know"].append(know)
 
     def _upgrade(self):
         """Fills in anything an older save doesn't have yet."""
@@ -279,7 +295,7 @@ class World:
 
     # ------------------------------------------------------------------ the GPU budget
     def _budget_hour(self):
-        b = self.city.living["budget"]
+        b = self.city.living.setdefault("budget", {"hour": None, "left": 0, "size": 0})
         key = self.clock // 60
         if b["hour"] != key:
             size = int(self.city.cfg.get("gpu_calls_per_hour", 120))
@@ -623,8 +639,16 @@ class World:
             else:
                 brain = self.rules                                 # out of budget this hour: run on instinct
                 self.stats["budget_rules"] = self.stats.get("budget_rules", 0) + 1
+        n_calls = _llm_last()
         tool, args = brain.choose(self, who, available)
         fn = available.get(tool, (None,))[0]
+        self.decisions.append({"n": next(self._dn), "time": self.now_str(), "who": who,
+                               "brain": "model" if brain is not self.rules and _llm_last() > n_calls else
+                               ("rules (no model)" if brain is self.rules and self.brains[who] is self.rules else
+                                "rules (model out of budget)" if brain is self.rules else "rules (model failed)"),
+                               "tool": tool, "args": {k: str(v)[:200] for k, v in args.items()},
+                               "thought": me.get("last_thought", "") if brain is not self.rules else "",
+                               "goals": list(me.get("goals", []))})
         m = None
         said = " ".join(str(args.get(k, "")) for k in ("text", "what", "question", "name")).strip().lower()[:80]
         if said and brain is not self.rules and said in me.get("recent_said", []):   # the model repeating itself

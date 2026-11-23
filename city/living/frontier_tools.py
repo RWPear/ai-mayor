@@ -207,8 +207,8 @@ def trade(world, me, args):
 
 TOOLS = {
     "walk":       (tools.walk, "walk somewhere (see Places)", ["place"], None),
-    "do":         (tools.do, "do anything at all, in your own words: eat, sleep, rest, explore, sing, carve, wash in "
-                             "the river, practise something... (the world decides what comes of it)", ["what"], None),
+    "do":         (tools.do, "do anything at all, in your own words - whatever you feel like, big or small (the "
+                             "world decides what comes of it)", ["what"], None),
     "gather":     (gather, "gather a material here by hand (wood, stone, clay, thatch, rope or food)",
                    ["material", "how"], None),
     "plan":       (plan, "decide to build something - your own idea, in your own words. The world works out what it "
@@ -367,11 +367,13 @@ def sections(world, me):
                            "Nobody knows yet how many will come."))
     cap = F.max_scale(world)
     S["building"].append(f"The biggest thing you could realistically take on now: something {cap} "
-                         f"({F.EXAMPLE[cap]}). Bigger needs more hands, and you get there by building bigger "
+                         f"({F.example(cap, world.city.rng)}). Bigger needs more hands, and you get there by building bigger "
                          f"one step at a time.")
     if L.get("builds", 0) < 2 and not n:
-        S["building"].append("Small jobs count: a fire pit, a patched roof, a drying rack - an hour or two each, and "
-                             "the field looks a little more lived-in by tonight. A cottage alone is about a day.")
+        from . import flavor
+        S["building"].append(f"Small jobs count ({flavor.some(flavor.SMALL_JOBS, 3, world.city.rng)}...) - an hour or "
+                             "two each, and the place looks a little more lived-in by tonight. A cottage alone is about "
+                             "a day.")
     if L.get("idle_yesterday", 0) >= 5:
         S["kingdom"].append(f"Yesterday the settlers had {L['idle_yesterday']} hours with nothing to do - nothing "
                             "of yours left to build or gather for.")
@@ -424,6 +426,8 @@ def identity(p):
                  "field, a dull axe, the clothes you're wearing. No subjects, no court, no gold to speak of, and "
                  "nobody has crowned you. Everything has to be built by hand, starting with your own. People (real "
                  "people who follow online) arrive once a week - if there's something to come to. ")
+    if p.get("character"):
+        start += p["character"] + " "
     return (start + f"Your one goal: {goal}\nEverything else - what you like, how you build, what you think the place "
             "should become - is yours to discover. You're a person: you get hungry, tired, lonely and bored, your "
             "ideas can fail, and you learn by doing.\n"

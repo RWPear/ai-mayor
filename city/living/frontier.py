@@ -357,6 +357,12 @@ EXAMPLE = {"tiny": "a bed, a stone axe", "small": "a cottage, a garden, a shed",
            "large": "a row of houses, a hall, a palisade", "huge": "a tenement block, a stone keep"}
 
 
+def example(scale, rng=None):
+    """A few things of that size, drawn fresh (fixed examples turn into the model's only ideas)."""
+    from . import flavor
+    return flavor.some(flavor.BY_SCALE[scale], 3, rng) if rng else EXAMPLE[scale]
+
+
 def max_scale(world):
     """The biggest thing that's realistic right now: limited by how many hands there are, and by experience -
     one size up from the biggest thing he's actually finished. One man alone raises cottages, not tenements."""
@@ -377,8 +383,8 @@ def too_big(world, d):
     built = max([ORDER.index(b.get("scale", "tiny")) for b in land(world)["buildings"] if b["id"] != "b0"] or [0])
     if ORDER.index(d["scale"]) > built + 1:
         return (f"nothing he's built comes close to that size - he'd need to raise something "
-                f"{ORDER[built + 1]} first ({EXAMPLE[ORDER[built + 1]]})")
-    return f"that's far too much for {who} - for now, think {cap}: {EXAMPLE[cap]}"
+                f"{ORDER[built + 1]} first ({example(ORDER[built + 1], world.city.rng)})")
+    return f"that's far too much for {who} - for now, think {cap}: {example(cap, world.city.rng)}"
 
 
 def start_project(world, idea, place=None):

@@ -419,7 +419,7 @@ def decree(world, me, args):
 
 def spend(world, me, args):
     city = world.city
-    what = str(args.get("what") or "").lower()
+    what = str(args.get("project") or args.get("what") or "").lower()
     pop = max(1, city.population())
     from ..sim import available_projects
     proj = next((p for p in available_projects(city) if p["id"] == what or p["name"].lower() == what), None)
@@ -586,7 +586,7 @@ ARG = {"place": "where to walk (one of the Places)",
        "question": "the decree question", "a_word": "one-word choice A", "a_text": "what happens if A wins",
        "a_flavor": "what A does: " + ", ".join(FLAVORS), "b_word": "one-word choice B",
        "b_text": "what happens if B wins", "b_flavor": "what B does", "back": "the word you want to win (optional)",
-       "what": "a building project id from the list", "target": "'north' (the war camp) or a hold",
+       "project": "a building project id from the list", "target": "'north' (the war camp) or a hold",
        "hold": "a hold's name", "warriors": "how many warriors to send"}
 
 TOOLS = {
@@ -605,7 +605,7 @@ TOOLS = {
         "summon":     (summon, "summon a subject (a real person) to the castle", ["handle", "why"], None),
         "decree":     (decree, "invent a new decree for the people to vote on tomorrow (one a day)",
                        ["question", "a_word", "a_text", "a_flavor", "b_word", "b_text", "b_flavor", "back"], None),
-        "spend":      (spend, "pay for one of the kingdom's building projects", ["what"], None),
+        "spend":      (spend, "pay for one of the kingdom's building projects", ["project"], None),
         "spy":        (spy, "send spies north to the war camp, or into a hold", ["target"], "room('spymaster_tower')"),
         "garrison":   (garrison, "station soldiers in a hold for a week (raids there get much harder)", ["hold"],
                        "room('war_room')"),

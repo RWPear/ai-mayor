@@ -89,11 +89,11 @@ export class Land {
     const cx = x - H.pos[0], cz = z - H.pos[1], d0 = Math.hypot(cx, cz);
     const tf = [this.field[0] - H.pos[0], this.field[1] - H.pos[1]], tl = Math.hypot(...tf) || 1;
     const toward = d0 > 0.01 ? Math.max(0, (cx * tf[0] + cz * tf[1]) / (d0 * tl)) : 0;
-    const dh = d0 / (H.r * 1.35) / (1 + 1.1 * Math.pow(toward, 3));
+    const dh = d0 / (H.r * 1.35) / (1 + 0.6 * Math.pow(toward, 3));      // (city/living/scene.py on_crag keeps lots off it)
     if (dh < 1.3) {
       const edge = dh + fbm(x * 0.07, z * 0.07, 2) * 0.1;
-      const top = 1 - smoothstep(0.42, 0.62 + 0.3 * Math.pow(toward, 3), edge);
-      h += H.height * 1.3 * top + H.height * 0.2 * (1 - smoothstep(0.6, 1.3, dh)) + fbm(x * 0.2, z * 0.2, 2) * 0.6;
+      const top = 1 - smoothstep(0.42, 0.62 + 0.35 * Math.pow(toward, 3), edge);
+      h += H.height * 1.3 * top + H.height * 0.2 * (1 - smoothstep(0.6, 1.1, dh)) + fbm(x * 0.2, z * 0.2, 2) * 0.6 * (1 - smoothstep(0.9, 1.2, dh));
     }
     const dr = distToPath(x, z, this.river.path);
     const w = this.river.width / 2;

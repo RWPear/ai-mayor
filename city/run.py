@@ -373,7 +373,7 @@ def main():
     py.add_argument("--speed", default="normal", choices=["slow", "normal", "fast", "faster"],
                     help="a day takes 48 / 24 / 6 / about 1 minute (change it in the browser too)")
     py.add_argument("--crowd", type=int, default=0, help="made-up followers commenting in the background")
-    py.add_argument("--seed", type=int, default=1)
+    py.add_argument("--seed", type=int, help="the same seed gives the same king and the same luck (default: random)")
     py.add_argument("--port", type=int, default=8765)
     rc = sub.add_parser("record", help="timelapse videos from the recorders in content/recorders.yaml")
     rc.add_argument("--days", default="runs/latest/days", help="a run's days folder")

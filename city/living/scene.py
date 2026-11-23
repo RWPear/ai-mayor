@@ -194,6 +194,8 @@ def place(world, rec):
             continue
         if _near_path(x, z, RIVER, 10 + max(size[:2]) / 2) or _near_path(x, z, ROAD, 4 + max(size[:2]) / 2):
             continue
+        if on_crag(x, z, max(size[:2]) / 2) and shape not in ("tower",):
+            continue
         rec["lot"] = {"pos": [round(x, 1), round(z, 1)], "size": size, "rot": rot, "shape": shape}
         return rec["lot"]
     return None
@@ -271,6 +273,18 @@ def piles(world):
 def stand_pos(world, pid):
     """Where a person stands at a place (the shack's door rather than its middle)."""
     return list(LAYOUT.get(pid, {}).get("stand") or place_pos(world, pid))
+
+
+def on_crag(x, z, pad=0.0):
+    """The rocky hill is a crag (viewer/js/terrain.js): cliffs, a flat top, one ramp down toward the field.
+    Nothing gets built on its slopes; the top is for something that belongs there."""
+    hx, hz = LAYOUT["hill"]["pos"]
+    fx, fz = LAYOUT["field"]["pos"]
+    dx, dz, d0 = x - hx, z - hz, math.hypot(x - hx, z - hz)
+    tl = math.hypot(fx - hx, fz - hz) or 1
+    toward = max(0.0, (dx * (fx - hx) + dz * (fz - hz)) / (max(d0, 0.01) * tl))
+    reach = LAYOUT["hill"]["r"] * 1.35 * (1 + 0.6 * toward ** 3)
+    return d0 < reach * 1.12 + pad
 
 
 def home_pos(world, handle):

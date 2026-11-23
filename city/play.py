@@ -44,6 +44,8 @@ class Play:
         cfg = config.load()
         self.state = Path(state)
         if fresh or not (self.state / "city.json").exists():
+            import random
+            seed = seed if seed is not None else random.randrange(1, 10 ** 9)   # a new king every time
             self.city = City(cfg, name, seed=seed)
         else:
             self.city = City.load(self.state, cfg)
@@ -54,6 +56,8 @@ class Play:
             from .sources.fake import FakeAudience
             self.audience = FakeAudience({"start_followers": crowd, "growth": {"daily": max(1, crowd // 8)},
                                           "engagement": 0.35, "free_text": 0.5}, seed=seed or 7)
+        from . import llm
+        llm.CLOCK = self.world.now_str
         self.inbox = queue.Queue()
         self.lock = threading.Lock()
         self.tick_s = SPEEDS.get(speed, 30)
@@ -272,6 +276,28 @@ class Play:
                     "handles": self.handles, "version": self.version}
 
 
+    def mind(self, since=0):
+        """What the minds chose and why: every decision (model or rules), every call to the model with what it was
+        told and what it said, and who the king is right now."""
+        from . import llm
+        with self.lock:
+            k = self.world.agent("king")
+            from .living import life
+            fr = self.world.frontier
+            from .living import frontier as F
+            crowned = fr and F.land(self.world).get("crowned")
+            card = {"name": ("King Aldric" if crowned else "Aldric") if fr else k.get("name"),
+                    "goal": k.get("frontier_goal") if fr else k.get("goal"), "goals": k.get("goals", []),
+                    "character": k.get("character"), "who": life.who_am_i(k), "thought": k.get("last_thought", ""),
+                    "brain": self.world.brains["king"].name if hasattr(self.world.brains["king"], "name") else "rules",
+                    "needs": {a: round(b, 2) for a, b in k.get("life", {}).get("needs", {}).items()},
+                    "location": k.get("location")}
+            dec = [d for d in self.world.decisions if d["n"] >= since][-150:]
+            calls = [c for c in list(llm.CALLS) if c["n"] >= since][-60:]
+            return {"king": card, "decisions": dec, "calls": calls,
+                    "stats": {a: b for a, b in self.world.stats.items() if not a.startswith("focus.")}}
+
+
 def serve(play, port=8765):
     class H(http.server.SimpleHTTPRequestHandler):
         def translate_path(self, path):
@@ -299,6 +325,8 @@ def serve(play, port=8765):
                 return self._json(None, play.cache["state"])
             if p == "/live/scene":
                 return self._json(None, play.cache["scene"])
+            if p == "/live/mind":
+                return self._json(play.mind())
             if p == "/live/feed":
                 since = int(dict(x.split("=", 1) for x in q.split("&") if "=" in x).get("since", 0) or 0)
                 return self._json(play.feed(since))

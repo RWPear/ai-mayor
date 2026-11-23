@@ -295,8 +295,11 @@ function makePool(where, proj) {
     const ts = S.trees_all || S.trees, felled = Math.round(S.trees_felled || 0);
     for (const tr of ts.slice(felled, felled + 120)) out.push({ pos: near([tr[0], tr[1]], land.woods.pos, -1.3), face: [tr[0], tr[1]], anim: "chop" });
   } else if (where === "hill") {
-    for (const st of (S.stones_all || S.stones).slice(Math.round(S.stones_hauled || 0)).slice(0, 120)) {
-      const a = R() * 6.28; out.push({ pos: [st[0] + Math.cos(a) * 1.3, st[1] + Math.sin(a) * 1.3], face: [st[0], st[1]], anim: "mine" });
+    for (const st of (S.stones_all || S.stones).slice(Math.round(S.stones_hauled || 0)).slice(0, 160)) {
+      const a = R() * 6.28, x = st[0] + Math.cos(a) * 1.3, z = st[1] + Math.sin(a) * 1.3, y = land.height(x, z);
+      const slope = Math.max(Math.abs(land.height(x + 1.5, z) - y), Math.abs(land.height(x, z + 1.5) - y)) / 1.5;
+      if (slope < 0.55) out.push({ pos: [x, z], face: [st[0], st[1]], anim: "mine" });   // not halfway up a cliff
+      if (out.length >= 120) break;
     }
   } else if (where === "river") {
     const P = S.terrain.river.path, w = S.terrain.river.width / 2 + 1.6;
@@ -483,7 +486,7 @@ function buildHud() {
   $("shotbtns").innerHTML = S.shots.map((s, i) => `<button type="button" data-i="${i}">${i + 1}. ${esc(s.text.slice(0, 60))}${s.text.length > 60 ? "..." : ""}</button>`).join("");
   document.querySelectorAll("#shotbtns button").forEach((b) => b.addEventListener("click", () => { const s = S.shots[+b.dataset.i]; now = s.t - S.start - 1; rig.set("orbit"); rig.lookAt(s.target, s.distance); syncMode(); showCaption(s.text, true); }));
   $("scrub").max = S.end - S.start;
-  $("daylabel").textContent = `Day ${S.day}` + (index.days.length > 1 ? ` of ${index.days[index.days.length - 1].day}` : "");
+  $("daylabel").textContent = `Day ${LIVE ? S.day + 1 : S.day}` + (index.days.length > 1 ? ` of ${index.days[index.days.length - 1].day}` : "");
   $("prev").disabled = dayIx === 0; $("next").disabled = dayIx >= index.days.length - 1;
 }
 function hud(t, h, wx, k) {
@@ -548,7 +551,7 @@ function bindUi() {
   $("next").addEventListener("click", () => showDay(dayIx + 1));
   document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => { setMode(b.dataset.mode); }));
   addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName) || e.target.isContentEditable) return;   // typing, not playing
     if (e.code === "Space") { e.preventDefault(); $("play").click(); }
     const n = { Digit1: "follow", Digit2: "director", Digit3: "walk", Digit4: "top", Digit5: "orbit", Digit6: "recorder" }[e.code];
     if (n) setMode(n);

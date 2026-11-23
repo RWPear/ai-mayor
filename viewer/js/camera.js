@@ -16,7 +16,7 @@ export class Rig {
     this.top = { x: 30, z: 0, h: 70 };
     this.shot = null; this.shotLeft = 0; this.recorder = null;
     this.lastTarget = null;
-    addEventListener("keydown", (e) => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT") this.keys[e.code] = true; });
+    addEventListener("keydown", (e) => { if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) this.keys[e.code] = true; });
     addEventListener("keyup", (e) => { this.keys[e.code] = false; });
     let drag = null;
     dom.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; if (this.mode === "walk" && e.pointerType === "mouse") dom.requestPointerLock?.(); });

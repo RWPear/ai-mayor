@@ -50,7 +50,7 @@ export function startLive({ onScene, onState }) {
   $("lstep").addEventListener("click", () => control({ action: "step" }));
   $("lclose").addEventListener("click", () => { $("lclose").disabled = true; control({ action: "close" }).finally(() => setTimeout(() => { $("lclose").disabled = false; }, 2500)); });
   $("larrive").addEventListener("click", () => control({ action: "arrive" }));
-  document.querySelectorAll("#ltabs button").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; render(); }));
+  document.querySelectorAll("#ltabs button").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; render(); if (tab === "mind") pollMind(); }));
 
   async function poll(force) {
     if (busy) return;
@@ -94,7 +94,8 @@ export function startLive({ onScene, onState }) {
   function render() {
     const mine = $("lmine").checked ? me() : "";
     document.querySelectorAll("#ltabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
-    $("lreplies").hidden = tab !== "replies"; $("llog").hidden = tab !== "log";
+    $("lreplies").hidden = tab !== "replies"; $("llog").hidden = tab !== "log"; $("lmind").hidden = tab !== "mind";
+    if (tab === "mind") { renderMind(); return; }
     if (tab === "replies") {
       const list = replies.filter((r) => !mine || r.to === mine).slice().reverse();
       const order = { pending: 0, approved: 1, rejected: 2 };
@@ -127,7 +128,45 @@ export function startLive({ onScene, onState }) {
     }
   }
 
+  // ---------------------------------------------------------------- inside his head
+  let mind = null, mindBusy = false;
+  async function pollMind() {
+    if (tab !== "mind" || mindBusy) return;
+    mindBusy = true;
+    try { mind = await api("/live/mind"); renderMind(); } catch (e) { /* next time */ } finally { mindBusy = false; }
+  }
+  const openState = new Set();
+  function renderMind() {
+    const el = $("lmind");
+    if (!mind) { el.innerHTML = `<p class="muted">Reading his mind...</p>`; pollMind(); return; }
+    el.querySelectorAll("details[data-k]").forEach((d) => { const want = d.dataset.k[0] === "u" ? d.open : !d.open; if (want) openState.add(d.dataset.k); else openState.delete(d.dataset.k); });
+    const k = mind.king, top = el.scrollTop;
+    const decs = mind.decisions.filter((d) => d.who === "king").slice().reverse();
+    const calls = mind.calls.slice().reverse();
+    el.innerHTML = `
+      <div class="mcard">
+        <div><strong>${esc(k.name)}</strong> <span class="k">· ${esc(k.brain === "llm" ? "thinking with the model" : "running on rules (no model)")} · at ${esc(k.location || "")}</span></div>
+        ${k.character ? `<div><span class="k">Who he was before:</span> ${esc(k.character)}</div>` : ""}
+        <div><span class="k">Goal:</span> ${esc(k.goal || "")}${k.goals.length ? ` · <span class="k">his own:</span> ${esc(k.goals.join("; "))}` : ""}</div>
+        ${k.who ? `<div><span class="k">Who he's becoming:</span> ${esc(k.who)}</div>` : ""}
+        ${k.thought ? `<div><span class="k">Last thought:</span> <em>${esc(k.thought)}</em></div>` : ""}
+        <div class="k">Needs: ${Object.entries(k.needs).map(([a, b]) => `${esc(a)} ${Math.round(b * 100)}%`).join(" · ")}</div>
+      </div>
+      <h3>What he chose</h3>
+      ${decs.length ? decs.slice(0, 40).map((d) => `<div class="dec ${d.brain === "model" ? "model" : ""}"><span class="t muted">${esc((d.time || "").split(", ")[1] || "")}</span>
+        <span class="b">${esc(d.brain)}</span><strong>${esc(d.tool)}</strong>(${esc(Object.entries(d.args).map(([a, b]) => `${a}: ${b}`).join(", "))})
+        ${d.thought ? `<div class="th">"${esc(d.thought)}"</div>` : ""}</div>`).join("") : `<p class="muted">Nothing yet.</p>`}
+      <h3>What the model was asked, and what it said</h3>
+      ${calls.length ? calls.map((c) => `<div class="call ${c.error ? "err" : ""}">
+        <div><strong>${esc(c.who)}</strong> <span class="muted">· ${esc((c.time || "").split(", ")[1] || "")} · ${c.ms} ms · ${esc(c.model)} · temp ${c.temperature}</span></div>
+        <details data-k="u${c.n}" ${openState.has(`u${c.n}`) ? "open" : ""}><summary>What it was told (${(c.system.length + c.user.length).toLocaleString()} characters)</summary><pre>${esc(c.system)}</pre><pre>${esc(c.user)}</pre></details>
+        <details data-k="r${c.n}" ${openState.has(`r${c.n}`) ? "" : "open"}><summary>What it said</summary><pre>${esc(c.error || c.response)}</pre></details>
+      </div>`).join("") : `<p class="muted">No calls to the model yet. ${k.brain === "llm" ? "" : "Start it with --king llm to see them."}</p>`}`;
+    el.scrollTop = top;
+  }
+
   poll(true);
   setInterval(() => poll(false), 1500);
+  setInterval(pollMind, 4000);
   return { get state() { return state; } };
 }

@@ -382,8 +382,14 @@ export function buildingMesh(b, land, ctx) {
   const hs = [land.height(x, z)];
   const [w, d] = b.size || [4, 4];
   if (b.shape !== "wall_ring") for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) hs.push(land.height(x + sx * w / 2, z + sz * d / 2));
-  const y = b.shape === "wall_ring" ? 0 : Math.max(...hs) * 0.6 + hs[0] * 0.4;
+  // on uneven ground a building sits level at its highest corner, on a stone foundation down to the lowest
+  const flatLot = ["plot", "road", "firepit", "prop", "bridge", "jetty", "fish_trap"].includes(b.shape);
+  const y = b.shape === "wall_ring" ? 0 : flatLot ? Math.max(...hs) * 0.6 + hs[0] * 0.4 : Math.max(...hs);
   g.position.copy(V(x, z, y));
+  const drop = y - Math.min(...hs);
+  if (!flatLot && b.shape !== "wall_ring" && drop > 0.25 && b.state !== "ruin") {
+    const f = mesh(box(w + 0.3, drop + 0.4, d + 0.3), M(C.stone)); f.position.y = -(drop + 0.4) / 2 + 0.05; g.add(f);
+  }
   g.rotation.y = (b.rot || 0) * Math.PI / 180 + (b.shape === "wall_ring" ? 0 : (R() - 0.5) * 0.04);
   if (b.quality === "shoddy" && b.state === "standing") g.rotation.z = 0.035;   // it leans
   if (b.shape === "wall_ring") {                                                // posts follow the ground

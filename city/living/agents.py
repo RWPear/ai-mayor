@@ -372,6 +372,17 @@ class LLMBrain:
             overview.append(S["people"][0])
         if p.get("goals"):
             overview.append("Your own goals: " + "; ".join(p["goals"]))
+        if world.frontier:                     # what he's been doing (so he doesn't loop), and something to notice
+            from . import flavor
+            mine = [d for d in world.decisions if d["who"] == "king"][-6:]
+            if mine:
+                overview.append("Lately you: " + "; ".join(
+                    d["tool"] + (f" ({next(iter(d['args'].values()))[:50]})" if d["args"] else "") for d in mine) + ".")
+            if world.city.rng.random() < 0.6:
+                p["_noticed"] = flavor.notice(world.city.rng, p.get("location"))
+                overview.append("You notice: " + p["_noticed"])
+            else:
+                p["_noticed"] = ""
         schema1 = {"type": "object", "properties": {
             "thought": {"type": "string"}, "focus": {"type": "string", "enum": list(options)},
             "intention": {"type": "string"}, "new_goal": {"type": "string"}},
@@ -380,7 +391,8 @@ class LLMBrain:
         one = self.llm.json(self._identity(p, "king") + "You live in this world in real time. What do you want to "
                             "focus on next?\n" + menu + "\nReply with JSON: thought (one private sentence), focus, "
                             "intention (what you mean to do, in your own words), new_goal (a new personal goal if "
-                            "your situation changed, else \"\").", "\n".join(overview), schema1, max_tokens=200)
+                            "your situation changed, else \"\").", "\n".join(overview), schema1, max_tokens=200,
+                            temperature=1.0)
         focus = one.get("focus")
         if focus not in options:
             raise ValueError(f"focus {focus}")
@@ -390,6 +402,8 @@ class LLMBrain:
         names = options[focus][1]
         argnames = sorted({a for n in names for a in available[n][2]})
         detail = [line for k in table[focus][2] for line in S.get(k, [])]
+        if p.get("_noticed"):
+            detail.append("You noticed: " + p["_noticed"])
         tool_lines = "\n".join(f"- {n}({', '.join(available[n][2])}): {available[n][1]}" for n in names)
         arg_lines = "\n".join(f"  {a}: {tools.ARG[a]}" for a in argnames)
         two = self.llm.json(self._identity(p, "king") + f"You've decided to focus on: {options[focus][0]}. You "
@@ -399,7 +413,7 @@ class LLMBrain:
                             "\n".join(detail), {"type": "object", "properties": {
                                 "tool": {"type": "string", "enum": names},
                                 "args": {"type": "object", "properties": {a: {"type": "string"} for a in argnames}}},
-                                "required": ["tool", "args"]}, max_tokens=300)
+                                "required": ["tool", "args"]}, max_tokens=300, temperature=0.95)
         tool = two.get("tool")
         if tool not in available:
             raise ValueError(f"tool {tool}")

@@ -105,6 +105,18 @@ body.live #bar .top { grid-template-columns: auto 1fr; }
 .lm.d2 { border-left-color: var(--accent); }
 .lm.d3 { border-left-color: var(--danger); }
 #lerror { white-space: normal; }
+.mcard { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 13.5px; display: grid; gap: 4px; }
+.mcard .k { color: var(--muted); }
+.dec { font-size: 13.5px; line-height: 1.35; border-left: 3px solid var(--line); padding-left: 8px; }
+.dec.model { border-left-color: var(--accent); }
+.dec .b { font-size: 11px; padding: 0 6px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-right: 4px; }
+.dec.model .b { color: var(--accent); border-color: var(--accent); }
+.dec .th { color: var(--muted); font-style: italic; }
+.call { border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; font-size: 12.5px; }
+.call.err { border-color: rgba(224,113,90,.6); }
+.call summary { cursor: pointer; color: var(--muted); }
+.call pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; background: rgba(0,0,0,.3); border-radius: 6px; padding: 7px; margin: 5px 0; max-height: 340px; overflow: auto; }
+#live h3 { font: 700 12px/1 var(--display); letter-spacing: .1em; color: var(--muted); margin: 8px 0 2px; }
 @media (max-width: 760px) {
   #live { top: auto; height: 55vh; }
   body.live #bar, body.live #hud { display: none; }
@@ -160,9 +172,10 @@ body.live #bar .top { grid-template-columns: auto 1fr; }
   <div class="row" id="ltabs" style="align-items:center">
     <button type="button" data-tab="replies" aria-pressed="true">Replies <span id="lpending"></span></button>
     <button type="button" data-tab="log" aria-pressed="false">What happened</button>
+    <button type="button" data-tab="mind" aria-pressed="false">Aldric's mind</button>
     <label class="muted" style="display:flex;gap:6px;align-items:center"><input id="lmine" type="checkbox"> only mine</label>
   </div>
-  <div style="min-height:0;display:grid"><div id="lreplies" class="lfeed"></div><div id="llog" class="lfeed" hidden></div></div>
+  <div style="min-height:0;display:grid"><div id="lreplies" class="lfeed"></div><div id="llog" class="lfeed" hidden></div><div id="lmind" class="lfeed" hidden></div></div>
   <div id="lerror" class="chip warn" hidden></div>
 </section>
 <div id="caption" class="panel"></div>
