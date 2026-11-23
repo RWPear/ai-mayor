@@ -38,32 +38,34 @@ Whenever the budget runs out, the rule-based versions fill in, so nothing ever s
 
 ## The king's life (the quiet path)
 
-- **Needs**: hunger, energy, company, fun, pride. They drift every 30 minutes and push him around
-  (he goes to eat, sleeps 23:00-7:00, seeks company, gets bored, needs to be admired).
-- **Passions** (`content/ruler.yaml`): painting, the lute, roses. Practising makes creations with a
-  skill level that grows (1/10 -> 10/10); they're saved in `living.agents.king.life.creations`.
+**He starts blank.** `content/ruler.yaml` is just a name and one goal: still be king after the Reckoning.
+No personality, no hobbies, no plans. Who he becomes is his:
+
+- **Needs** - hunger, energy, company, fun. Just a body. They push him to eat, sleep (23:00-7:00), find
+  someone to talk to, do something for fun.
+- **Pastimes** - he can do anything for its own sake (paint, sing, carve, fish, write poems...). Whatever he
+  keeps coming back to becomes a passion, and he gets better at it (skill 1-10). Nothing is pre-chosen.
+- **Self** - every night at 23:00 he reflects on his day and rewrites who he is: traits, likes, dislikes,
+  passions, wants, fears, and one sentence about who he's becoming. It's saved in
+  `living.agents.king.self` and fed into everything he does after. Day 1 he's nobody; by day 30 he's
+  someone - and you didn't write him.
 - **The town** (`city/living/town.py`): the throne room, bedchamber, kitchens, castle yard, gardens, market
   square, tavern (he goes in disguise and overhears people), King's Street, smithy, chapel, river, fields,
-  walls. Every place has features in a state (*"a dirt road churned into mud"*), the kinds of subjects you'd
-  meet there at that hour (real followers), and improvements he could make.
-- **His own projects**: standing somewhere, he can start one of the improvements he sees - or invent his own
-  (a size and an effect from a fixed list, so it stays bounded). He pays, workers build it over days, he
-  can roll up his sleeves and help, and when it's done the place really changes.
-- **His castle starts half-ruined.** Building rooms unlocks his tools:
-
-| Room | Unlocks |
-|---|---|
-| war room | `garrison` - station soldiers in a hold (raids there get much harder) |
-| spymaster's tower | `spy` - on the war camp or a hold |
-| great hall | `feast` |
-| dungeon | criminals go to the dungeon instead of the stocks (longer sentences) |
-
-- **The court** (`content/court.yaml`): Steward Wendell (flatters him, quietly skims the treasury - the
-  audience sees it, the king doesn't), Captain Bryn (blunt, worried about Skarn), Pip the Jester (mocks him
-  to his face). He talks to them when he's lonely.
-- **The docket**: petitions from real comments ("I beg the king for a job"), criminals the guards caught,
-  and visitors who turn up at the gate. In the throne room he rules on them: grant, deny, reward, pardon,
-  fine or jail.
+  walls. Each place has features in a state (*"a dirt road churned into mud"*) and the real subjects you'd
+  meet there at that hour. **Nothing suggests what to do about any of it.** If he thinks the road should be
+  stone, that's his idea. If he never does, it stays mud.
+- **His projects** can go wrong. He names it, picks a size (bigger is riskier), pays up front. Workers build
+  over days; setbacks happen (storms, cracked stone, theft). When it's done it's rolled: it **turns out
+  well**, comes out **shoddy** (half the benefit, "already cracking"), or **fails** - gold gone, a
+  half-finished ruin left behind. Pitching in himself and experience from earlier builds help.
+- **Ruins** - parts of his castle are ruins at the start (war room, spymaster's tower, great hall,
+  dungeon). He isn't told what they're for. Rebuilding one quietly unlocks a power (garrison, spy, feast,
+  real jail sentences) - he finds out when it's done.
+- **The court** (`content/court.yaml`): Steward Wendell (flattering, quietly skims the treasury - the audience
+  sees it, the king doesn't), Captain Bryn (blunt, worried about Skarn), Pip the Jester (mocks him). These
+  side characters do have written personalities - they're the world he wakes up in.
+- **The docket**: petitions from real comments, criminals the guards caught, visitors at the gate. In the
+  throne room he rules: grant, deny, reward, pardon, fine or jail.
 
 ## Subjects acting on each other (the viral path)
 

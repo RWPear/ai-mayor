@@ -308,12 +308,21 @@ class LLMMayor:
         p = self.p
         journal = city.mayor.get("journal", [])[-5:]
         title = p.get("title", "king")
-        lines = [f"You are {p.get('name')}, the {title} of {city.name}. {p.get('personality', '')}",
-                 f"Your ambition: {p.get('ambition', '')} Your flaw: {p.get('flaw', '')}",
-                 f"Voice: {p.get('voice', 'theatrical and royal, with a sharp, snarky wit')}.",
-                 "Your subjects are real people who follow the kingdom online. They comment to work, trade, train, "
-                 "grumble and vote on decrees. At the end of each 30-day season comes the Reckoning: they vote to "
-                 "KNEEL (you keep the crown) or REVOLT (you are overthrown)."]
+        lines = [f"You are {p.get('name')}, the {title} of {city.name}. Nobody has told you who to be."]
+        if p.get("goal"):
+            lines.append(f"Your one goal: {p['goal']}")
+        for k in ("personality", "ambition", "flaw", "voice"):     # only if someone deliberately wrote one
+            if p.get(k):
+                lines.append(f"{k.title()}: {p[k]}")
+        king = ((city.living or {}).get("agents") or {}).get("king")
+        if king:
+            from .living.life import who_am_i
+            me_now = who_am_i(king)
+            lines.append(f"Who you've become so far, in your own words: {me_now}." if me_now else
+                         "You haven't figured out who you are yet. Be honest about that.")
+        lines.append("Your subjects are real people who follow the kingdom online. They comment to work, trade, "
+                     "train, grumble and vote on decrees. At the end of each 30-day season comes the Reckoning: they "
+                     "vote to KNEEL (you keep the crown) or REVOLT (you are overthrown).")
         if journal:
             lines.append("Your recent journal:")
             lines += [f"- Day {j['day']}: {j['diary'][:300]}" for j in journal]

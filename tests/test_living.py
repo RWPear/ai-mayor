@@ -81,18 +81,21 @@ def test_king_invents_a_decree_that_survives_save_and_load(tmp_path):
     assert eid in storyteller.catalog()
 
 
-def test_tools_unlock_as_the_world_changes():
+def test_rebuilding_a_ruined_room_unlocks_a_tool(monkeypatch):
+    from city.living import life, tools
+    monkeypatch.setitem(life.SUCCESS, "small", 1.0)
+    monkeypatch.setitem(life.SETBACK, "small", 0.0)
     city, w = _world()
     assert "spy" not in tools.unlocked(w, "king")
-    from city.living import life
-    from city.living import town as T
-    work, _ = life.start_work(w, T.improvements_at(city.living["town"], "spymaster_tower")[0], "spymaster_tower")
-    assert work and work["room"]
-    for _ in range(int(work["days"] * 48) + 2):
+    king = w.agent("king")
+    king["location"] = "spymaster_tower"
+    m = tools.start_work(w, king, {"size": "small"})
+    assert m and "rebuilding the spymaster's tower" in m["text"]
+    for _ in range(2 * 48 + 2):
         w.tick()
     assert city.living["town"]["rooms"]["spymaster_tower"]
     assert "spy" in city.living["unlocked"]["king"]
-    assert any("New power" in m["text"] and "spies" in m["text"] for m in city.living["moments"])
+    assert any("New power" in m["text"] for m in city.living["moments"])
 
 
 class FakeLLM:
@@ -176,42 +179,75 @@ def test_the_king_judges_criminals_at_court():
 
 
 # ---------------------------------------------------------------- the king's own life
-def test_the_king_notices_a_muddy_road_and_paves_it():
-    from city.living import tools
+def test_nobody_hands_him_ideas():
+    """He sees the mud. Whether he thinks of paving it is up to him."""
+    from city.living.agents import perceive
     city, w = _world(60)
-    king = w.agent("king")
-    king["location"] = "kings_street"
-    assert "mud" in city.living["town"]["features"]["kings_street"]["road"]
-    m = tools.start_work(w, king, {"improvement": "pave_street"})
-    assert m and "paving King's Street" in m["text"]
-    for _ in range(4 * 48 + 2):
-        w.tick()
-    assert city.living["town"]["features"]["kings_street"]["road"] == "a paved stone road"
+    w.agent("king")["location"] = "kings_street"
+    view = perceive(w, "king")
+    assert "mud" in view
+    assert "pave" not in view.lower() and "stone road" not in view.lower() and "could improve" not in view.lower()
+
+
+def test_his_projects_can_succeed_be_shoddy_or_fail():
+    from city.living import life, tools
+    results = []
+    for seed in range(12):
+        city, w = _world(60, seed=seed)
+        city.treasury = 10 ** 7
+        city.living["town"]["works"] = []
+        king = w.agent("king")
+        king["location"] = "kings_street"
+        assert tools.start_work(w, king, {"name": "paving the street with stone", "size": "large", "purpose": "roads"})
+        for _ in range(9 * 48):
+            w.tick()
+            done = [o for o in king["life"]["outcomes"] if o["name"] == "paving the street with stone"]
+            if done:
+                results.append(done[0]["result"])
+                break
+    assert set(results) >= {"success", "failed"} or set(results) >= {"success", "shoddy"}
+    feats = city.living["town"]["features"]["kings_street"]
+    assert any("paving the street with stone" in v for v in feats.values())
 
 
 def test_his_own_ideas_are_bounded():
     from city.living import tools
     city, w = _world(60)
+    city.treasury = 10 ** 6
     king = w.agent("king")
     king["location"] = "river"
-    m = tools.start_work(w, king, {"name": "a giant golden duck statue", "size": "colossal", "effect": "tax_raise"})
-    imp = next(iter(city.living["town"]["invented"].values()))
-    assert imp["size"] == "small" and imp["flavor"] == "nothing"   # unknown size/effect -> the smallest, harmless
+    m = tools.start_work(w, king, {"name": "a giant golden duck statue", "size": "colossal", "purpose": "tax_raise"})
+    work = city.living["town"]["works"][-1]
+    assert work["size"] == "small" and work["flavor"] == "nothing"   # unknown size/purpose -> smallest, harmless
     assert m and "golden duck" in m["text"]
+    assert tools.start_work(w, king, {"name": "another thing"}) is None   # one project per place at a time
 
 
-def test_needs_and_passions():
+def test_a_blank_king_grows_a_self():
     from city.living import life, tools
+    from city.living.agents import LLMBrain
     city, w = _world(60)
     king = w.agent("king")
-    king["life"]["needs"]["fun"] = 0.05
-    tool, args = w.rules.choose(w, "king", tools.unlocked(w, "king"))
-    assert tool in ("create", "walk")
+    assert not life.who_am_i(king)                                   # nobody in particular yet
     for _ in range(3):
-        king["location"] = "throne_room"
-        tools.create(w, king, {"passion": "painting", "title": "Me, Again", "description": "A very large nose."})
-    assert king["life"]["skills"]["painting"] == 3 and len(king["life"]["creations"]) == 3
-    assert king["life"]["needs"]["fun"] > 0.5
+        tools.pastime(w, king, {"activity": "Whittling little boats", "title": "Boat", "description": "Lopsided."})
+    life.reflect(w, king, None)
+    assert "whittling little boats" in king["self"]["passions"]
+    mind = FakeLLM({"traits": ["curious", "stubborn"], "likes": ["the river"], "dislikes": ["mud"],
+                    "passions": ["whittling"], "wants": ["a bridge over the river"], "fears": ["the warlord"],
+                    "becoming": "a king who builds things with his own hands"})
+    w.city.living["budget"]["left"] = 99
+    life.reflect(w, king, mind)
+    assert king["self"]["wants"] == ["a bridge over the river"] and "builds" in king["self"]["becoming"]
+    grab = {}
+
+    class Spy(FakeLLM):
+        def json(self, system, user, schema, **k):
+            grab["system"] = system
+            return super().json(system, user, schema)
+    LLMBrain(Spy({"thought": "x", "tool": "rest", "args": {}, "new_goal": ""})).choose(w, "king", tools.unlocked(w, "king"))
+    assert "Nobody has told you who to be" in grab["system"] and "builds things" in grab["system"]
+    assert "vain" not in grab["system"].lower() and "flaw" not in grab["system"].lower()
 
 
 # ---------------------------------------------------------------- one budget, two kinds of day

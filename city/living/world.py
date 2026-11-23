@@ -1,9 +1,9 @@
 """The living world: a clock that never stops, two minds, a court, and a crowd.
 
 Time runs in 30-minute ticks. Between posts:
-  - King Aldric lives his life: needs (hunger, energy, company, fun, pride), passions (painting,
-    the lute, roses), walking the town, noticing things and starting his own projects, holding court,
-    and - when it matters - being king. He sleeps 23:00-7:00.
+  - King Aldric lives his life. He starts blank - a name and one goal - and grows a self: needs (hunger,
+    energy, company, fun) push him around, he tries pastimes, has his own ideas for the town (which can
+    fail), holds court, and rules. Every night at 23:00 he reflects and rewrites who he is. Sleeps to 7:00.
   - Skarn the Red runs his war camp and decides when to strike (he sleeps 10:00-16:00).
   - Works get built, the steward skims, visitors turn up at the gate, the camp eats at midnight.
   - Comments arrive through the day; people's own-words moves are played out every hour.
@@ -55,7 +55,7 @@ class World:
         start = self.city.day * 1440 + POST_HOUR * 60 - 1440      # one full day of life before the next post
         self.city.living = {
             "clock": start,
-            "agents": {"king": {**k, "location": "throne_room", "goals": [k.get("ambition", "")][:1], "next_act": start},
+            "agents": {"king": {**k, "location": "throne_room", "goals": [], "next_act": start},
                        "warlord": {**w, "location": camp["name"], "goals": [w.get("ambition", "")][:1],
                                    "next_act": start + 60}},
             "warcamp": camp, "moments": [], "custom_events": {}, "unlocked": {"king": [], "warlord": []},
@@ -69,10 +69,14 @@ class World:
         lv.setdefault("budget", {"hour": None, "left": 0, "size": 0})
         king = lv["agents"]["king"]
         king.setdefault("life", life.new_life())
+        king.setdefault("self", life.new_self())
         if king.get("location") not in T.PLACES:
             king["location"] = "throne_room"
-        if "passions" not in king:
-            king["passions"] = agents.persona("king").get("passions", [])
+        persona = agents.persona("king")
+        for k in ("personality", "ambition", "flaw", "voice", "passions"):   # older saves had a preset personality
+            if k not in persona:
+                king.pop(k, None)
+        king.setdefault("goal", persona.get("goal", ""))
         for who in ("king", "warlord"):
             if not lv["unlocked"].get(who):
                 lv["unlocked"][who] = sorted(tools.unlocked(self, who))
@@ -285,6 +289,8 @@ class World:
         king = self.agent("king")
         life.drift(king, AWAKE["king"](hour))
         if not AWAKE["king"](hour):
+            if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
+                life.reflect(self, king, getattr(self.brains["king"], "llm", None))
             king["location"] = "bedchamber"
         for who in ("king", "warlord"):
             me = self.agent(who)
@@ -326,13 +332,13 @@ class World:
         return m
 
     def announce_works(self, finished):
-        for w in finished:
-            place = T.PLACES[w["place"]]["name"]
-            extra = (f" The king can now {T.ROOMS[w['id']]['unlocks']}." if w.get("room")
-                     else f" {place[0].upper() + place[1:]} looks different now.")
-            self.moment("king", f"{w['name'][0].upper() + w['name'][1:]} is finished!{extra}", 2, public=True,
-                        place=w["place"])
-            self.notify(f"Finished: {w['name']}")
+        for w, result in finished:
+            name = w["name"][0].upper() + w["name"][1:]
+            text = {"success": f"{name} is finished, and it turned out well.",
+                    "shoddy": f"{name} is finished... sort of. It's shoddy and already cracking.",
+                    "failed": f"{name} FAILED. The work fell apart and {w['cost']:,.0f} gold is gone."}[result]
+            self.moment("king", text, 3 if result == "failed" else 2, public=True, place=w["place"])
+            self.notify(f"{w['name']}: {result}")
 
     def _steward_skims(self):
         if self.city.treasury <= 0:

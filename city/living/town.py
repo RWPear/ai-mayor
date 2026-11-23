@@ -61,20 +61,7 @@ PLACES = {
                        "people": {(0, 24): ["guard", "archer", "scout"]}},
 }
 
-# what could be improved where. size: small (2 days), medium (4), large (7). Costs scale with the kingdom.
-IMPROVEMENTS = {
-    "throne_room":   [{"id": "new_throne", "name": "a proper throne", "feature": "throne", "after": "a tall carved throne", "size": "small", "flavor": "vanity"}],
-    "royal_gardens": [{"id": "roses", "name": "the royal rose garden", "feature": "beds", "after": "rows of red roses", "size": "small", "flavor": "festival"}],
-    "market_square": [{"id": "fountain", "name": "a fountain in the market", "feature": "square", "after": "a cobbled square around a stone fountain", "size": "medium", "flavor": "guilds"}],
-    "kings_street":  [{"id": "pave_street", "name": "paving King's Street with stone", "feature": "road", "after": "a paved stone road", "size": "medium", "flavor": "roads"}],
-    "chapel":        [{"id": "new_bell", "name": "a new chapel bell", "feature": "bell", "after": "a bright bronze bell", "size": "small", "flavor": "commoners"}],
-    "river":         [{"id": "stone_bridge", "name": "a stone bridge over the river", "feature": "crossing", "after": "a stone bridge", "size": "large", "flavor": "roads"}],
-    "fields":        [{"id": "irrigation", "name": "irrigation ditches for the fields", "feature": "fields", "after": "green, well-watered wheat", "size": "medium", "flavor": "food"}],
-    "city_walls":    [{"id": "stone_walls", "name": "stone walls", "feature": "walls", "after": "solid stone walls", "size": "large", "flavor": "walls"}],
-    "castle_yard":   [{"id": "training_yard", "name": "a proper training yard", "feature": "yard", "after": "a sanded training yard with practice dummies", "size": "small", "flavor": "army"}],
-}
-
-# castle rooms: building them unlocks tools
+# castle rooms: ruins at the start. Rebuilding one quietly unlocks tools (he finds out when it's done)
 ROOMS = {
     "war_room":        {"name": "the war room", "size": "medium", "unlocks": "garrison soldiers in a hold"},
     "spymaster_tower": {"name": "the spymaster's tower", "size": "medium", "unlocks": "send spies"},
@@ -96,15 +83,8 @@ def new_town():
             "rooms": {r: False for r in ROOMS}, "works": [], "done": [], "invented": {}}
 
 
-def improvements_at(town, pid):
-    """Improvements still possible at a place (built-in + invented ones), not done or underway."""
-    taken = set(town["done"]) | {w["id"] for w in town["works"]}
-    out = [i for i in IMPROVEMENTS.get(pid, []) if i["id"] not in taken]
-    out += [i for i in town["invented"].values() if i["place"] == pid and i["id"] not in taken]
-    if pid in ROOMS and not town["rooms"][pid] and pid not in taken:
-        out.append({"id": pid, "name": f"building {ROOMS[pid]['name']}", "size": ROOMS[pid]["size"], "room": True,
-                    "flavor": "nothing"})
-    return out
+def ruins(town):
+    return [pid for pid, ok in town["rooms"].items() if not ok]
 
 
 def place_of(pid, town):

@@ -213,6 +213,7 @@
 - id: statue_decree
   title: "The king wants a giant golden statue of himself"
   scope: city
+  planned_only: true     # assumes a vain king - only use it if he turns out that way
   weight: 1
   when: "treasury > 0 and not built('statue')"
   days: 2

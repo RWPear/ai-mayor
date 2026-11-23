@@ -26,9 +26,10 @@ Reckoning: the people KNEEL or REVOLT.
 
 ## The living world (new)
 
-Between posts the kingdom keeps living. **King Aldric** (protagonist) has needs and passions, walks the
-town, notices things and starts his own projects, builds the rooms of his half-ruined castle (which unlocks
-his powers), talks with his court and judges the docket. **Skarn the Red** (the barbarian warlord,
+Between posts the kingdom keeps living. **King Aldric** (protagonist) starts blank - a name and one goal - and
+grows his own self: needs push him around, he tries pastimes, has his own ideas for the town (which can fail),
+rebuilds castle ruins (which quietly unlocks powers), talks with his court and judges the docket, and every
+night he rewrites who he is. **Skarn the Red** (the barbarian warlord,
 antagonist) runs his war camp and decides when to raid. Comments in people's own words give their
 character a turn - including stealing from, fighting, or befriending other followers (nobody dies).
 One GPU budget per hour: the crowd gets first claim, the king gets the rest - so a quiet day is about the
