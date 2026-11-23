@@ -106,7 +106,7 @@ export function startLive({ onScene, onState }) {
       list.sort((a, b) => order[a.status] - order[b.status]);
       $("lreplies").innerHTML = list.length ? list.map((r) => `
         <article class="reply ${r.status}" data-id="${r.id}">
-          <header><strong>@${esc(r.to)}</strong> <span class="muted">${esc(r.kind)} · ${esc((r.time || "").split(", ")[1] || "")}${r.by ? ` · <span title="Who understood the comment and who wrote this reply" style="${/rules/.test(r.by) ? "color:var(--danger)" : ""}">${esc(r.by)}</span>` : ""}</span>
+          <header><strong>@${esc(r.to)}</strong> <span class="muted">${esc(r.kinds ? (r.kind.startsWith("later") ? "later: " : "") + r.kinds.join(" + ") : r.kind)} · ${esc((r.time || "").split(", ")[1] || "")}${r.by ? ` · <span title="Who understood the comment and who wrote this reply" style="${/rules/.test(r.by) ? "color:var(--danger)" : ""}">${esc(r.by)}</span>` : ""}</span>
             <span class="badge">${r.status}${r.edited ? ", edited" : ""}</span></header>
           <p>${esc(r.text)}</p>
           ${r.status === "pending" ? `<div class="row"><button type="button" data-act="approved">Approve</button><button type="button" data-act="rejected">Reject</button><button type="button" data-act="edit">Edit</button></div>` : `<div class="row"><button type="button" data-act="pending">Undo</button></div>`}

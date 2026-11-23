@@ -173,26 +173,57 @@ class World:
         u = str(cm.get("username", "")).strip().lstrip("@").lower()
         if u:
             lv = self.city.living
-            lv.setdefault("last_comment", {})[u] = {"id": cm.get("id"), "post": cm.get("post"), "day": self.city.day + 1}
+            lv.setdefault("last_comment", {})[u] = {"id": cm.get("id"), "post": cm.get("post"), "day": self.city.day + 1,
+                                                    "clock": self.clock}
             counts = lv.setdefault("comment_counts", {})
             if counts.get("_day") != self.city.day + 1:
                 counts.clear()
                 counts["_day"] = self.city.day + 1
             counts[u] = counts.get(u, 0) + 1
 
+    REPLY_WINDOW = 24 * 60      # game minutes: only comments from the last day get answered
+    REPLIES_PER_COMMENT = 2     # the answer, and at most one "later that day" - anything more is folded in
+
     def reply(self, handle, text, kind, credit=None, by=None):
-        """Something happened to/with a follower's character. They hear about it (a reply to their latest comment,
-        if they commented in the last 7 days), and if it's their doing it goes on their record and maybe the post."""
+        """Something happened to/with a follower's character. They hear about it as a reply to their latest comment -
+        but only a recent one (from the last day), and not over and over: everything that happens to them before a
+        reply goes out is folded into that one reply (a newer bit of the same kind replaces the older), and each
+        comment gets at most two replies. Their record and the post still get it all."""
         lv = self.city.living
         handle = str(handle).lstrip("@").lower()
         text = F.title(self.city, text)
         last = lv.get("last_comment", {}).get(handle)
         spammy = kind in ("your_move", "your_story") and lv.get("comment_counts", {}).get(handle, 0) > 15
-        if last and last["day"] >= self.city.day + 1 - 7 and not spammy and not intents.muted(self, handle):
-            lv.setdefault("outbox", []).append({"to": handle, "text": text[:600], "kind": kind, "time": self.now_str(),
-                                                "day": self.city.day + 1, "comment_id": last.get("id"),
-                                                "post": last.get("post"), "status": "pending",
-                                                **({"by": by} if by else {})})
+        fresh = bool(last) and (self.clock - last["clock"] <= self.REPLY_WINDOW if "clock" in last
+                                else last["day"] >= self.city.day + 1)
+        if fresh and not spammy and not intents.muted(self, handle):
+            out = lv.setdefault("outbox", [])
+            cid = last.get("id") or f"{handle}@{last.get('clock', last['day'])}"      # one thread per comment
+            waiting = next((x for x in reversed(out) if x["to"] == handle and x.get("thread") == cid
+                            and x.get("status") == "pending"), None)
+            counts = lv.setdefault("replies_to", {})
+            if waiting:                                     # hasn't gone out yet: fold this in
+                parts = waiting.setdefault("parts", [{"kind": waiting["kind"], "text": waiting["text"]}])
+                same = next((p for p in parts if p["kind"] == kind and kind != "your_move"), None)
+                if same:
+                    same["text"] = text[:600]               # the newer word on the same thing wins
+                else:
+                    parts.append({"kind": kind, "text": text[:600]})
+                waiting["text"] = "\n\n".join(p["text"] for p in parts)[:1200]
+                waiting["kinds"] = sorted({p["kind"] for p in parts})
+                waiting["time"] = self.now_str()
+                if by and kind == "your_move":
+                    waiting["by"] = by
+            elif counts.get(cid, 0) < self.REPLIES_PER_COMMENT:
+                counts[cid] = counts.get(cid, 0) + 1
+                if len(counts) > 3000:
+                    for k in list(counts)[:1000]:
+                        del counts[k]
+                out.append({"to": handle, "text": text[:600], "kind": kind if counts[cid] == 1 else f"later: {kind}",
+                            "time": self.now_str(), "day": self.city.day + 1, "comment_id": last.get("id"), "thread": cid,
+                            "post": last.get("post"), "status": "pending", **({"by": by} if by else {})})
+            else:
+                self.stats["replies_folded"] = self.stats.get("replies_folded", 0) + 1
             lv.setdefault("welcomed", {}).setdefault(handle, self.city.day + 1)
         if credit:
             rec = lv.setdefault("impact", {}).setdefault(handle, [])

@@ -40,6 +40,15 @@ and approve. Nothing is posted anywhere (in the Instagram version, this is where
 **What happened** is the running log: your comments, Aldric's moves, arrivals and the post closing.
 "Only mine" filters both to the handle you're commenting as.
 
+### Not spammy
+
+- Only comments from the last game day get replies. Someone who commented a week ago doesn't hear about
+  things now (it still goes on their record and can make the post).
+- One comment gets at most two replies: the answer, and one "later" with whatever else happened to them.
+- Anything that happens before a reply goes out is folded into it (Aldric talking to them, court, moving in);
+  a newer bit of the same kind replaces the older one, so four chats with the king become one.
+- One open court case per person: asking again updates it.
+
 ## Aldric's mind
 
 The third tab shows what the king is thinking and why:

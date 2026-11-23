@@ -21,6 +21,8 @@ def _world(n=30, seed=3):
 def _play(w, u, text):
     from city.living import intents
     w.city.living["acted_today"] = []
+    w.note_comment({"username": u, "id": f"c{u}-{len(w.city.living.get('outbox', []))}-{text[:12]}",
+                    "post": w.city.day + 1})                    # each play is a new comment
     before = len(w.city.living.get("outbox", []))
     intents.process(w, {u: text}, None, 0)
     return [x for x in w.city.living["outbox"][before:] if x["to"] == u]

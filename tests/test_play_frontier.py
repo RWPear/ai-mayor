@@ -65,3 +65,26 @@ def test_the_model_gets_room_to_finish_and_another_go_before_rules_step_in():
     assert asked[0] >= 1536 and asked[1] > asked[0]                       # plenty of room, then more
     calls = list(llm.CALLS)[-2:]
     assert calls[0].get("retried") and "asking again" in calls[0]["error"]
+
+
+def test_replies_fold_together_answer_only_recent_comments_and_stop_at_two(tmp_path):
+    p = _play(tmp_path)
+    w = p.world
+    w.note_comment({"username": "wes", "id": "c1", "post": 1})
+    w.reply("wes", "You chopped wood.", "your_move")
+    w.reply("wes", 'Aldric said "hello".', "king_talked")
+    w.reply("wes", 'Aldric said "hello again".', "king_talked")          # replaces the older chat
+    out = [x for x in w.city.living["outbox"] if x["to"] == "wes"]
+    assert len(out) == 1 and "hello again" in out[0]["text"] and '"hello".' not in out[0]["text"]
+    out[0]["status"] = "approved"                                       # it went out
+    w.reply("wes", "Your case was heard.", "court")
+    w.reply("wes", "You moved into a cottage.", "moved_in")             # folded into the follow-up
+    w.reply("wes", "x", "court")
+    out = [x for x in w.city.living["outbox"] if x["to"] == "wes"]
+    assert len(out) == 2 and out[1]["kind"].startswith("later") and "cottage" in out[1]["text"]
+    out[1]["status"] = "approved"
+    w.reply("wes", "Something else.", "court")                         # two replies to one comment: that's it
+    assert len([x for x in w.city.living["outbox"] if x["to"] == "wes"]) == 2
+    w.city.living["clock"] += 25 * 60                                   # a day later: the comment is stale
+    w.reply("wes", "Old news.", "court")
+    assert len([x for x in w.city.living["outbox"] if x["to"] == "wes"]) == 2

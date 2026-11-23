@@ -442,7 +442,7 @@ def test_send_the_king_a_gift_and_hear_when_he_uses_it():
     assert any(g["item"].startswith("lute") and g["from"] == "u4" for g in inv)
     tools.do(w, w.agent("king"), {"what": "try to play the lute in the garden"})
     out = [x for x in city.living["outbox"] if x["to"] == "u4"]
-    assert any(x["kind"] == "your_move" for x in out) and any(x["kind"] == "gift_used" for x in out)
+    assert any(x["kind"] == "your_move" for x in out) and any("gift_used" in x.get("kinds", [x["kind"]]) for x in out)
     assert out[-1]["comment_id"] == "c123"                     # replies go to their comment
     assert city.living["impact"]["u4"][-1]["text"].startswith("the king used their gift")
 
@@ -456,7 +456,7 @@ def test_the_king_takes_up_a_followers_idea():
     king = w.agent("king")
     king["location"] = "river"
     tools.start_work(w, king, {"name": "a stone bridge across the river", "size": "large"})
-    assert any(x["kind"] == "idea_used" and x["to"] == "u5" for x in city.living["outbox"])
+    assert any("idea_used" in x.get("kinds", [x["kind"]]) and x["to"] == "u5" for x in city.living["outbox"])
     r = w.post(RuleMayor(), [], [])
     from city import report
     assert any(t.startswith("@u5 the king took up their idea") for t in report.shoutouts(r))

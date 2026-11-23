@@ -234,7 +234,12 @@ def advance_works(world, minutes, boost=None, by=0.0):
 
 # ---------------------------------------------------------------- docket
 def add_case(city, kind, who, text):
+    """One open case per person per kind: asking again just updates it (and doesn't reset how long they've waited)."""
     d = city.living.setdefault("docket", [])
+    same = next((k for k in d if k["who"] == who and k["kind"] == kind), None)
+    if same:
+        same["text"] = text[:200]
+        return same
     case = {"id": f"k{city.living.get('case_no', 0) + 1}", "kind": kind, "who": who, "text": text[:200],
             "day": city.day + 1}
     city.living["case_no"] = city.living.get("case_no", 0) + 1

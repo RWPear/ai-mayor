@@ -260,8 +260,10 @@ class Play:
         self.n_moments = len(lv.get("moments", []))
         out = lv.get("outbox", [])
         with self.rlock:
-            for x in out[self.seen_out:]:
-                self.replies.append({**x, "id": f"r{len(self.replies)}", "status": "pending"})
+            for x in out[self.seen_out:]:      # the same dict: later news folded into it shows up here too
+                x["id"] = f"r{len(self.replies)}"
+                x.setdefault("status", "pending")
+                self.replies.append(x)
         self.seen_out = len(out)
         del self.log[:-1500]
         self.version += 1

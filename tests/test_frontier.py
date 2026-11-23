@@ -111,7 +111,7 @@ def test_arrival_day_beds_then_tents_then_moving_in():
     L["buildings"].append({"id": "by", "name": "a longhouse", "kind": "housing", "scale": "medium", "capacity": 8,
                            "place": "field", "quality": "good", "day": 2})
     assert F.rehouse(w) == 4 and F.tents(city) == 0
-    assert any(x["kind"] == "moved_in" for x in city.living["outbox"])
+    assert any("moved_in" in x.get("kinds", [x["kind"]]) for x in city.living["outbox"])
     assert int((c.walled[c.active()] >= 0).sum()) == 6
 
 
@@ -305,7 +305,7 @@ def test_a_settler_asks_to_start_a_garden_and_the_king_says_yes():
     assert p and p["lot"] and p["lot"]["shape"] == "plot"
     home = scene.home_pos(w, "u1")
     assert abs(p["lot"]["pos"][0] - home[0]) + abs(p["lot"]["pos"][1] - home[1]) < 30      # by their house
-    assert any(x["kind"] == "court" and "said yes" in x["text"] for x in city.living["outbox"] if x["to"] == "u1")
+    assert any("court" in x.get("kinds", [x["kind"]]) and "said yes" in x["text"] for x in city.living["outbox"] if x["to"] == "u1")
     for _ in range(20):                                      # evenings, then a keen day
         personal.daily(w)
         if not personal.of(w, "u1"):
