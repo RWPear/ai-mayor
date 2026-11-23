@@ -15,7 +15,9 @@ from pathlib import Path
 import yaml
 
 from ..config import CONTENT
-from . import tools, warcamp
+from ..roles import JOB_NAMES
+from . import life, tools, warcamp
+from . import town as T
 
 
 def persona(who):
@@ -28,42 +30,76 @@ def _ago(world, m):
     return f"{mins // 60}h ago" if mins >= 60 else "just now"
 
 
+def king_view(world, me):
+    """Where he is and what he sees there, how he feels, what's on his plate, the kingdom, the war."""
+    from ..sim import available_projects
+    city, c = world.city, world.city.citizens
+    t = city.living["town"]
+    loc = me.get("location", "throne_room")
+    lines = [f"It is {world.now_str()}. You are in {T.place_of(loc, t)}. You see: {T.describe(t, loc)}."]
+    court = life.court()
+    here = world.court_here()
+    if here:
+        lines.append("Here with you: " + ", ".join(court[k]["name"] for k in here) + ".")
+    people = world.people_here(loc)
+    if people:
+        lines.append("Subjects around you: " + ", ".join(
+            f"@{c.handles[i]} ({JOB_NAMES[int(c.job[i])]}, {'grumpy' if c.mood[i] < 0.45 else 'cheerful'})"
+            for i in people) + ".")
+    if loc == "tavern":
+        heard = [m["text"] for m in world.moments_since(world.clock - 24 * 60) if m["who"].startswith("@")][-3:]
+        lines.append("In disguise, you overhear: " + (" / ".join(heard) if heard else "grumbling about bread prices."))
+    imps = T.improvements_at(t, loc)
+    if imps:
+        lines.append("You could improve this place: " + "; ".join(
+            f"{i['id']} = {i['name']} ({T.cost(i['size'], city.population()):,.0f} gold)" for i in imps)
+            + ". Or start a project of your own idea here.")
+    works = t["works"]
+    if works:
+        lines.append("Being built: " + "; ".join(f"{w['name']} at {T.PLACES[w['place']]['name']} "
+                                                f"({w['progress']:.0%})" for w in works))
+    unbuilt = [T.ROOMS[r]["name"] for r, ok in t["rooms"].items() if not ok]
+    if unbuilt:
+        lines.append("Your castle is half ruined. Unbuilt rooms: " + ", ".join(unbuilt) +
+                     " (walk to one to start building it; each one gives you new powers).")
+    docket = city.living.get("docket", [])
+    if docket:
+        if loc == "throne_room":
+            lines.append("Waiting at court: " + " / ".join(f"[{k['id']}] {k['text']}" for k in docket[:3]))
+        else:
+            lines.append(f"{len(docket)} people are waiting for you at court (the throne room).")
+    life_ = me.get("life", {})
+    passions = ", ".join(f"{p['name']} (skill {min(10, 1 + life_.get('skills', {}).get(p['id'], 0) // 3)}/10 - "
+                         f"{p.get('note', '')})" for p in me.get("passions", []))
+    lines.append(life.feeling(me) + (f" Your passions: {passions}." if passions else ""))
+    lines.append(f"Kingdom: {city.population()} subjects, loyalty {city.approval():.0%}, treasury "
+                 f"{city.treasury:,.0f} gold, tax {city.tax_rate:.0%}. The Reckoning (the vote on your crown) is in "
+                 f"{city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
+    letters = [x for x in me.get("letters", []) if x["day"] >= city.day - 1]
+    if letters:
+        lines.append("Letters: " + " / ".join(f"from {x['from']}: \"{x['text']}\"" for x in letters[-2:]))
+    if me.get("intel"):
+        lines.append("Your spies' reports: " + json.dumps(me["intel"]))
+    comments = city.living.get("loud_comments", [])[-4:]
+    if comments:
+        lines.append("What subjects are saying: " + " / ".join(comments))
+    events = [f"{a['title']} ({a['days_left']} days left)" for a in city.events]
+    if events:
+        lines.append("Happening now: " + "; ".join(events))
+    projs = [f"{p['id']} ({p['cost_pc'] * city.population():,.0f} gold)" for p in available_projects(city)][:5]
+    if projs:
+        lines.append("Kingdom building projects (spend): " + ", ".join(projs))
+    return lines
+
+
 def perceive(world, who):
     """What this mind knows right now, as plain text."""
     city, me = world.city, world.agent(who)
-    loc = me.get("location", "camp")
-    lines = [f"It is {world.now_str()}. You are in {loc if loc.startswith('the ') else 'the ' + loc}."]
     if who == "king":
-        lines.append(f"Kingdom: {city.population()} subjects, loyalty {city.approval():.0%}, "
-                     f"treasury {city.treasury:,.0f} gold, tax {city.tax_rate:.0%}, "
-                     f"defense {city.quality['defense']:.2f}, food {city.quality['food']:.2f}. "
-                     f"Reckoning (the vote on your crown) in {city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
-        lines.append("Holds: " + "; ".join(f"{w['name']} (pop {w['pop']}, mood {(w['mood'] or 0.5):.2f}, lord "
-                                            f"{'@' + city.citizens.handles[w['councilor']] if w.get('councilor') is not None else 'none'})"
-                                            for w in city.ward_stats()))
-        if me.get("location", "").startswith("tavern in "):
-            hold = me["location"][len("tavern in "):]
-            heard = [m for m in world.moments_since(world.clock - 24 * 60) if m["who"].startswith("@")
-                     and hold in m.get("hold", "")][-4:]
-            lines.append(f"In disguise, you overhear the people of {hold}: " +
-                         (" / ".join(m["text"] for m in heard) if heard else "grumbling about bread prices."))
-        letters = [l for l in me.get("letters", []) if l["day"] >= city.day - 1]
-        if letters:
-            lines.append("Letters: " + " / ".join(f"from {l['from']}: \"{l['text']}\"" for l in letters[-2:]))
-        if me.get("intel"):
-            lines.append("Your spies' reports: " + json.dumps(me["intel"]))
-        comments = city.living.get("loud_comments", [])[-5:]
-        if comments:
-            lines.append("What subjects are saying in the comments: " + " / ".join(comments))
-        events = [f"{a['title']} ({a['days_left']} days left)" for a in city.events]
-        if events:
-            lines.append("Happening now: " + "; ".join(events))
-        from ..sim import available_projects
-        projs = [f"{p['id']} ({p['cost_pc'] * city.population():,.0f} gold)" for p in available_projects(city)][:6]
-        if projs:
-            lines.append("You could build: " + ", ".join(projs))
+        lines = king_view(world, me)
     else:
         c = warcamp.camp(city)
+        lines = [f"It is {world.now_str()}. You are in {c['name']}."]
         lines.append(f"Your camp: {c['warriors']} warriors, {c['food']:.0f} food (they eat "
                      f"{c['warriors'] * 0.5:.0f} a day), morale {c['morale']:.2f}. Raids won {c['raids_won']}, "
                      f"lost {c['raids_lost']}." + (" A raid is underway right now." if c.get("active_raid") else ""))
@@ -125,34 +161,84 @@ class RuleBrain:
                 return "raid", {"hold": self._weakest(city, c, holds), "warriors": str(int(c["warriors"] * 0.6))}
             if "sabotage" in available and rng.random() < 0.08:
                 return "sabotage", {"hold": rng.choice(holds)}
-            pick = rng.choices(["scout", "recruit", "hunt", "taunt", "feast"], [3, 4, 3, 1, 1])[0]
+            fresh = [h for h in holds if c["intel"].get(h, {}).get("day", -9) < city.day - 2]
+            if not fresh and rng.random() < 0.7:
+                fresh = []
+            food_rich = c["food"] > c["warriors"] * 6
+            pick = rng.choices(["scout", "recruit", "hunt", "taunt", "feast"],
+                               [3 if fresh else 0.2, 4, 0.5 if food_rich else 3, 1, 2 if food_rich else 1])[0]
+            if pick == "scout" and fresh:
+                return "scout", {"hold": rng.choice(fresh)}
             if pick == "taunt":
                 return "taunt", {"text": rng.choice(["Your walls are made of bread, little king.",
                                                      "I am coming for your chair.",
                                                      "Your soldiers fight like your poets."])}
             return pick, {"hold": rng.choice(holds)}
-        # the king
+        return self._king(world, me, available)
+
+    def _king(self, world, me, available):
+        """A day in the life: needs first, then whatever's in front of him, then being king."""
+        city, rng = world.city, world.city.rng
+        t = city.living["town"]
+        loc = me.get("location")
+        n = me.get("life", {}).get("needs", {})
+        low = min(n, key=n.get) if n else None
+        if low and n[low] < 0.3:
+            if low == "hunger":
+                return ("eat", {}) if loc in ("kitchens", "great_hall", "tavern") else ("walk", {"place": "kitchens"})
+            if low == "energy":
+                return ("rest", {}) if loc == "bedchamber" else ("walk", {"place": "bedchamber"})
+            if low == "company":
+                who = rng.choice(world.court_here() or ["steward"])
+                if who not in world.court_here() and loc != "throne_room":
+                    return "walk", {"place": "throne room"}
+                return "talk", {"person": who, "text": rng.choice(["Do they love me?", "Tell me something true.",
+                                                                    "What are people saying?"])}
+            if low == "fun":
+                pas = rng.choice(me.get("passions") or [{"id": "painting"}])["id"]
+                if pas == "roses" and loc != "royal_gardens":
+                    return "walk", {"place": "royal gardens"}
+                return "create", {"passion": pas, "title": rng.choice(["Self-Portrait No. %d" % rng.randint(2, 40),
+                                                                        "Ode to My Own Jawline", "The Red Rose",
+                                                                        "Sunset Over the Mud"]),
+                                  "description": "It is, he insists, a masterpiece."}
+            if low == "pride":
+                return "proclaim", {"text": rng.choice(["Emberfall has never been greater!",
+                                                        "Your king works tirelessly for you.",
+                                                        "Whoever mocks the king will scrub the stables."])}
         raid = any(a["id"] in ("warlord_raid", "warlord_horde") for a in city.events)
         open_holds = [w["name"] for w in city.wards if w.get("garrison_until", -1) < city.day]
-        if raid and "garrison" in available and open_holds and rng.random() < 0.3:
+        if raid and "garrison" in available and open_holds and rng.random() < 0.4:
             return "garrison", {"hold": rng.choice(open_holds)}
+        if loc == "throne_room" and city.living.get("docket") and rng.random() < 0.7:
+            k = city.living["docket"][0]
+            verdict = ("jail" if k["kind"] == "crime" and rng.random() < 0.6 else
+                       rng.choice(["grant", "deny", "reward"]) if k["kind"] != "crime" else "pardon")
+            return "hold_court", {"case": k["id"], "verdict": verdict, "words": "So it is decreed."}
+        here_work = [w for w in t["works"] if w["place"] == loc]
+        if here_work and rng.random() < 0.5:
+            return "work_on", {}
+        imps = T.improvements_at(t, loc)
+        if imps and rng.random() < 0.45:
+            imp = min(imps, key=lambda i: T.SIZES[i["size"]]["cost_pc"])
+            if city.treasury > T.cost(imp["size"], city.population()) * 1.5:
+                return "start_work", {"improvement": imp["id"]}
         r = rng.random()
-        if r < 0.12 and "spy" in available:
+        if r < 0.08 and "spy" in available:
             return "spy", {"target": "north"}
-        if r < 0.22:
-            lords = [city.citizens.handles[w["councilor"]] for w in city.wards if w.get("councilor") is not None]
-            if lords:
-                return "summon", {"handle": rng.choice(lords), "why": "to hear the news from their hold"}
-        if r < 0.3 and city.living.get("last_decree_day", -9) < city.day - 3:
+        if r < 0.15 and city.living.get("last_decree_day", -9) < city.day - 3:
             return "decree", rng.choice(RULE_DECREES)
-        if r < 0.42:
-            return "proclaim", {"text": rng.choice(["Emberfall will stand forever!", "Taxes are a privilege.",
-                                                    "Whoever mocks the king will scrub the stables."])}
-        if r < 0.5 and city.treasury > 20 * city.population():
-            return "spend", {"what": f"feast {rng.choice([w['name'] for w in city.wards])}"}
-        if r < 0.75:
-            return "go", {"place": rng.choice(tools.KING_PLACES + [f"tavern in {w['name']}" for w in city.wards])}
-        return "rest", {}
+        if r < 0.25:
+            people = world.people_here(loc, 1)
+            if people:
+                return "talk", {"person": "@" + city.citizens.handles[people[0]], "text": "How goes it, subject?"}
+        if r < 0.3 and "feast" in available and city.treasury > 25 * city.population():
+            return "feast", {}
+        if city.living.get("docket") and loc != "throne_room" and r < 0.45:
+            return "walk", {"place": "throne room"}
+        # wander: unbuilt rooms and places with things to fix pull him in
+        targets = [pid for pid in T.PLACES if T.improvements_at(t, pid)] or list(T.PLACES)
+        return "walk", {"place": T.PLACES[rng.choice(targets)]["name"]}
 
     @staticmethod
     def _weakest(city, c, holds):

@@ -8,3 +8,8 @@ personality: >
 ambition: "Build a kingdom the bards will sing about - with a very large statue of himself in the middle."
 flaw: "Pride: he hates admitting a decree was wrong, and he takes mockery personally."
 voice: "grand, royal and snarky - he roasts his subjects affectionately, and sometimes not so affectionately"
+# what he does when nobody is attacking him
+passions:
+  - {id: painting, name: "painting", note: "thinks he's a genius; he is not (yet)"}
+  - {id: lute, name: "playing the lute", note: "knows four chords, sings about himself"}
+  - {id: roses, name: "growing roses", note: "the one thing he's secretly good at"}

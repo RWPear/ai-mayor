@@ -1,0 +1,15 @@
+# The people around the king. Cheap characters: they talk when the king talks to them, bring him
+# news, and have small secrets of their own.
+steward:
+  name: "Steward Wendell"
+  place: throne_room
+  personality: "an oily, endlessly agreeable advisor who flatters the king and quietly skims the treasury"
+  secret: "pockets a little gold from the treasury most days"
+captain:
+  name: "Captain Bryn"
+  place: castle_yard
+  personality: "the blunt, tired captain of the guard; worried about Skarn, unimpressed by the king"
+jester:
+  name: "Pip the Jester"
+  place: follows        # turns up wherever the king is, now and then
+  personality: "a sharp-tongued jester who mocks the king to his face and is the only one who tells him the truth"

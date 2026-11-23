@@ -57,10 +57,11 @@ def cmd_test(args):
         d = city.day + 1
         pack = forced.get(d) or pack_for_today(city)
         followers = audience.followers_on(d)
-        if world:
-            world.live_until_post()          # a full day of the king and the warlord living their lives
         comments = audience.comments_on(d, pack, city)
-        r = world.post(mayor, followers, comments, pack) if world else run_day(city, mayor, followers, comments, pack)
+        if world:   # comments trickle in through the day while the king and the warlord live their lives
+            r = world.post(mayor, followers, comments, pack)
+        else:
+            r = run_day(city, mayor, followers, comments, pack)
         s = r["stats"]
         first = [report.headline(r)] if r.get("election") else []
         if world and r.get("chronicle"):
@@ -123,15 +124,21 @@ def cmd_live(args):
     inbox = Path(args.inbox)
     inbox.mkdir(parents=True, exist_ok=True)
     print(f"{city.name} is alive. {world.now_str()}. Next post closes at {world.now_str(world.next_post_clock())}.")
-    print(f"Drop each post's comments in {inbox}/comments-dayN.json (and a follower export in {inbox}/followers).")
+    print(f"Comments for each post go in {inbox}/comments-dayN.json - keep appending through the day; new ones "
+          f"play out within the hour. A follower export can go in {inbox}/followers.")
+    seen = 0
     while True:
+        d = city.day + 1
+        f = inbox / f"comments-day{d}.json"
+        comments = json.loads(f.read_text()) if f.exists() else []
+        if len(comments) > seen:          # new comments since the last tick: they play out within the hour
+            world.queue_comments(comments[seen:], spread=False)
+            seen = len(comments)
         if world.clock + W.TICK > world.next_post_clock():
-            d = city.day + 1
-            f = inbox / f"comments-day{d}.json"
-            comments = json.loads(f.read_text()) if f.exists() else []
             fol = inbox / "followers"
             followers = read_followers(fol) if fol.exists() else []
-            r = world.post(mayor, followers, comments, None)
+            r = world.post(mayor, followers, comments, None, already_queued=True)
+            seen = 0
             report.save(city, r, state / "days")
             print(f"\n=== POST {d} closed: {report.headline(r)}  ->  next words: "
                   f"{', '.join(r['next_pack']['commands'])}\n")

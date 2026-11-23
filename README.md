@@ -26,14 +26,18 @@ Reckoning: the people KNEEL or REVOLT.
 
 ## The living world (new)
 
-Between posts the kingdom keeps living: **King Aldric** (protagonist) and **Skarn the Red** (the barbarian
-warlord, antagonist) act on their own every hour or so with a small set of tools that unlock over time.
-The warlord decides when to raid. The king invents his own decrees. Comments in people's own words give
-their character a turn. Each post is a 3-moment summary of the last 24 hours. Full guide: `docs/LIVING.md`.
+Between posts the kingdom keeps living. **King Aldric** (protagonist) has needs and passions, walks the
+town, notices things and starts his own projects, builds the rooms of his half-ruined castle (which unlocks
+his powers), talks with his court and judges the docket. **Skarn the Red** (the barbarian warlord,
+antagonist) runs his war camp and decides when to raid. Comments in people's own words give their
+character a turn - including stealing from, fighting, or befriending other followers (nobody dies).
+One GPU budget per hour: the crowd gets first claim, the king gets the rest - so a quiet day is about the
+king's life and a viral day is about the crowd. Each post is a 3-moment summary. Guide: `docs/LIVING.md`.
 
 ```bash
 ./kingdom test --scenario scenarios/living.yaml                 # a living month in seconds (rule-based minds)
 ./kingdom test --scenario scenarios/living.yaml --king llm --days 7 --reports
+./kingdom test --scenario scenarios/living_viral.yaml --reports  # the account blows up in week 2
 ./kingdom live --state data/live --plan seeds --king llm         # real time
 ```
 
@@ -55,8 +59,10 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
   report.py      daily report, episode script for the video, STATUS cards
   sources/       fake audience (test) and Instagram follower export reader (live)
   llm.py         the shared Ollama client
-  living/        the living world: world.py (clock + loop), agents.py (the minds), tools.py,
-                 warcamp.py (the warlord's economy), intents.py (own-words comments), chronicle.py
+  living/        the living world: world.py (clock, loop, GPU budget), agents.py (the minds), tools.py,
+                 town.py (places, improvements, castle rooms), life.py (needs, passions, works, court,
+                 docket), warcamp.py (the warlord's economy), intents.py (own-words comments, fights,
+                 thefts, gifts), chronicle.py
 content/         events, projects, milestones, ruler persona, balance overrides (all YAML)
 seasons/         season plans: season1.yaml (written), season2.yaml (outline)
 seeds/           season plans for the living world (only the bones - the minds do the rest)

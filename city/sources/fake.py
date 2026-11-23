@@ -32,6 +32,13 @@ FREE_TEXT = [
     "I paint WALLS NOT STATUES on the castle gate at night",
     "I train the village kids to throw rocks at barbarians",
     "I ask the king for a job as his royal food taster",
+    "I rob {target} while they're asleep",
+    "I challenge {target} to a duel at noon",
+    "I punch {target} for cheating me at dice",
+    "I give {target} 20 gold to fix their roof",
+    "I buy {target} a drink and become friends",
+    "I loudly mock {target}'s terrible singing in the tavern",
+    "I try to kill {target} for stealing my goat",
 ]
 
 ARCHETYPES = {
@@ -107,7 +114,10 @@ class FakeAudience:
             ts += 1
             word = None
             if free_share and self.rng.random() < free_share:   # living world: some people write their own move
-                out.append({"username": h, "text": self.rng.choice(FREE_TEXT), "timestamp": ts})
+                text = self.rng.choice(FREE_TEXT)
+                if "{target}" in text:
+                    text = text.replace("{target}", "@" + self.rng.choice(self.followers or [h]))
+                out.append({"username": h, "text": text, "timestamp": ts})
                 continue
             if forced and self.rng.random() < sum(forced.values()):
                 word = self.rng.choices(list(forced), list(forced.values()))[0]

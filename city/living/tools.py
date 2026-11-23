@@ -1,10 +1,13 @@
-"""What the king and the warlord can do between posts.
+"""What the king and the warlord can do.
 
-Each tool: who can use it, a one-line description (the minds read these), its
-arguments, an optional unlock condition, and what it does. Tools start small
-and open up through the world: the king gets spies when watchtowers go up, the
-warlord gets the full horde when his camp is strong enough. Each unlock is
-announced as a moment - a story beat of its own.
+Each tool: a one-line description (the minds read these), its arguments, an
+optional unlock condition, and what it does. The warlord's tools open up as his
+camp grows; the king's open up as he builds the rooms of his castle (a war room,
+a spymaster's tower, a great hall, a dungeon) - and each unlock is a story beat.
+
+The king's everyday life is tools too: walking the town, talking to people,
+painting, starting his own projects where he notices something wrong, pitching
+in on them, holding court, eating, sleeping.
 
 Every effect here is small and bounded. The big swings still come from events
 the crowd fights over in the comments.
@@ -15,11 +18,10 @@ import numpy as np
 
 from .. import effects, storyteller
 from ..roles import JOB_NAMES
-from . import warcamp
+from . import life, warcamp
+from . import town as T
 
-KING_PLACES = ["throne room", "war room", "treasury", "royal gardens", "city walls", "chapel"]
-
-# what an invented decree's options can do: small, fixed packages (the king picks words and a flavour)
+# what an invented decree's (or project's) options can do: small, fixed packages
 FLAVORS = {
     "walls":     {"service.defense": 0.07},
     "food":      {"service.food": 0.07},
@@ -34,6 +36,7 @@ FLAVORS = {
     "harsh":     {"service.defense": 0.04, "mood": -0.03},
     "nothing":   {},
 }
+BUILD_FLAVORS = [f for f in FLAVORS if f not in ("tax_cut", "tax_raise")]
 
 
 def _hold_names(world):
@@ -45,20 +48,180 @@ def _word(x, default):
     return w or default
 
 
-# ---------------------------------------------------------------------------- king
-def go(world, me, args):
-    place = str(args.get("place") or "").strip().lower()
-    holds = {n.lower(): n for n in _hold_names(world)}
-    tavern = next((holds[h] for h in holds if h in place), None)
-    if tavern:
-        me["location"] = f"tavern in {tavern}"
-        return world.moment("king", f"The king slipped into the tavern in {tavern} in a cheap disguise.", 1,
-                            public=False, place=me["location"])
-    place = next((p for p in KING_PLACES if p in place or place in p), None) if place else None
-    if not place or place == me.get("location"):
+def _town(world):
+    return world.city.living["town"]
+
+
+# ---------------------------------------------------------------------------- the king's life
+def walk(world, me, args):
+    pid = T.match_place(args.get("place"))
+    if not pid or pid == me.get("location"):
         return None
-    me["location"] = place
-    return world.moment("king", f"The king went to the {place}.", 0, public=False, place=place)
+    me["location"] = pid
+    me["next_act"] = world.clock + T.PLACES[pid]["walk"]        # walking takes a while
+    name = T.place_of(pid, _town(world))
+    disguise = pid == "tavern"
+    return world.moment("king", f"The king {'slipped into' if disguise else 'walked to'} {name}"
+                        + (" in a cheap disguise." if disguise else "."), 0, public=False, place=pid)
+
+
+def talk(world, me, args):
+    """Talk to a member of the court (steward, captain, jester) or to any subject (@handle)."""
+    who = str(args.get("person") or "").strip()
+    said = str(args.get("text") or "").strip()[:200]
+    court = life.court()
+    key = next((k for k, v in court.items() if k in who.lower() or v["name"].lower().split()[-1] in who.lower()), None)
+    life.satisfy(me, "company", 0.35)
+    if key:
+        reply = world.voice_npc(key, f'The king says to you: "{said}"' if said else "The king wants to chat.")
+        return world.moment("king", f'The king to {court[key]["name"]}: "{said or "Well?"}" - "{reply}"',
+                            2 if key == "jester" else 1, public=True, place=me.get("location"))
+    c = world.city.citizens
+    h = who.lstrip("@").lower()
+    i = c.index.get(h)
+    if i is None or c.status[i] != 0:
+        return None
+    reply = world.voice_subject(int(i), f'The king, at {T.PLACES[me["location"]]["name"]}, says to you: "{said}"'
+                                if said else "The king stops to talk to you.")
+    c.loyalty[i] = float(np.clip(c.loyalty[i] + 0.04, 0, 1))
+    c.log(int(i), world.city.day + 1, "talked with the king himself")
+    return world.moment("king", f'The king stopped to talk with @{c.handles[i]}: "{said or "Hello there."}" - '
+                                f'"{reply}"', 2, public=True, place=me.get("location"), handles=[c.handles[i]])
+
+
+def create(world, me, args):
+    passions = {p["id"]: p for p in me.get("passions", [])}
+    pid = str(args.get("passion") or "").lower()
+    pid = next((k for k in passions if k in pid or pid in k), None) or (next(iter(passions)) if passions else None)
+    if not pid:
+        return None
+    if pid == "roses" and me.get("location") != "royal_gardens":
+        return None
+    title = str(args.get("title") or f"Untitled {passions[pid]['name']}").strip()
+    desc = str(args.get("description") or "").strip()
+    item, level, leveled = life.create(world, me, pid, title, desc)
+    verb = {"painting": "painted", "lute": "played", "roses": "grew"}.get(pid, "made")
+    return world.moment("king", f'The king {verb} "{item["title"]}"' + (f": {desc[:140]}" if desc else "")
+                        + (f" (he's getting better - skill {level}/10)" if leveled else f" (skill {level}/10)"),
+                        2 if leveled else 1, public=True, place=me.get("location"))
+
+
+def start_work(world, me, args):
+    """Start a project where the king is standing: one of the improvements he sees, or his own idea."""
+    t = _town(world)
+    pid = me.get("location")
+    options = T.improvements_at(t, pid)
+    which = str(args.get("improvement") or "").lower()
+    imp = next((o for o in options if o["id"] == which or o["name"].lower() == which), None)
+    if not imp and args.get("name"):        # the king's own idea, bounded like an invented decree
+        size = args.get("size") if args.get("size") in T.SIZES else "small"
+        flavor = args.get("effect") if args.get("effect") in BUILD_FLAVORS else "nothing"
+        iid = f"own_{len(t['invented']) + 1}"
+        imp = {"id": iid, "name": str(args["name"])[:80], "place": pid, "size": size, "flavor": flavor,
+               "feature": f"new_{iid}", "after": str(args["name"])[:80], "invented": True}
+        t["invented"][iid] = imp
+        world.notify(f"The king came up with his own project at {T.PLACES[pid]['name']}: {imp['name']}")
+    if not imp:
+        return None
+    work, cost = life.start_work(world, imp, pid)
+    if not work:
+        return world.moment("king", f"The king wanted {imp['name']}, but the treasury can't pay "
+                                    f"{cost:,.0f} gold. He sulked.", 1, public=False, place=pid)
+    life.satisfy(me, "pride", 0.2)
+    return world.moment("king", f"The king ordered {imp['name']} ({cost:,.0f} gold, about {work['days']} days of "
+                                f"work).", 2, public=True, place=pid)
+
+
+def work_on(world, me, args):
+    t = _town(world)
+    here = [w for w in t["works"] if w["place"] == me.get("location")] or t["works"][:1]
+    if not here:
+        return None
+    w = here[0]
+    if w["place"] != me.get("location"):
+        return None
+    finished = life.advance_works(world, 0, boost=w["id"], by=0.12)
+    world.announce_works(finished)
+    life.satisfy(me, "fun", 0.2)
+    life.satisfy(me, "pride", 0.1)
+    life.satisfy(me, "energy", -0.15)
+    return world.moment("king", f"The king rolled up his sleeves and worked on {w['name']} himself "
+                                f"({min(100, w['progress'] * 100):.0f}% done).", 1, public=True, place=w["place"])
+
+
+def hold_court(world, me, args):
+    """At the throne room: rule on a case from the docket (petitioners, criminals, visitors)."""
+    from .intents import set_condition
+    if me.get("location") != "throne_room":
+        return None
+    docket = world.city.living.get("docket", [])
+    case = next((k for k in docket if k["id"] == args.get("case")), docket[0] if docket else None)
+    if not case:
+        return None
+    docket.remove(case)
+    verdict = str(args.get("verdict") or "deny").lower()
+    words = str(args.get("words") or "").strip()[:200]
+    c, city = world.city.citizens, world.city
+    i = c.index.get(case["who"])
+    jail = "the dungeon" if _town(world)["rooms"].get("dungeon") else "the stocks"
+    effect = ""
+    if i is not None:
+        if verdict in ("grant", "reward", "pardon"):
+            c.loyalty[i] = float(np.clip(c.loyalty[i] + 0.1, 0, 1))
+            c.mood[i] = float(np.clip(c.mood[i] + 0.08, 0, 1))
+            if verdict == "reward":
+                gold = 20 + 30 * city.rng.random()
+                city.treasury -= gold
+                c.wealth[i] += gold
+                effect = f" and {gold:.0f} gold"
+            if verdict == "pardon":
+                city.living.get("conditions", {}).pop(case["who"], None)
+        elif verdict in ("jail", "fine", "deny"):
+            c.loyalty[i] = float(np.clip(c.loyalty[i] - 0.06, 0, 1))
+            if verdict == "jail":
+                set_condition(city, case["who"], "jailed", 2 if jail == "the dungeon" else 1, "sentenced by the king")
+                effect = f" - {2 if jail == 'the dungeon' else 1} days in {jail}"
+            if verdict == "fine":
+                fine = min(float(c.wealth[i]) * 0.2, 80.0)
+                c.wealth[i] -= fine
+                city.treasury += fine
+                effect = f" - fined {fine:.0f} gold"
+        c.log(i, city.day + 1, f"was judged by the king: {verdict}")
+    life.satisfy(me, "pride", 0.15)
+    return world.moment("king", f"At court: {case['text']}. The king's verdict: {verdict.upper()}{effect}."
+                        + (f' "{words}"' if words else ""), 2, public=True, place="throne_room",
+                        handles=[case["who"]])
+
+
+def eat(world, me, args):
+    where = me.get("location")
+    good = where in ("kitchens", "great_hall", "tavern")
+    life.satisfy(me, "hunger", 0.7 if good else 0.4)
+    if where == "tavern":
+        life.satisfy(me, "company", 0.2)
+    return None if not good else world.moment("king", f"The king ate at {T.PLACES[where]['name']}.", 0, public=False)
+
+
+def rest(world, me, args):
+    life.satisfy(me, "energy", 0.35 if me.get("location") == "bedchamber" else 0.15)
+    return None
+
+
+def royal_feast(world, me, args):
+    """Unlocked by the great hall: a feast for the capital (or a hold)."""
+    city = world.city
+    hold = args.get("hold")
+    wi = world.ward_index(hold) if hold else None
+    cost = 1.5 * max(1, city.population())
+    if city.treasury < cost:
+        return None
+    city.treasury -= cost
+    effects.apply(city, {"mood.hold" if wi is not None else "mood": 0.05, "loyalty": 0.01}, wi)
+    life.satisfy(me, "company", 0.5)
+    life.satisfy(me, "hunger", 0.8)
+    life.satisfy(me, "pride", 0.3)
+    where = city.wards[wi]["name"] if wi is not None else "the great hall"
+    return world.moment("king", f"The king threw a feast in {where} ({cost:,.0f} gold).", 2, public=True)
 
 
 def proclaim(world, me, args):
@@ -79,7 +242,7 @@ def summon(world, me, args):
     if i is None or c.status[i] != 0:
         return None
     why = str(args.get("why") or "").strip()[:160]
-    reply = world.voice_subject(int(i), f"The king summoned you to the {me.get('location', 'throne room')}"
+    reply = world.voice_subject(int(i), f"The king summoned you to {T.PLACES.get(me.get('location'), T.PLACES['throne_room'])['name']}"
                                         + (f" because: {why}" if why else "") + ". What do you tell him?")
     good = float(c.mood[i]) > 0.5
     c.loyalty[i] = float(np.clip(c.loyalty[i] + (0.06 if good else -0.03), 0, 1))
@@ -127,15 +290,6 @@ def spend(world, me, args):
     city = world.city
     what = str(args.get("what") or "").lower()
     pop = max(1, city.population())
-    if what.startswith("feast"):
-        wi = world.ward_index(what.replace("feast", "")) if what.replace("feast", "").strip() else None
-        cost = 1.5 * pop
-        if city.treasury < cost:
-            return None
-        city.treasury -= cost
-        effects.apply(city, {"mood.hold" if wi is not None else "mood": 0.05}, wi)
-        where = city.wards[wi]["name"] if wi is not None else "the capital"
-        return world.moment("king", f"The king threw a feast in {where} ({cost:,.0f} gold).", 1, public=True)
     from ..sim import available_projects
     proj = next((p for p in available_projects(city) if p["id"] == what or p["name"].lower() == what), None)
     if not proj or city.treasury < proj["cost_pc"] * pop:
@@ -144,11 +298,6 @@ def spend(world, me, args):
     lines, _ = apply_decision(city, {"project": proj["id"]})
     return world.moment("king", lines[0] if lines else f"The king ordered {proj['name']}.", 1, public=True) \
         if lines else None
-
-
-def rest(world, me, args):
-    me["energy"] = min(1.0, me.get("energy", 1) + 0.3)
-    return None
 
 
 def spy(world, me, args):
@@ -183,6 +332,8 @@ def garrison(world, me, args):
     effects.apply(city, {"mood.hold": 0.03}, wi)
     return world.moment("king", f"The king stationed soldiers in {city.wards[wi]['name']} for a week.", 1, public=True)
 
+
+# ---------------------------------------------------------------------------- warlord
 
 # ---------------------------------------------------------------------------- warlord
 def scout(world, me, args):
@@ -256,6 +407,8 @@ def recruit(world, me, args):
 def hunt(world, me, args):
     c = warcamp.camp(world.city)
     got = int(15 + c["warriors"] * 0.25 * world.city.rng.uniform(0.5, 1.4))
+    if c["food"] > c["warriors"] * 6:      # the forest is hunted out near the camp
+        got //= 3
     c["food"] += got
     return world.moment("warlord", f"The hunters of {c['name']} dragged back {got} sacks of meat.", 0, public=False)
 
@@ -289,27 +442,40 @@ def sabotage(world, me, args):
     return world.moment("warlord", f"{me['name']}'s men set the fire in {city.wards[wi]['name']}.", 1, public=False)
 
 
-# ---------------------------------------------------------------------------- the tool table
-ARG = {"place": "where to go: one of the castle rooms, or 'tavern in <hold>' to go in disguise",
-       "text": "the words, in your voice", "handle": "a subject's @handle", "why": "why (a few words)",
+ARG = {"place": "where to walk: " + ", ".join(p["name"] for p in T.PLACES.values()),
+       "person": "'steward', 'captain', 'jester', or a subject's @handle", "text": "the words, in your voice",
+       "passion": "which of your passions", "title": "a title for what you make",
+       "description": "what it is like, honestly, in one or two sentences",
+       "improvement": "an improvement id you can see here", "name": "your own idea for a project here (optional)",
+       "size": "small, medium or large", "effect": "what your own project is for: " + ", ".join(BUILD_FLAVORS),
+       "case": "a case id from the docket", "verdict": "grant, deny, reward, pardon, fine or jail",
+       "words": "what you say", "handle": "a subject's @handle", "why": "why (a few words)",
        "question": "the decree question", "a_word": "one-word choice A", "a_text": "what happens if A wins",
        "a_flavor": "what A does: " + ", ".join(FLAVORS), "b_word": "one-word choice B",
        "b_text": "what happens if B wins", "b_flavor": "what B does", "back": "the word you want to win (optional)",
-       "what": "a project id from the brief, or 'feast <hold>'", "target": "'north' (the war camp) or a hold",
+       "what": "a building project id from the list", "target": "'north' (the war camp) or a hold",
        "hold": "a hold's name", "warriors": "how many warriors to send"}
 
 TOOLS = {
     "king": {
-        "go":        (go, "walk somewhere in the castle, or visit a hold's tavern in disguise to hear what people say", ["place"], None),
-        "proclaim":  (proclaim, "make a public proclamation to the kingdom", ["text"], None),
-        "summon":    (summon, "summon a subject (a real person) to talk to them", ["handle", "why"], None),
-        "decree":    (decree, "invent a new decree for the people to vote on tomorrow (one a day)",
-                      ["question", "a_word", "a_text", "a_flavor", "b_word", "b_text", "b_flavor", "back"], None),
-        "spend":     (spend, "pay for a building project or a feast", ["what"], None),
-        "rest":      (rest, "rest, sulk, or sleep", [], None),
-        "spy":       (spy, "send spies north to the war camp, or into a hold", ["target"], "built('watchtower')"),
-        "garrison":  (garrison, "station soldiers in a hold for a week (raids there get much harder)", ["hold"],
-                      "happened('warlord_raid')"),
+        "walk":       (walk, "walk somewhere in the castle or town (the tavern means going in disguise)", ["place"], None),
+        "talk":       (talk, "talk to someone here: a member of your court or a subject (@handle)", ["person", "text"], None),
+        "create":     (create, "spend time on one of your passions and make something", ["passion", "title", "description"], None),
+        "start_work": (start_work, "start a project right where you are (an improvement you see, or your own idea)",
+                       ["improvement", "name", "size", "effect"], None),
+        "work_on":    (work_on, "roll up your sleeves and help build the project where you are", [], None),
+        "hold_court": (hold_court, "in the throne room: rule on the next case on the docket", ["case", "verdict", "words"], None),
+        "eat":        (eat, "eat something", [], None),
+        "rest":       (rest, "rest, sulk, or sleep", [], None),
+        "proclaim":   (proclaim, "make a public proclamation to the kingdom", ["text"], None),
+        "summon":     (summon, "summon a subject (a real person) to the castle", ["handle", "why"], None),
+        "decree":     (decree, "invent a new decree for the people to vote on tomorrow (one a day)",
+                       ["question", "a_word", "a_text", "a_flavor", "b_word", "b_text", "b_flavor", "back"], None),
+        "spend":      (spend, "pay for one of the kingdom's building projects", ["what"], None),
+        "spy":        (spy, "send spies north to the war camp, or into a hold", ["target"], "room('spymaster_tower')"),
+        "garrison":   (garrison, "station soldiers in a hold for a week (raids there get much harder)", ["hold"],
+                       "room('war_room')"),
+        "feast":      (royal_feast, "throw a feast for the capital or a hold", ["hold"], "room('great_hall')"),
     },
     "warlord": {
         "scout":     (scout, "send scouts to study a hold's defenses", ["hold"], None),

@@ -77,6 +77,8 @@ def stats_ns(city):
     ns.update({f"faction_{f}": (fm.get(f) if fm.get(f) is not None else 0.5) for f in FACTIONS})
     camp = (getattr(city, "living", None) or {}).get("warcamp") or {}
     ns.update({f"camp_{k}": camp.get(k, 0) for k in ("warriors", "food", "morale", "raids_won", "raids_lost")})
+    rooms = ((getattr(city, "living", None) or {}).get("town") or {}).get("rooms", {})
+    ns["room"] = lambda r: bool(rooms.get(r))
     return ns
 
 

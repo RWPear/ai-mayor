@@ -21,7 +21,7 @@ PLACEHOLDERS = {"ward", "councilor", "resident", "hold", "lord", "warlord"}
 STAT_NAMES = {"pop", "approval", "treasury", "tax", "economy", "day", "season", "season_day", "unrest", "has",
               "happened", "result", "active", "built", "min", "max", "and", "or", "not", "None", "True", "False",
               "helped", "timed_out", "mayor"} | {f"q_{s}" for s in SERVICES} | {f"faction_{f}" for f in FACTIONS} \
-    | {f"camp_{k}" for k in ("warriors", "food", "morale", "raids_won", "raids_lost")}
+    | {f"camp_{k}" for k in ("warriors", "food", "morale", "raids_won", "raids_lost")} | {"room"}
 
 
 def _yaml(path, problems):

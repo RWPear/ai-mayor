@@ -8,9 +8,10 @@ Comment a word to act, or tell your character what to do in your own words. Once
 ```
 19:00  yesterday's post closes ─┐
         │  every 30 minutes the world ticks:
-        │   - King Aldric (awake 7:00-23:00) acts about once an hour
+        │   - King Aldric (awake 7:00-23:00) lives his life and rules - every 30 min to 2 hours, by budget
         │   - Skarn the Red (sleeps 10:00-16:00 - barbarians like the dark) acts about every 90 minutes
-        │   - the war camp eats at midnight; raids that the crowd has fought resolve and the camp feels it
+        │   - comments arrive; every hour, people's own-words moves are played out
+        │   - works get built, the steward skims, visitors turn up at the gate, the camp eats at midnight
         │   - new tools unlock when the world allows it (that's a moment too)
 19:00  today's post closes ─────┘
         comments are read: keywords, STATUS, BECOME <JOB>, and people's own words
@@ -21,33 +22,80 @@ Comment a word to act, or tell your character what to do in your own words. Once
 The post stays small. Everything that happened is in `dayNNN.log.txt` (for you), and each subject's own
 story is on their STATUS card.
 
-## The two minds
+## One GPU budget, two kinds of day
 
-| | King Aldric (protagonist) | Skarn the Red (antagonist) |
-|---|---|---|
-| Lives in | the castle (and taverns, in disguise) | the Frostfang camp in the north |
-| Wants | to be adored, to keep the crown at the Reckoning | to sit on Aldric's throne |
-| Starts with | go, proclaim, summon (a real @handle), decree (invents a vote), spend, rest | scout, raid (from day 3), recruit, hunt, taunt, feast |
-| Unlocks | **spy** when watchtowers are built · **garrison** after the first raid | **march** (the whole horde) once the camp is big and confident · **sabotage** after two winning raids |
-| Persona file | `content/ruler.yaml` | `content/warlord.yaml` |
+Every hour has a budget of model calls (`gpu_calls_per_hour`, default 120 - raise it freely, the 3060
+can do several hundred). **The crowd gets first claim**: people's own-words moves (2 calls per 8 people).
+The minds get what's left, and their pace follows:
 
-Each time a mind acts it sees a short picture of its world (where it is, what it knows, what just
-happened, its goals, its recent actions) and picks one tool. It can also give itself a new goal. That's
-all - the story comes from two characters with opposite wants and a crowd that keeps changing things.
+| The hour is... | Budget left for the minds | The king acts every | What the post is about |
+|---|---|---|---|
+| **quiet** | more than half | ~30 min | the king's life, his projects, the war |
+| **busy** | 20-50% | ~1 hour | a mix |
+| **viral** | under 20% | ~2 hours (big decisions only) | the crowd: thefts, duels, feuds, the king's court cases |
 
-The warlord's camp is a small economy: warriors eat food, food comes from hunting and raiding, morale
-rises with victories and falls with defeats and hunger, and the camp can only hold as many warriors as
-its reputation allows. A raid's difficulty depends on how many warriors he sends, the kingdom's defenses,
-a garrison, and luck. Nobody schedules the war.
+Whenever the budget runs out, the rule-based versions fill in, so nothing ever stops.
 
-## Subjects in their own words
+## The king's life (the quiet path)
 
-A comment that isn't one of the post's words - *"I sneak into the castle kitchens to steal bread for my
-kids"* - is that subject's move for the day. Their character gets a turn: the model turns it into the
-closest real action (work, train, protest, help or hurt the current crisis...) and writes one sentence of
-what happened. The effect is the same bounded effect as the matching keyword; the sentence goes on their
-STATUS card, and the boldest ones make the post. Cost scales with commenters, 8 per model call, capped
-by `intents_cap` (default 400/day; anyone past the cap gets the rule-based version).
+- **Needs**: hunger, energy, company, fun, pride. They drift every 30 minutes and push him around
+  (he goes to eat, sleeps 23:00-7:00, seeks company, gets bored, needs to be admired).
+- **Passions** (`content/ruler.yaml`): painting, the lute, roses. Practising makes creations with a
+  skill level that grows (1/10 -> 10/10); they're saved in `living.agents.king.life.creations`.
+- **The town** (`city/living/town.py`): the throne room, bedchamber, kitchens, castle yard, gardens, market
+  square, tavern (he goes in disguise and overhears people), King's Street, smithy, chapel, river, fields,
+  walls. Every place has features in a state (*"a dirt road churned into mud"*), the kinds of subjects you'd
+  meet there at that hour (real followers), and improvements he could make.
+- **His own projects**: standing somewhere, he can start one of the improvements he sees - or invent his own
+  (a size and an effect from a fixed list, so it stays bounded). He pays, workers build it over days, he
+  can roll up his sleeves and help, and when it's done the place really changes.
+- **His castle starts half-ruined.** Building rooms unlocks his tools:
+
+| Room | Unlocks |
+|---|---|
+| war room | `garrison` - station soldiers in a hold (raids there get much harder) |
+| spymaster's tower | `spy` - on the war camp or a hold |
+| great hall | `feast` |
+| dungeon | criminals go to the dungeon instead of the stocks (longer sentences) |
+
+- **The court** (`content/court.yaml`): Steward Wendell (flatters him, quietly skims the treasury - the
+  audience sees it, the king doesn't), Captain Bryn (blunt, worried about Skarn), Pip the Jester (mocks him
+  to his face). He talks to them when he's lonely.
+- **The docket**: petitions from real comments ("I beg the king for a job"), criminals the guards caught,
+  and visitors who turn up at the gate. In the throne room he rules on them: grant, deny, reward, pardon,
+  fine or jail.
+
+## Subjects acting on each other (the viral path)
+
+Own-words comments can name another subject:
+
+| Comment | What happens |
+|---|---|
+| "I rob @someone" | a roll vs the kingdom's guards (and whether the target is a soldier): gold changes hands, or the thief is caught |
+| "I challenge @someone to a duel" / "I punch..." / "I try to kill..." | both characters' strength (army, battles, rank, mood) + luck. The loser is **wounded** for a day or two. **Nobody dies.** The attacker may be **arrested** |
+| "I give @someone 20 gold" | gold moves, both get happier |
+| "I buy @someone a drink" | they become friends |
+| "I mock @someone" | their mood drops, a grudge starts |
+| "I beg the king for..." | goes on the king's docket |
+
+The model reads what people meant, **the game rolls the result**, then the model narrates it - so it can't
+be talked into a win. Arrested people go to the dungeon (or the stocks) and onto the docket; the jailed and
+wounded sit out. A target can only be hit by a couple of hostile acts a day (no dogpiles). Two people who
+keep clashing become a **feud** - news across the kingdom.
+
+## The warlord
+
+| | Skarn the Red |
+|---|---|
+| Lives in | the Frostfang camp in the north (sleeps 10:00-16:00 - barbarians like the dark) |
+| Wants | to sit on Aldric's throne |
+| Starts with | scout, raid (from day 3), recruit, hunt, taunt, feast |
+| Unlocks | **march** (the whole horde) once the camp is big and confident · **sabotage** after two winning raids |
+
+His camp is a small economy: warriors eat food, food comes from hunting and raiding, morale rises with
+victories and falls with defeats and hunger, and the camp only holds as many warriors as its reputation
+allows. A raid's difficulty depends on how many warriors he sends, the kingdom's defenses, garrisons, and
+luck. Nobody schedules the war.
 
 ## Invented decrees
 
@@ -68,6 +116,7 @@ to get it on your phone).
 # test: a month in seconds with rule-based minds, or for real with the model
 ./kingdom test --scenario scenarios/living.yaml
 ./kingdom test --scenario scenarios/living.yaml --king llm --days 7 --reports
+./kingdom test --scenario scenarios/living_viral.yaml --reports      # the account blows up in week 2
 
 # live, in real time (comments for each post go in inbox/comments-dayN.json)
 ./kingdom live --state data/live --plan seeds --king llm

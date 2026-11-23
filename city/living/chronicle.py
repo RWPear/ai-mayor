@@ -8,7 +8,7 @@ Everything else stays in the full log and on people's STATUS cards.
 
 
 def pick(moments, top=3):
-    pool = [m for m in moments if m["drama"] >= 1 and (m["who"] != "warlord" or m["public"])]
+    pool = [m for m in moments if m["drama"] >= 1 and (m["public"] or m["who"] == "king")]
     pool.sort(key=lambda m: (-m["drama"], -m["clock"]))
     chosen, per, kinds = [], {}, set()
     for m in pool:
@@ -23,7 +23,7 @@ def pick(moments, top=3):
         if len(chosen) == top:
             break
     chosen.sort(key=lambda m: m["clock"])
-    secret = [m for m in moments if m["who"] == "warlord" and not m["public"]]
-    secret.sort(key=lambda m: (-m["drama"], -m["clock"]))
+    secret = [m for m in moments if m["who"] in ("warlord", "steward") and not m["public"]]
+    secret.sort(key=lambda m: (m["who"] != "warlord", -m["drama"], -m["clock"]))
     return {"top": [{"time": m["time"], "who": m["who"], "text": m["text"], "drama": m["drama"]} for m in chosen],
             "meanwhile": secret[0]["text"] if secret else None}

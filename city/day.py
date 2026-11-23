@@ -124,17 +124,8 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
     tallies = packs.apply(city, ctx, actions, pack)
     if world is not None:
         from .living import intents
-        results = intents.interpret(city, free, world.crowd_llm, pack)
-        tallies.update(intents.apply(city, ctx, results, pack))
-        for r in results:
-            if r["outcome"] and r["drama"] >= 2:
-                i = c.index[r["user"]]
-                world.moment("@" + r["user"], r["outcome"], r["drama"], public=True,
-                             hold=city.wards[int(c.ward[i])]["name"], handles=[r["user"]])
-        # what the king can "read in the comments" tomorrow: a few real lines, with handles
-        loud = [f"@{u}: {t[:120]}" for u, t in list(free.items())[:40]]
-        city.rng.shuffle(loud)
-        city.living["loud_comments"] = loud[:8]
+        world.finish_crowd(free)          # most own-words moves were already played out during the day
+        tallies.update(intents.finish_day(world, ctx, pack))
     for u in status_users:
         i = c.index.get(u)
         if i is not None:
@@ -202,6 +193,11 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
              "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
              "services": {k: round(v, 3) for k, v in city.quality.items()}, "factions": city.faction_moods(),
              "wards": len(city.wards)}
+    if world is not None:   # what the crowd decided today is part of the story of the last 24 hours
+        for e in ended:
+            big = e.get("source") == "warlord" or e["id"].startswith("decree_") or e.get("result") not in ("timed_out",)
+            world.moment("world", e["outcome"], 3 if e.get("source") == "warlord" else (2 if big else 1),
+                         public=True, hold=city.wards[e["ward"]]["name"] if e.get("ward") is not None else "")
     chron = world.chronicle() if world is not None else None
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
                + ([m["text"] for m in chron["top"]] if chron else [])
