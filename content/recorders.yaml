@@ -1,0 +1,47 @@
+# Recorders: fixed cameras around Emberfall. `./kingdom record` takes a picture from each one at the times
+# below, every day of a run, and stitches each recorder's pictures into a timelapse video - the town growing
+# out of the field, the woods thinning, the camp filling up and emptying. They also show up in the viewer
+# (the Recorders button, R for the next one).
+#
+#   pos:   where the camera stands [x east, height, z north] in metres (the shack is at 0, 0)
+#   look:  what it looks at [x, height, z]
+#   fov:   lens (smaller = more zoomed in)
+#   times: when to take a picture each day (24h clock). More times = a smoother timelapse, longer to render.
+#   follow: king   - instead of a fixed spot, keep Aldric in frame (offset = where the camera sits from him)
+
+recorders:
+  - name: overview            # the whole valley: the field, the woods, the hill, the road
+    pos: [-70, 95, -150]
+    look: [30, 0, 10]
+    fov: 38
+    times: ["08:00", "12:00", "17:00"]
+
+  - name: the_field           # where the buildings go up
+    pos: [5, 28, -40]
+    look: [40, 0, 10]
+    fov: 45
+    times: ["09:00", "13:00", "17:30"]
+
+  - name: the_camp            # tents by the old road: full after an arrival day, emptying as houses finish
+    pos: [20, 22, -95]
+    look: [46, 0, -64]
+    fov: 45
+    times: ["12:00", "20:30"]
+
+  - name: the_woods           # watch the trees come down
+    pos: [-20, 30, 10]
+    look: [-72, 0, 48]
+    fov: 42
+    times: ["12:00"]
+
+  - name: top                 # straight down, Prison Architect style: the plan of the place
+    pos: [32, 160, -20]
+    look: [32, 0, 8]
+    fov: 40
+    times: ["12:00"]
+
+  - name: king                # over Aldric's shoulder, wherever he is
+    follow: king
+    offset: [9, 7, 9]
+    fov: 45
+    times: ["08:00", "11:00", "14:00", "17:00"]

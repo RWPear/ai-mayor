@@ -27,7 +27,7 @@ SCHEMA = "scene/1"
 
 # where things are (metres). r = radius of the area; stand = where a person stands to do the place's thing
 LAYOUT = {
-    "shack": {"pos": [0, 0], "r": 6},
+    "shack": {"pos": [0, 0], "r": 6, "stand": [-1.4, -4.6]},     # stand: by the door, not inside the walls
     "field": {"pos": [38, 6], "r": 48},
     "woods": {"pos": [-72, 48], "r": 38},
     "river": {"pos": [-28, -40], "r": 10},
@@ -38,7 +38,7 @@ LAYOUT = {
 RIVER = [[-140, -84], [-80, -58], [-30, -42], [8, -66], [48, -112], [70, -160]]       # a slow bend, 10 m wide
 ROAD = [[22, -170], [20, -110], [16, -46], [6, -10]]                                  # from the south to the shack
 TREES = 240
-STONES = 90
+STONES = 240
 
 # footprints: width (x), depth (z), height
 SIZE = {"tiny": [3, 3, 2.2], "small": [6, 5, 3.6], "medium": [13, 7, 5.5], "large": [24, 9, 6.5],
@@ -224,7 +224,7 @@ def trees(world):
 
 def stones(world):
     L = F.land(world)
-    hauled = int(L.get("harvested", {}).get("stone", 0) // 6)
+    hauled = int(L.get("harvested", {}).get("stone", 0) // 15)
     all_ = _scatter(STONES, LAYOUT["hill"]["pos"], LAYOUT["hill"]["r"] * 0.9, 13)
     all_.sort(key=lambda t: math.hypot(t[0], t[1]))
     return all_[min(hauled, STONES - 5):], hauled
@@ -253,6 +253,11 @@ def piles(world):
     return out
 
 
+def stand_pos(world, pid):
+    """Where a person stands at a place (the shack's door rather than its middle)."""
+    return list(LAYOUT.get(pid, {}).get("stand") or place_pos(world, pid))
+
+
 def place_pos(world, pid):
     if pid in LAYOUT:
         return list(LAYOUT[pid]["pos"])
@@ -272,13 +277,18 @@ def record(world, who, tool, args, moment):
     lv = world.city.living
     loc = me.get("location", "shack")
     dur = max(5, int(me.get("next_act", world.clock) - world.clock))
-    pos = place_pos(world, loc)
+    pos = stand_pos(world, loc)
     if tool == "build":
         p = next((p for p in F.land(world)["projects"] if p["place"] == loc and p.get("lot")), None)
         if p:
             pos = list(p["lot"]["pos"])
     elif tool == "gather":
         pos = _gather_spot(world, loc, str(args.get("material") or ""))
+    tr0 = lv.get("tracks", {}).get(who) or []
+    if tool == "walk" and tr0 and tr0[-1]["place"] != loc:     # worn paths: where he keeps walking
+        key = "|".join(sorted([tr0[-1]["place"], loc]))
+        walks = F.land(world).setdefault("walks", {})
+        walks[key] = walks.get(key, 0) + 1
     entry = {"t": world.clock, "place": loc, "pos": [round(pos[0], 1), round(pos[1], 1)],
              "anim": anim_for(tool, args, loc), "dur": dur, "tool": tool,
              "text": (moment or {}).get("text", "")[:200] if moment else ""}
@@ -304,6 +314,32 @@ def _gather_spot(world, loc, material):
     return place_pos(world, loc)
 
 
+def trees_all(world):
+    """All the trees the woods started with, in the order they get cut (nearest the shack first)."""
+    all_ = _scatter(TREES, LAYOUT["woods"]["pos"], LAYOUT["woods"]["r"], 11,
+                    keep_out=lambda x, z: _near_path(x, z, RIVER, 7))
+    all_.sort(key=lambda t: math.hypot(t[0], t[1]))
+    return all_
+
+
+def stones_all(world):
+    all_ = _scatter(STONES, LAYOUT["hill"]["pos"], LAYOUT["hill"]["r"] * 0.9, 13)
+    all_.sort(key=lambda t: math.hypot(t[0], t[1]))
+    return all_
+
+
+def sample(world):
+    """Every hour: what the 3D view needs to show the day changing (not just how it ended)."""
+    L = F.land(world)
+    h = L.get("harvested", {})
+    s = {"t": world.clock, "felled": min(int(h.get("wood", 0) // 12), TREES - 10),
+         "hauled": min(int(h.get("stone", 0) // 15), STONES - 5), "tents": F.tents(world.city),
+         "settled": F.settled(world.city), "stores": {m: int(v) for m, v in L["stock"].items() if v >= 1},
+         "progress": {p["id"]: round(p["progress"], 3) for p in L["projects"]}}
+    lv = world.city.living
+    lv["samples"] = [x for x in lv.get("samples", []) if x["t"] >= world.clock - 2 * 1440] + [s]
+
+
 def harvested(world, material, n):
     h = F.land(world).setdefault("harvested", {})
     h[material] = h.get(material, 0) + n
@@ -319,6 +355,7 @@ def export(world, since=None, until=None):
     since = lv.get("last_post_clock", until - 1440) if since is None else since
     ts, felled = trees(world)
     ss, hauled = stones(world)
+    samples = [x for x in lv.get("samples", []) if since <= x["t"] <= until]
     n_tents = F.tents(city)
     homes = L.get("homes", {})
     buildings = []
@@ -337,14 +374,16 @@ def export(world, since=None, until=None):
                           "scale": b["scale"], "pos": lot["pos"], "size": lot["size"], "rot": lot["rot"],
                           "radius": lot.get("radius"), "state": "standing", "quality": b.get("quality"),
                           "material": b.get("material") or "wood", "look": b.get("look", ""),
-                          "built_day": b.get("day"), "capacity": b.get("capacity", 0),
+                          "built_day": b.get("day"), "built_t": b.get("t"), "capacity": b.get("capacity", 0),
                           "residents": sorted(h for h, bid in homes.items() if bid == b["id"])[:200]})
     for r in L.get("ruins", []):
         buildings.append({**r, "state": "ruin"})
     projects = [{"id": p["id"], "name": p["name"], "shape": p["lot"]["shape"], "kind": p["kind"], "scale": p["scale"],
                  "pos": p["lot"]["pos"], "size": p["lot"]["size"], "rot": p["lot"]["rot"],
                  "radius": p["lot"].get("radius"), "state": "scaffold", "progress": round(p["progress"], 3),
-                 "material": p.get("material") or "wood", "look": p.get("look", ""), "missing_know": p["missing"]}
+                 "material": p.get("material") or "wood", "look": p.get("look", ""), "missing_know": p["missing"],
+                 "started_t": p.get("started_t"),
+                 "progress_at": [[x["t"], x["progress"][p["id"]]] for x in samples if p["id"] in x["progress"]]}
                 for p in L["projects"] if p.get("lot")]
     moments = [m for m in lv.get("moments", []) if since < m["clock"] <= until]
     events = [{"t": m["clock"], "time": m["time"], "who": m["who"], "place": m.get("place"),
@@ -369,23 +408,27 @@ def export(world, since=None, until=None):
                        "stores": {m: int(v) for m, v in L["stock"].items() if v >= 1}, "gold": round(city.treasury)},
         "terrain": {"ground": {"size": [420, 420]}, "river": {"path": RIVER, "width": 10},
                     "road": {"path": ROAD, "width": 4}, "hill": {"pos": LAYOUT["hill"]["pos"],
-                                                                 "r": LAYOUT["hill"]["r"], "height": 12},
+                                                                 "r": LAYOUT["hill"]["r"], "height": 20},
                     "woods": {"pos": LAYOUT["woods"]["pos"], "r": LAYOUT["woods"]["r"]}},
         "places": [{"id": pid, "name": p["name"], "pos": place_pos(world, pid),
                     "r": LAYOUT.get(pid, {}).get("r", 6), "resources": p.get("resources", [])}
                    for pid, p in F.places(world).items()],
         "trees": ts, "trees_felled": felled, "stones": ss, "stones_hauled": hauled,
+        "trees_all": trees_all(world), "stones_all": stones_all(world),
+        "samples": samples, "trails": _trails(world),
+        "peddler": ({"until": L["peddler"]["until"], "goods": L["peddler"]["goods"],
+                     "pos": [ROAD[2][0] + 4, ROAD[2][1] - 6]} if L.get("peddler") else None),
         "buildings": buildings, "projects": projects, "tents": tents(world, (n_tents + 1) // 2),
         "piles": piles(world),
         "weather": weather,
         "actors": {
             "king": {"name": "Aldric", "crowned": L["crowned"], "track": track,
                      "start": {"place": track[0]["place"] if track else king.get("location", "shack"),
-                               "pos": track[0]["pos"] if track else place_pos(world, king.get("location", "shack"))},
+                               "pos": track[0]["pos"] if track else stand_pos(world, king.get("location", "shack"))},
                      "needs": {k: round(v, 2) for k, v in king.get("life", {}).get("needs", {}).items()},
                      "becoming": king.get("self", {}).get("becoming", "")},
             "court": [{"id": k, "name": (__import__("city.living.life", fromlist=["court"]).court().get(k) or {})
-                       .get("name", k), "pos": place_pos(world, L["court_place"])} for k in L["court"]],
+                       .get("name", k), "pos": stand_pos(world, L["court_place"])} for k in L["court"]],
             "settlers": named,
             "crowd": _crowd(world),
         },
@@ -393,6 +436,27 @@ def export(world, since=None, until=None):
         "today": {"built": [b["name"] for b in L["buildings"] if b.get("day") == city.day],
                   "arrived": sum(1 for m in moments if "walked up the old road" in m["text"])},
     }
+
+
+def _trails(world):
+    """Worn paths: where people keep walking - settlers between home and work, the king between places."""
+    city, c, L = world.city, world.city.citizens, F.land(world)
+    wear = {}
+    homes = L.get("homes", {})
+    lots = {b["id"]: b["lot"]["pos"] for b in L["buildings"] if b.get("lot")}
+    act = np.where(c.active())[0]
+    for i in act[:5000]:
+        h = c.handles[int(i)]
+        a = tuple(lots.get(homes.get(h), LAYOUT["camp"]["pos"] if int(c.walled[i]) == -2 else LAYOUT["field"]["pos"]))
+        b = tuple(place_pos(world, F.home_of(c, i)))
+        key = (tuple(round(v / 6) * 6 for v in a), tuple(round(v / 6) * 6 for v in b))
+        wear[key] = wear.get(key, 0) + 1
+    for key, n in L.get("walks", {}).items():
+        p, q = key.split("|")
+        k = (tuple(place_pos(world, p)), tuple(place_pos(world, q)))
+        wear[k] = wear.get(k, 0) + 3 * n
+    top = sorted(wear.items(), key=lambda kv: -kv[1])[:40]
+    return [{"from": list(a), "to": list(b), "wear": n} for (a, b), n in top if a != b]
 
 
 def _named(world, moments, extra=20):

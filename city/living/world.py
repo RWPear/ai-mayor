@@ -660,6 +660,9 @@ class World:
     def _frontier_tick(self):
         """The frontier's clockwork: arrivals, word from the road, settlers' work, meals, the peddler."""
         t = self.clock % 1440
+        if t % 60 == 0:                          # the 3D view's hourly snapshot (trees, tents, stores, progress)
+            from . import scene
+            scene.sample(self)
         L = F.land(self)
         day = self.city.day + 1
         if t == 6 * 60:

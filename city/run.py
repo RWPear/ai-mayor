@@ -278,23 +278,41 @@ def cmd_check(args):
 
 
 def cmd_view(args):
-    """Builds a page that plays one day in 3D (viewer/index.html with that day's scene inside it)."""
+    """Exports the 3D world as a static folder (the viewer, its scripts, the run's days, the recorders) that
+    any web host can serve - or open with ./kingdom serve instead, which needs no export."""
+    import json as _json
+    import shutil as _shutil
     from .config import ROOT
+    from .recorder import recorders, scenes_index
     days = Path(args.days)
-    files = sorted(days.glob("day*.scene.json"))
-    if args.day:
-        files = [f for f in files if f.name == f"day{args.day:03d}.scene.json"]
-    if not files:
+    index = scenes_index(days)
+    if args.first or args.last:
+        index = [d for d in index if (not args.first or d["day"] >= args.first) and (not args.last or d["day"] <= args.last)]
+    if not index:
         print(f"No scene files in {days} - run a frontier scenario with --reports first.")
         return
-    src = files[-1]
-    data = src.read_text().replace("</", "<\\/")
-    page = (ROOT / "viewer" / "index.html").read_text().replace(
-        '<script id="scene-data" type="application/json">null</script>',
-        f'<script id="scene-data" type="application/json">{data}</script>')
-    out = src.with_name(src.name.replace(".scene.json", ".view.html"))
-    out.write_text(page)
-    print(f"{out}  (open it in a browser - it plays {src.name})")
+    out = Path(args.out or days.parent / "world")
+    if out.exists():
+        _shutil.rmtree(out)
+    _shutil.copytree(ROOT / "viewer", out)
+    (out / "days").mkdir()
+    for d in index:
+        _shutil.copy(days / d["file"], out / "days" / d["file"])
+    (out / "days" / "scenes.json").write_text(_json.dumps(index))
+    (out / "recorders.json").write_text(_json.dumps(recorders()))
+    print(f"{out}  ({len(index)} days; host the folder anywhere, or: python -m http.server -d {out})")
+
+
+def cmd_serve(args):
+    from .recorder import serve
+    serve(args.days, args.port)
+
+
+def cmd_record(args):
+    from .recorder import record
+    record(args.days, names=args.recorders.split(",") if args.recorders else None, every=args.every, size=args.size,
+           quality=args.quality, fps=args.fps, out=args.out, only_day=args.day, gpu=not args.cpu, three=args.three,
+           first=args.first, last=args.last)
 
 
 def main():
@@ -339,14 +357,33 @@ def main():
     e.add_argument("--state")
     e.add_argument("--hold", "--ward", dest="hold")
     e.add_argument("--day", type=int)
-    v = sub.add_parser("view", help="build a page that plays a day in 3D (from a run's scene files)")
+    sv = sub.add_parser("serve", help="open the 3D world in your browser (http://localhost:8765)")
+    sv.add_argument("--days", default="runs/latest/days", help="a run's days folder")
+    sv.add_argument("--port", type=int, default=8765)
+    rc = sub.add_parser("record", help="timelapse videos from the recorders in content/recorders.yaml")
+    rc.add_argument("--days", default="runs/latest/days", help="a run's days folder")
+    rc.add_argument("--recorders", help="comma-separated names (default: all)")
+    rc.add_argument("--every", type=int, help="a frame every N game minutes from 06:00 to 20:00 (default: each "
+                                              "recorder's own times)")
+    rc.add_argument("--day", type=int, help="only this day (adds to the existing frames)")
+    rc.add_argument("--first", type=int, help="first day to record")
+    rc.add_argument("--last", type=int, help="last day to record")
+    rc.add_argument("--size", default="1280x720")
+    rc.add_argument("--quality", default="high", choices=["high", "low"])
+    rc.add_argument("--fps", type=int, default=10)
+    rc.add_argument("--out", help="default: the run's recordings/ folder")
+    rc.add_argument("--cpu", action="store_true", help="render without the GPU (slow, but works anywhere)")
+    rc.add_argument("--three", help="a local copy of the three npm package (offline machines)")
+    v = sub.add_parser("view", help="export the 3D world as a static folder you can host anywhere")
     v.add_argument("--days", default="runs/latest/days", help="a run's days folder")
-    v.add_argument("--day", type=int, help="which day (default: the last one)")
+    v.add_argument("--first", type=int, help="first day to include")
+    v.add_argument("--last", type=int, help="last day to include")
+    v.add_argument("--out", help="default: the run's world/ folder")
     c = sub.add_parser("check", help="validate events, projects, milestones, packs and plans")
     c.add_argument("--plan", default="seasons")
     args = p.parse_args()
     {"test": cmd_test, "day": cmd_day, "status": cmd_status, "plan": cmd_plan, "event": cmd_event,
-     "check": cmd_check, "live": cmd_live, "view": cmd_view}[args.cmd](args)
+     "check": cmd_check, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record}[args.cmd](args)
 
 
 if __name__ == "__main__":

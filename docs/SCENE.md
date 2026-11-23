@@ -7,11 +7,11 @@ bump it.
 
 ```
 ./kingdom test --scenario scenarios/frontier_viral.yaml --reports
-./kingdom view --day 20          # -> runs/latest/days/day020.view.html, plays that day in a browser
+./kingdom serve                  # -> http://localhost:8765, the 3D world playing the run
 ```
 
-`viewer/index.html` is a reference player in three.js. It's a dev tool, not the final look: it proves the
-data is complete and the timing is right. Drop any scene file onto it.
+The 3D world in `viewer/` reads these files: `./kingdom serve`. See [WORLD.md](WORLD.md) for the viewer,
+its cameras and the recorders that turn a run into timelapses.
 
 ## Coordinates and time
 
@@ -29,8 +29,11 @@ data is complete and the timing is right. Drop any scene file onto it.
 | `settlement` | `stage` (alone/hamlet/village/town/city), `crowned`, `settled`, `on_road`, `beds`, `free_beds`, `tents`, `next_arrival`, `know` (techniques), `stores` {material: n}, `gold` |
 | `terrain` | `ground.size`, `river {path, width}`, `road {path, width}`, `hill {pos, r, height}`, `woods {pos, r}`. Paths are lists of `[x, z]` |
 | `places` | `{id, name, pos, r, resources}`: the base six, plus big gathering places he builds and `camp` once there are tents |
-| `trees` | standing trees `[x, z, scale]`. Trees nearest the shack go first as wood is cut. `trees_felled` is the count |
-| `stones` | loose stones on the hill `[x, z, scale]`, which thin out the same way. `stones_hauled` is the count |
+| `trees` | standing trees at the end of the post `[x, z, scale]`. `trees_all` is every tree in the order they get cut (nearest the shack first); `trees_felled` is how many are down. Draw `trees_all[felled:]` standing and `trees_all[:felled]` as stumps |
+| `stones` | loose stones on the hill. `stones_all` / `stones_hauled` work the same way |
+| `samples` | an hourly snapshot `{t, felled, hauled, tents, settled, stores, progress {project id: 0-1}}`, so the day can change as it plays (trees falling, stores growing, scaffolding rising) instead of jumping to how it ended |
+| `trails` | worn paths `{from [x, z], to [x, z], wear}`: settlers between home and work, Aldric between places. More wear = a wider, browner path |
+| `peddler` | `{until, goods, pos}` while the peddler's cart is on the road |
 | `buildings` | see below. Includes the shack (`id: b0`) and ruins |
 | `projects` | buildings under construction, same fields, `state: "scaffold"`, `progress` 0-1 |
 | `tents` | tent positions `[x, z]` (about one per two people in tents) |
@@ -62,6 +65,8 @@ data is complete and the timing is right. Drop any scene file onto it.
 - `look` is the model's one-line description. Use it for variation now, or for generated assets later.
 - A project's lot is chosen when it's planned and is the building's lot when it's finished: scaffolding
   stands exactly where the house will.
+- Buildings have `built_t`, the minute they were finished (ruins have `t`); before that, show scaffolding.
+  Projects have `started_t` and `progress_at` (`[[t, progress], ...]`, hourly).
 
 ## Actors
 

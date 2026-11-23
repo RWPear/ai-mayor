@@ -100,3 +100,37 @@ def test_the_viewer_page_can_be_built():
     from city.config import ROOT
     page = (ROOT / "viewer" / "index.html").read_text()
     assert '<script id="scene-data" type="application/json">null</script>' in page
+
+
+def test_the_day_changes_hour_by_hour():
+    city, w, _ = _world()
+    from city.mayor import RuleMayor
+    r = w.post(RuleMayor(), [], [])
+    s = r["scene"]
+    assert len(s["samples"]) >= 20                              # an hourly snapshot through the day
+    assert all({"t", "felled", "hauled", "tents", "stores", "progress"} <= set(x) for x in s["samples"])
+    assert s["trees_all"] and len(s["trees_all"]) >= len(s["trees"])
+    for p in s["projects"]:
+        assert "progress_at" in p and "started_t" in p
+    assert isinstance(s["trails"], list)
+
+
+def test_the_viewer_is_served_with_the_runs_days(tmp_path):
+    import urllib.request
+    from city import recorder
+    from city.config import ROOT
+    days = tmp_path / "days"
+    days.mkdir()
+    city, w, r = _world()
+    (days / f"day{r['day']:03d}.scene.json").write_text(json.dumps(r["scene"]))
+    srv = recorder.serve(days, port=8833, block=False)
+    try:
+        get = lambda p: urllib.request.urlopen(f"http://127.0.0.1:8833{p}", timeout=5).read().decode()
+        assert "Emberfall" in get("/")
+        assert json.loads(get("/days/scenes.json"))[0]["day"] == r["day"]
+        assert "overview" in [x["name"] for x in json.loads(get("/recorders.json"))]
+        assert "kingdom" in get("/js/main.js")
+        assert json.loads(get(f"/days/day{r['day']:03d}.scene.json"))["schema"] == scene.SCHEMA
+    finally:
+        srv.shutdown()
+    assert (ROOT / "content" / "recorders.yaml").exists()

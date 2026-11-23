@@ -364,7 +364,7 @@ def start_project(world, idea, place=None):
          "needs": dict(d["needs"]), "used": {m: 0 for m in d["needs"]}, "kind": d["kind"], "scale": d["scale"],
          "capacity": d["capacity"], "know": d["know"], "boosts": d["boosts"], "look": d["look"],
          "missing": [k for k in d["know"] if k not in L["know"]], "started": world.city.day + 1, "helpers": [],
-         "material": d.get("material"),
+         "material": d.get("material"), "started_t": world.clock,
          "king_hours": 0.0}
     L["projects"].append(p)
     from . import scene
@@ -434,7 +434,7 @@ def finish(world, p):
             L.setdefault("ruins", []).append({"id": f"r_{p['id']}", "name": f"the collapsed {bare(p['name'])}",
                                               "shape": "ruin", "of": p["lot"]["shape"], "pos": p["lot"]["pos"],
                                               "size": p["lot"]["size"], "rot": p["lot"]["rot"],
-                                              "kind": p["kind"], "day": city.day + 1})
+                                              "kind": p["kind"], "day": city.day + 1, "t": world.clock})
         world.moment("king", f"{p['name']} collapsed before it was finished. Days of work, gone."
                      + (f" At least he learned something about {', '.join(learned)}." if learned else ""),
                      2, public=True, place=p["place"])
@@ -445,7 +445,7 @@ def finish(world, p):
     b = {"id": f"b{len(L['buildings'])}", "name": p["name"], "kind": p["kind"], "scale": p["scale"], "capacity": cap,
          "place": p["place"], "quality": "good" if result == "success" else "shoddy", "day": city.day + 1,
          "by": "the king", "look": p.get("look", ""), "boosts": p.get("boosts", ""), "material": p.get("material"),
-         "lot": p.get("lot")}
+         "lot": p.get("lot"), "t": world.clock, "started_t": p.get("started_t")}
     L["buildings"].append(b)
     feats[f"b_{b['id']}"] = p["name"] + ("" if result == "success" else " (shoddy - it leans)")
     q = 1.0 if result == "success" else 0.6

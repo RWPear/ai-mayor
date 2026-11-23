@@ -3,65 +3,91 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emberfall Scene Viewer</title>
+<title>Emberfall</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* one visual world: a dusk-blue HUD over the 3D field. Layout: canvas full-bleed, HUD in the corners, timeline at the bottom. */
-  --ink: #eef1f4;
-  --muted: #a9b4bf;
-  --panel: rgba(16, 24, 33, 0.82);
-  --line: rgba(238, 241, 244, 0.16);
-  --accent: #e8b04a;
-  --danger: #e2674f;
-  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  /* one visual world: the HUD is parchment-and-ink over the 3D valley. Layout: canvas full-bleed; story feed
+     on the right, the day and Aldric top-left, the clock and cameras along the bottom. */
+  --ink: #f3ead8;
+  --muted: #b9ad96;
+  --panel: rgba(28, 22, 16, 0.78);
+  --line: rgba(243, 234, 216, 0.16);
+  --accent: #e2b448;
+  --danger: #e0715a;
+  --display: "Alegreya Sans SC", "Trebuchet MS", sans-serif;
+  --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
   color-scheme: dark;
 }
-html, body { height: 100%; margin: 0; background: #0e151c; color: var(--ink); font: 15px/1.4 var(--body); overflow: hidden; }
+html, body { height: 100%; margin: 0; background: #1a1612; color: var(--ink); font: 15px/1.4 var(--body); overflow: hidden; }
 #view { position: fixed; inset: 0; }
-.panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(6px); }
-#hud { top: 16px; left: 16px; max-width: min(340px, calc(100vw - 32px)); display: grid; gap: 6px; }
-#hud h1 { font: 600 24px/1 var(--display); letter-spacing: .02em; margin: 0; text-wrap: balance; }
-#clock { font: 600 20px/1 var(--display); color: var(--accent); font-variant-numeric: tabular-nums; }
+#view canvas { display: block; }
+.panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+body.nohud .panel, body.nohud #labels { display: none !important; }
+#hud { top: 16px; left: 16px; width: min(340px, calc(100vw - 32px)); display: grid; gap: 8px; }
+#hud h1 { font: 700 26px/1 var(--display); letter-spacing: .03em; margin: 0; text-wrap: balance; }
+#clock { font: 500 17px/1 var(--display); color: var(--accent); font-variant-numeric: tabular-nums; }
+#doing { font-size: 15px; min-height: 2.8em; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-variant-numeric: tabular-nums; }
-.chip.warn { color: var(--danger); border-color: rgba(226,103,79,.5); }
-#doing { color: var(--ink); font-size: 14px; }
-#feed { right: 16px; top: 16px; width: min(360px, calc(100vw - 32px)); max-height: 42vh; overflow-y: auto; display: grid; gap: 6px; }
-#feed h2, #shots h2 { font: 600 14px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
-.ev { font-size: 13px; color: var(--muted); border-left: 3px solid transparent; padding-left: 8px; cursor: pointer; }
+.chip { font-size: 12.5px; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip.warn { color: var(--danger); border-color: rgba(224,113,90,.5); }
+#feed { right: 16px; top: 16px; width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 220px); display: grid; grid-template-rows: auto 1fr; gap: 8px; }
+#feed h2, #shots h2 { font: 700 13px/1 var(--display); letter-spacing: .1em; color: var(--muted); margin: 0; }
+#events { overflow-y: auto; display: grid; gap: 4px; padding-right: 4px; }
+.ev { all: unset; font-size: 13.5px; color: var(--muted); border-left: 3px solid transparent; padding: 2px 0 2px 9px; cursor: pointer; line-height: 1.35; }
 .ev.public { color: var(--ink); }
 .ev.d2 { border-left-color: var(--accent); }
 .ev.d3 { border-left-color: var(--danger); }
 .ev .t { font-variant-numeric: tabular-nums; color: var(--muted); margin-right: 6px; }
-.ev.past { opacity: .55; }
-#caption { left: 50%; transform: translateX(-50%); bottom: 108px; max-width: min(720px, calc(100vw - 32px)); text-align: center; font-size: 17px; display: none; }
+.ev.past { opacity: .5; }
+.ev:focus-visible { outline: 2px solid var(--accent); }
+#caption { left: 50%; transform: translateX(-50%); bottom: 132px; max-width: min(760px, calc(100vw - 32px)); text-align: center; font-size: 17px; display: none; }
+#caption.big { font-size: 20px; font-family: var(--display); letter-spacing: .01em; }
 #caption.show { display: block; }
-#bar { left: 16px; right: 16px; bottom: 16px; display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; }
-button, select { font: 600 13px var(--body); color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
-button:hover { background: rgba(255,255,255,.12); }
+#bar { left: 16px; right: 16px; bottom: 16px; display: grid; gap: 10px; }
+#bar .top { display: grid; grid-template-columns: auto auto auto 1fr auto auto; gap: 10px; align-items: center; }
+#daylabel { font: 700 15px var(--display); letter-spacing: .04em; white-space: nowrap; }
+#modes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#modehint { color: var(--muted); font-size: 13px; margin-left: 6px; }
+button, select { font: 600 13.5px var(--body); color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px; cursor: pointer; }
+button:hover:not(:disabled) { background: rgba(255,255,255,.13); }
+button:disabled { opacity: .35; cursor: default; }
+button[aria-pressed="true"] { background: var(--accent); color: #231a0f; border-color: var(--accent); }
 button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
-#shots { left: 16px; bottom: 76px; display: none; gap: 6px; max-width: min(520px, calc(100vw - 32px)); }
-#shots.show { display: grid; }
-#tip { position: fixed; pointer-events: none; font-size: 13px; padding: 6px 9px; display: none; max-width: 280px; }
-#drop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(14,21,28,.85); font: 600 28px var(--display); }
+label.cont { color: var(--muted); font-size: 13px; white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+#shots { left: 16px; bottom: 132px; display: grid; gap: 6px; width: min(430px, calc(100vw - 32px)); }
+#shots .row button { text-align: left; }
+#tip { position: fixed; pointer-events: none; font-size: 13.5px; padding: 7px 10px; display: none; max-width: 300px; z-index: 5; }
+#tip .muted { color: var(--muted); }
+#drop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(26,22,18,.85); font: 700 30px var(--display); z-index: 9; }
 #drop.show { display: grid; }
-#empty { left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 440px; display: none; }
+#empty { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); display: none; }
 #empty.show { display: block; }
-.label { position: fixed; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: rgba(238,241,244,.75); pointer-events: none; transform: translate(-50%, -50%); white-space: nowrap; text-shadow: 0 1px 3px #000; }
-@media (max-width: 700px) { #feed { top: auto; bottom: 150px; max-height: 26vh; } #hud { max-width: calc(100vw - 32px); } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+#labels { position: fixed; inset: 0; pointer-events: none; }
+.label { position: fixed; left: 0; top: 0; font: 700 12.5px var(--display); letter-spacing: .08em; color: rgba(243,234,216,.85); white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.6); }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); letter-spacing: .08em; color: var(--muted); pointer-events: none; }
+body.ready #loading { display: none; }
+@media (max-width: 760px) {
+  #feed { top: auto; bottom: 200px; max-height: 24vh; }
+  #shots { display: none; }
+  #bar .top { grid-template-columns: auto 1fr auto; }
+  #bar .top #speed, #bar .top label.cont { display: none; }
+  #modehint { display: none; }
+  #hud { width: calc(100vw - 32px); }
+  #caption { bottom: 200px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
 <div id="view"></div>
 <div id="labels"></div>
+<div id="loading">Raising Emberfall...</div>
 <section id="hud" class="panel" aria-live="polite">
   <h1 id="title">Emberfall</h1>
-  <div id="clock">day -, --:--</div>
+  <div id="clock">--:--</div>
   <div id="doing">Loading the day...</div>
   <div class="row" id="stats"></div>
   <div class="row" id="stores"></div>
@@ -71,17 +97,32 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 <div id="caption" class="panel"></div>
 <div id="tip" class="panel"></div>
 <section id="bar" class="panel">
-  <button id="play" type="button">Pause</button>
-  <select id="speed" aria-label="Playback speed">
-    <option value="2">1 hour = 30 s</option>
-    <option value="6" selected>1 hour = 10 s</option>
-    <option value="20">1 hour = 3 s</option>
-  </select>
-  <input id="scrub" type="range" min="0" max="1440" value="0" step="1" aria-label="Time of day">
-  <button id="follow" type="button" aria-pressed="true">Following Aldric</button>
+  <div class="top">
+    <button id="prev" type="button" aria-label="Previous day">&larr;</button>
+    <span id="daylabel">Day</span>
+    <button id="next" type="button" aria-label="Next day">&rarr;</button>
+    <input id="scrub" type="range" min="0" max="1440" value="0" step="1" aria-label="Time of day">
+    <select id="speed" aria-label="Playback speed">
+      <option value="2">1 hour = 30 s</option>
+      <option value="6" selected>1 hour = 10 s</option>
+      <option value="20">1 hour = 3 s</option>
+      <option value="60">1 hour = 1 s</option>
+    </select>
+    <button id="play" type="button" aria-pressed="false">Play</button>
+  </div>
+  <div id="modes">
+    <button type="button" data-mode="follow" title="1">Follow Aldric</button>
+    <button type="button" data-mode="director" title="2">Director</button>
+    <button type="button" data-mode="walk" title="3">Walk around</button>
+    <button type="button" data-mode="top" title="4">From above</button>
+    <button type="button" data-mode="orbit" title="5">Free camera</button>
+    <button type="button" data-mode="recorder" title="6, R for the next one">Recorders</button>
+    <label class="cont"><input id="cont" type="checkbox" checked> keep playing into the next day</label>
+    <span id="modehint"></span>
+  </div>
 </section>
 <div id="empty" class="panel">
-  <p><strong>No scene loaded.</strong> Drop a <code>dayNNN.scene.json</code> from <code>runs/latest/days/</code> anywhere on this page, or build a page with the day inside it: <code>./kingdom view</code>.</p>
+  <p><strong>No days to show yet.</strong> Run a frontier scenario with <code>--reports</code>, then <code>./kingdom serve</code> and open the address it prints. You can also drop a <code>dayNNN.scene.json</code> anywhere on this page.</p>
   <input id="file" type="file" accept=".json,application/json" aria-label="Choose a scene file">
 </div>
 <div id="drop">Drop the scene file</div>
@@ -90,366 +131,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
-<script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-
-const $ = (id) => document.getElementById(id);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
-renderer.shadowMap.enabled = true;
-$("view").appendChild(renderer.domElement);
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 2000);
-camera.position.set(60, 70, 110);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(10, 0, 0);
-controls.maxPolarAngle = Math.PI * 0.47;
-controls.enableDamping = true;
-const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x3b4a2a, 0.9);
-scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, far: 600 });
-scene.add(sun, sun.target);
-scene.fog = new THREE.Fog(0xbfd3e6, 200, 700);
-
-const world = new THREE.Group();
-scene.add(world);
-const MAT = {
-  wood: 0x8b5a2b, stone: 0x9b9b96, clay: 0xb5653a, mixed: 0xa27a52, iron: 0x6d7378, thatch: 0xc9a85a,
-  grass: 0x6e8f45, river: 0x3f6f8f, road: 0x8a7350, hill: 0x7e8770, leaf: 0x2f5a2e, trunk: 0x5b3a1e,
-  tent: 0xd9cba6, plot: 0x6b4a2b, crop: 0x8fbf4a, ruin: 0x4b4640,
-};
-const mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, ...extra });
-
-let S = null, T0 = 0, now = 0, playing = true, follow = true, labels = [], captionUntil = 0;
-const figures = {};
-
-function strip(path, width, color, y) {
-  const pos = [], idx = [];
-  path.forEach((p, i) => {
-    const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)];
-    const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
-    const nx = -dz / L * width / 2, nz = dx / L * width / 2;
-    pos.push(p[0] + nx, y, -(p[1] + nz), p[0] - nx, y, -(p[1] - nz));
-    if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
-  });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx); g.computeVertexNormals();
-  const m = new THREE.Mesh(g, mat(color, { side: THREE.DoubleSide }));
-  m.receiveShadow = true;
-  return m;
-}
-// world z (north) -> three -z, so the map reads with north up from the default camera
-const V = (x, z, y = 0) => new THREE.Vector3(x, y, -z);
-
-function gable(w, d, h, color) {
-  const shape = new THREE.Shape([new THREE.Vector2(-w / 2, 0), new THREE.Vector2(w / 2, 0), new THREE.Vector2(0, h)]);
-  const g = new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false });
-  g.translate(0, 0, -d / 2);
-  const m = new THREE.Mesh(g, mat(color));
-  m.castShadow = true;
-  return m;
-}
-function box(w, h, d, color, y = h / 2) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
-  m.position.y = y; m.castShadow = true; m.receiveShadow = true;
-  return m;
-}
-function windows(w, h) {
-  const c = document.createElement("canvas"); c.width = 128; c.height = 256;
-  const x = c.getContext("2d"); x.fillStyle = "#a27a52"; x.fillRect(0, 0, 128, 256);
-  x.fillStyle = "#3a2a1c";
-  for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) x.fillRect(10 + k * 30, 12 + r * 30, 14, 16);
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 8), Math.max(1, h / 8));
-  return t;
-}
-
-function makeBuilding(b) {
-  const g = new THREE.Group();
-  const [w, d, h] = b.size || [5, 4, 3];
-  const wall = MAT[b.material] || MAT.wood;
-  const roof = b.material === "stone" ? 0x5f5f66 : MAT.thatch;
-  const shape = b.shape;
-  if (b.state === "ruin") {
-    for (let k = 0; k < 6; k++) { const m = box(w / 3 * Math.random() + 1, 0.6 + Math.random(), d / 3 + 0.5, MAT.ruin); m.position.set((Math.random() - .5) * w, m.position.y, (Math.random() - .5) * d); m.rotation.y = Math.random(); g.add(m); }
-  } else if (b.state === "scaffold") {
-    const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: 0xe8b04a }));
-    frame.position.y = h / 2; g.add(frame);
-    const done = Math.max(0.05, b.progress || 0);
-    const part = box(w, h * done, d, wall); part.material.transparent = true; part.material.opacity = 0.85; g.add(part);
-  } else if (shape === "shack") {
-    g.add(box(w, h * 0.7, d, 0x6b4a2e));
-    const r = gable(w + 0.6, d + 0.6, 1.4, 0x5a4a32); r.position.y = h * 0.7; r.rotation.z = 0.06; g.add(r);
-  } else if (shape === "hut") {
-    g.add(box(w, h * 0.6, d, wall));
-    const r = new THREE.Mesh(new THREE.ConeGeometry(w * 0.8, h * 0.7, 8), mat(MAT.thatch)); r.position.y = h * 0.95; r.castShadow = true; g.add(r);
-  } else if (["cottage", "longhouse", "storehouse", "hall", "shed"].includes(shape)) {
-    const wh = shape === "hall" ? h * 0.65 : h * 0.6;
-    g.add(box(w, wh, d, shape === "storehouse" ? 0x6f4a28 : wall));
-    const r = gable(w + 0.8, d + 0.8, h - wh + (shape === "hall" ? 2 : 1), roof); r.position.y = wh; g.add(r);
-  } else if (shape === "rowhouses") {
-    const n = Math.max(2, Math.round(w / 6));
-    for (let k = 0; k < n; k++) {
-      const u = new THREE.Group(); u.add(box(w / n - 0.4, h * 0.6, d, wall));
-      const r = gable(w / n, d + 0.6, h * 0.45, roof); r.position.y = h * 0.6; u.add(r);
-      u.position.x = -w / 2 + (k + 0.5) * w / n; g.add(u);
-    }
-  } else if (shape === "apartments") {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ map: windows(w, h), roughness: 0.9 }));
-    m.position.y = h / 2; m.castShadow = true; g.add(m);
-    g.add(box(w + 0.6, 0.6, d + 0.6, 0x5f5f66, h + 0.3));
-  } else if (shape === "plot") {
-    g.add(box(w, 0.3, d, MAT.plot, 0.15));
-    for (let k = 0; k < 5; k++) { const c = box(w * 0.9, 0.4, 0.6, MAT.crop, 0.4); c.position.z = -d / 2 + (k + 0.5) * d / 5; g.add(c); }
-  } else if (shape === "workshop") {
-    g.add(box(w, h * 0.7, d, wall));
-    const r = box(w + 0.6, 0.4, d + 0.6, roof, h * 0.75); r.rotation.z = 0.15; g.add(r);
-    g.add(Object.assign(box(0.8, h * 0.6, 0.8, 0x666666, h), { }));
-  } else if (shape === "tower") {
-    g.add(box(w, h, d, wall));
-    const r = new THREE.Mesh(new THREE.ConeGeometry(w * 0.85, 3, 4), mat(roof)); r.position.y = h + 1.5; r.rotation.y = Math.PI / 4; g.add(r);
-  } else if (shape === "wall_ring") {
-    const R = b.radius || w / 2, n = Math.round(R * 2.2);
-    const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.4, 3.2, 6), mat(MAT.wood), n);
-    const o = new THREE.Object3D();
-    for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; o.position.set(Math.cos(a) * R, 1.6, Math.sin(a) * R); o.updateMatrix(); posts.setMatrixAt(k, o.matrix); }
-    posts.castShadow = true; g.add(posts);
-  } else if (shape === "well") {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.1, 1.2, 12), mat(MAT.stone)); m.position.y = 0.6; g.add(m);
-    const r = gable(2.6, 2.6, 1, MAT.wood); r.position.y = 2.2; g.add(r);
-  } else {
-    g.add(box(w, h, d, wall));
-  }
-  if (b.quality === "shoddy" && b.state === "standing") g.rotation.z = 0.035;   // it leans
-  g.position.copy(V(b.pos[0], b.pos[1]));
-  g.rotation.y = -(b.rot || 0) * Math.PI / 180;
-  g.userData = { tip: `<strong>${esc(b.name)}</strong><br>${esc(b.state === "scaffold" ? `being built - ${Math.round((b.progress || 0) * 100)}%` : b.state === "ruin" ? "collapsed" : `${b.shape}${b.capacity ? `, room for ${b.capacity}` : ""}${b.quality ? `, ${b.quality}` : ""}`)}${b.look ? `<br><span style="color:var(--muted)">${esc(b.look)}</span>` : ""}` };
-  g.traverse((o) => { if (o.isMesh) o.userData = g.userData; });
-  return g;
-}
-
-function person(color, crown = false) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.9, 4, 8), mat(color)); body.position.y = 0.9; body.castShadow = true;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.33, 12, 10), mat(0xe2c2a0)); head.position.y = 1.8; head.castShadow = true;
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), mat(color)); arm.position.set(0.5, 1.2, 0); arm.geometry.translate(0, -0.35, 0);
-  g.add(body, head, arm);
-  if (crown) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.22, 8, 1, true), mat(0xe8b04a, { metalness: 0.6, roughness: 0.3, side: THREE.DoubleSide })); c.position.y = 2.1; g.add(c); }
-  g.userData.arm = arm; g.userData.body = body;
-  return g;
-}
-
-function tagTip(g) { g.traverse((o) => { o.userData.tip = g.userData.tip; }); }
-function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-function hash(s) { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); }
-
-function build(data) {
-  S = data; T0 = S.start; now = 0;
-  world.clear(); labels.forEach((l) => l.el.remove()); labels = [];
-  for (const k in figures) delete figures[k];
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(S.terrain.ground.size[0], S.terrain.ground.size[1]), mat(MAT.grass));
-  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; world.add(ground);
-  world.add(strip(S.terrain.river.path, S.terrain.river.width, MAT.river, 0.05));
-  world.add(strip(S.terrain.road.path, S.terrain.road.width, MAT.road, 0.04));
-  const H = S.terrain.hill;
-  const hill = new THREE.Mesh(new THREE.SphereGeometry(H.r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat(MAT.hill));
-  hill.scale.y = H.height / H.r; hill.position.copy(V(H.pos[0], H.pos[1])); hill.receiveShadow = true; world.add(hill);
-  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 2.4, 6), mat(MAT.trunk), S.trees.length);
-  const leaf = new THREE.InstancedMesh(new THREE.ConeGeometry(1.8, 4.6, 7), mat(MAT.leaf), S.trees.length);
-  const o = new THREE.Object3D();
-  S.trees.forEach(([x, z, s], i) => {
-    o.position.copy(V(x, z, 1.2 * s)); o.scale.setScalar(s); o.updateMatrix(); trunk.setMatrixAt(i, o.matrix);
-    o.position.y = 4.2 * s; o.updateMatrix(); leaf.setMatrixAt(i, o.matrix);
-  });
-  trunk.castShadow = leaf.castShadow = true; world.add(trunk, leaf);
-  const stones = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.7), mat(MAT.stone), S.stones.length);
-  S.stones.forEach(([x, z, s], i) => {
-    const dx = x - H.pos[0], dz = z - H.pos[1], r = Math.min(1, Math.hypot(dx, dz) / H.r);
-    o.position.copy(V(x, z, H.height * Math.sqrt(Math.max(0, 1 - r * r)) + 0.3)); o.scale.setScalar(s); o.updateMatrix(); stones.setMatrixAt(i, o.matrix);
-  });
-  world.add(stones);
-  for (const b of S.buildings) world.add(makeBuilding(b));
-  for (const p of S.projects) world.add(makeBuilding(p));
-  const tent = new THREE.ConeGeometry(1.3, 1.8, 4);
-  if (S.tents.length) {
-    const tm = new THREE.InstancedMesh(tent, mat(MAT.tent), S.tents.length);
-    S.tents.forEach(([x, z], i) => { o.position.copy(V(x, z, 0.9)); o.rotation.set(0, i, 0); o.scale.setScalar(1); o.updateMatrix(); tm.setMatrixAt(i, o.matrix); });
-    tm.castShadow = true; world.add(tm);
-  }
-  for (const p of S.piles) {
-    const n = Math.min(12, Math.ceil(Math.log2(p.amount + 1) * 1.5));
-    for (let k = 0; k < n; k++) {
-      const geo = p.material === "wood" ? new THREE.CylinderGeometry(0.2, 0.2, 2, 6) : new THREE.BoxGeometry(0.6, 0.5, 0.6);
-      const m = new THREE.Mesh(geo, mat(MAT[p.material] || 0x8a6a4a));
-      if (p.material === "wood") m.rotation.z = Math.PI / 2;
-      m.position.copy(V(p.pos[0] + (k % 3) * 0.5, p.pos[1] + ((k / 3) | 0) * 0.3, 0.25 + ((k / 6) | 0) * 0.45));
-      m.castShadow = true; world.add(m);
-    }
-  }
-  for (const pl of S.places) addLabel(pl.name, V(pl.pos[0], pl.pos[1], 7));
-  const king = person(0x2f5f9a, S.actors.king.crowned); figures.king = king; world.add(king);
-  king.userData.tip = "<strong>Aldric</strong>" + (S.actors.king.becoming ? `<br>${esc(S.actors.king.becoming)}` : ""); tagTip(king);
-  for (const c of S.actors.court) { const f = person(0x7a4b8f); f.position.copy(V(c.pos[0] + 2, c.pos[1] + 2)); f.userData.tip = esc(c.name); tagTip(f); world.add(f); }
-  for (const p of S.actors.settlers) {
-    const f = person(new THREE.Color().setHSL((hash(p.role) % 360) / 360, 0.35, 0.5).getHex());
-    f.userData.who = p; f.userData.tip = `<strong>@${esc(p.handle)}</strong><br>${esc(p.name)}, ${esc(p.role)}${p.condition ? ` (${esc(p.condition)})` : ""}`;
-    tagTip(f); figures["@" + p.handle] = f; world.add(f);
-  }
-  const named = S.actors.settlers.length;
-  const crowd = [];
-  for (const [place, n] of Object.entries(S.actors.crowd.day || {})) {
-    const pl = S.places.find((p) => p.id === place); if (!pl) continue;
-    for (let k = 0; k < Math.min(50, Math.max(0, n - named)); k++) crowd.push(pl.pos);
-  }
-  if (crowd.length) {
-    const cm = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.35, 0.8, 3, 6), mat(0x8c7f70), crowd.length);
-    crowd.forEach((p, i) => { const r = 4 + (hash(i) % 20), a = i * 2.4; o.position.copy(V(p[0] + Math.cos(a) * r, p[1] + Math.sin(a) * r, 0.8)); o.rotation.set(0, 0, 0); o.scale.setScalar(1); o.updateMatrix(); cm.setMatrixAt(i, o.matrix); });
-    cm.userData.crowd = true; world.add(cm); figures.crowd = cm;
-  }
-  const st = S.settlement;
-  $("title").textContent = `${S.city} - day ${S.day}`;
-  $("stats").innerHTML = [
-    st.crowned ? "crowned" : "not crowned", st.stage, `${st.settled} settlers`, `${st.beds} beds (${st.free_beds} free)`,
-    st.tents ? `<span class="chip warn">${st.tents} in tents</span>` : null, st.on_road ? `${st.on_road} on the road` : null,
-    `arrivals day ${st.next_arrival}`, `${S.trees_felled} trees felled`,
-  ].filter(Boolean).map((t) => t.startsWith("<span") ? t : `<span class="chip">${esc(t)}</span>`).join("");
-  $("stores").innerHTML = Object.entries(st.stores).map(([k, v]) => `<span class="chip">${v} ${esc(k)}</span>`).join("") + `<span class="chip">${st.gold} gold</span>`;
-  $("events").innerHTML = S.events.map((e, i) => `<div class="ev ${e.public ? "public" : ""} d${e.drama}" data-i="${i}" tabindex="0"><span class="t">${esc(e.time.split(", ")[1])}</span>${esc(e.text)}</div>`).join("");
-  document.querySelectorAll(".ev").forEach((el) => {
-    const go = () => { const e = S.events[+el.dataset.i]; now = e.t - T0 - 2; if (e.pos) look(e.pos, 14); };
-    el.addEventListener("click", go); el.addEventListener("keydown", (k) => { if (k.key === "Enter") go(); });
-  });
-  $("shotbtns").innerHTML = S.shots.map((s, i) => `<button type="button" data-i="${i}">${i + 1}. ${esc(s.text.slice(0, 48))}${s.text.length > 48 ? "..." : ""}</button>`).join("");
-  $("shots").classList.toggle("show", S.shots.length > 0);
-  document.querySelectorAll("#shotbtns button").forEach((b) => b.addEventListener("click", () => {
-    const s = S.shots[+b.dataset.i]; now = s.t - T0 - 1; follow = false; $("follow").textContent = "Free camera"; look(s.target, s.distance); showCaption(s.text, true);
-  }));
-  $("scrub").max = Math.max(1, S.end - S.start);
-  $("empty").classList.remove("show");
-}
-
-function addLabel(text, pos) { const el = document.createElement("div"); el.className = "label"; el.textContent = text; $("labels").appendChild(el); labels.push({ el, pos }); }
-function look(p, dist) { controls.target.copy(V(p[0], p[1], 1)); camera.position.copy(V(p[0] + dist * 0.8, p[1] - dist, dist * 0.8)); }
-
-function kingAt(t) {
-  const tr = S.actors.king.track;
-  if (!tr.length) return { pos: S.actors.king.start.pos, anim: "idle", text: "" };
-  let i = -1;
-  for (let k = 0; k < tr.length; k++) if (tr[k].t <= t) i = k; else break;
-  if (i < 0) return { pos: S.actors.king.start.pos, anim: "sleep", text: "" };
-  const e = tr[i], prev = i ? tr[i - 1].pos : S.actors.king.start.pos;
-  const span = e.anim === "walk" ? Math.max(1, e.dur) : 3;
-  const f = Math.min(1, (t - e.t) / span);
-  const pos = [prev[0] + (e.pos[0] - prev[0]) * f, prev[1] + (e.pos[1] - prev[1]) * f];
-  const moving = f < 1 && (Math.abs(e.pos[0] - prev[0]) + Math.abs(e.pos[1] - prev[1])) > 0.5;
-  const busy = t < e.t + e.dur;
-  return { pos, anim: moving ? "walk" : busy ? e.anim : "idle", text: busy ? e.text : "", heading: Math.atan2(e.pos[0] - prev[0], e.pos[1] - prev[1]) };
-}
-
-function pose(f, anim, clock) {
-  const arm = f.userData.arm, body = f.userData.body;
-  f.rotation.x = 0; f.position.y = 0; arm.rotation.x = 0; arm.rotation.z = 0; body.scale.y = 1;
-  const s = clock * 8;
-  if (anim === "walk" || anim === "run") { f.position.y = Math.abs(Math.sin(s * (anim === "run" ? 2 : 1))) * 0.15; arm.rotation.x = Math.sin(s) * 0.6; }
-  else if (["chop", "hammer", "mine", "dig", "cut"].includes(anim)) arm.rotation.x = -1.4 + Math.sin(s * 1.5) * 1.1;
-  else if (anim === "sleep") { f.rotation.x = -Math.PI / 2; f.position.y = 0.45; }
-  else if (anim === "sit" || anim === "read" || anim === "eat" || anim === "craft") { body.scale.y = 0.75; arm.rotation.x = -0.9 + Math.sin(s * 0.5) * 0.1; }
-  else if (anim === "speak" || anim === "judge" || anim === "talk" || anim === "sing") arm.rotation.z = 0.6 + Math.sin(s * 0.7) * 0.3;
-  else if (anim === "forage" || anim === "fish" || anim === "twist") arm.rotation.x = -0.7 + Math.sin(s) * 0.3;
-}
-
-function hourOf(t) { return ((t % 1440) + 1440) % 1440 / 60; }
-function sky(h, weather) {
-  const day = Math.max(0, Math.sin((h - 6) / 12 * Math.PI));
-  const wet = /rain|drizzle|fog|grey/.test(weather);
-  const c = new THREE.Color().setHSL(0.58, wet ? 0.12 : 0.45, 0.08 + day * (wet ? 0.5 : 0.62));
-  if (h > 17 && h < 20.5) c.lerp(new THREE.Color(0xe0905a), 0.35 * (1 - Math.abs(h - 18.7) / 1.8));
-  scene.background = c; scene.fog.color = c;
-  scene.fog.near = /fog/.test(weather) ? 30 : 200; scene.fog.far = /fog/.test(weather) ? 180 : 700;
-  sun.intensity = 0.15 + day * (wet ? 0.6 : 1.3); hemi.intensity = 0.25 + day * 0.7;
-  const a = (h - 6) / 12 * Math.PI;
-  sun.position.set(Math.cos(a) * 200, 40 + Math.sin(a) * 220, -80); sun.target.position.set(0, 0, 0);
-}
-
-function showCaption(text, big = false) { $("caption").textContent = text; $("caption").classList.add("show"); $("caption").style.fontSize = big ? "19px" : "17px"; captionUntil = performance.now() + 6000; }
-
-let last = performance.now(), lastEv = -1;
-function frame(ms) {
-  const dt = (ms - last) / 1000; last = ms;
-  if (S) {
-    if (playing) now = Math.min(S.end - S.start, now + dt * 60 / (60 / +$("speed").value) );
-    if (now >= S.end - S.start) playing = false, $("play").textContent = "Play";
-    $("scrub").value = now;
-    const t = T0 + now, h = hourOf(t);
-    const wx = (S.weather.filter((w) => w.t <= t).pop() || S.weather[0] || {}).weather || "";
-    sky(h, wx);
-    const day = Math.floor(t / 1440) + 1;
-    $("clock").textContent = `day ${day}, ${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor((h % 1) * 60)).padStart(2, "0")} - ${wx}`;
-    const k = kingAt(t), kf = figures.king;
-    kf.position.copy(V(k.pos[0], k.pos[1])); if (k.anim === "walk") kf.rotation.y = k.heading;
-    pose(kf, k.anim, ms / 1000);
-    $("doing").textContent = k.text ? k.text : k.anim === "sleep" ? "Aldric is asleep." : "Aldric is between things.";
-    if (follow) { const tgt = V(k.pos[0], k.pos[1], 1); controls.target.lerp(tgt, 0.05); }
-    for (const [key, f] of Object.entries(figures)) {
-      const p = f.userData.who; if (!p) continue;
-      const atWork = h >= 7 && h < 19, j = hash(p.handle);
-      const base = atWork ? p.work_pos : p.home_pos;
-      const r = atWork ? 3 + j % 9 : 1.5, a = j % 628 / 100 + (atWork ? ms / 9000 : 0);
-      f.position.copy(V(base[0] + Math.cos(a) * r, base[1] + Math.sin(a) * r));
-      f.visible = p.condition !== "jailed" && (atWork || p.home.tent !== undefined || h < 7 ? true : h < 22);
-      pose(f, p.condition === "wounded" || !atWork && h >= 22 ? "sleep" : atWork ? ["chop", "hammer", "forage"][j % 3] : "idle", ms / 1000 + j);
-    }
-    if (figures.crowd) figures.crowd.visible = h >= 7 && h < 19;
-    const evs = S.events; let idx = -1;
-    for (let i = 0; i < evs.length; i++) if (evs[i].t <= t) idx = i;
-    if (idx !== lastEv) {
-      document.querySelectorAll(".ev").forEach((el, i) => el.classList.toggle("past", i < idx));
-      if (idx > lastEv && idx >= 0 && evs[idx].public && evs[idx].drama >= 1) showCaption(evs[idx].text, evs[idx].drama >= 2);
-      lastEv = idx;
-    }
-    if (performance.now() > captionUntil) $("caption").classList.remove("show");
-  }
-  controls.update();
-  renderer.render(scene, camera);
-  const w = renderer.domElement.clientWidth, hh = renderer.domElement.clientHeight;
-  for (const l of labels) {
-    const p = l.pos.clone().project(camera);
-    const vis = p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1;
-    l.el.style.display = vis ? "block" : "none";
-    if (vis) { l.el.style.left = `${(p.x + 1) / 2 * w}px`; l.el.style.top = `${(1 - p.y) / 2 * hh}px`; }
-  }
-  requestAnimationFrame(frame);
-}
-
-function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-window.addEventListener("resize", resize); resize();
-
-const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
-renderer.domElement.addEventListener("pointermove", (ev) => {
-  mouse.set(ev.clientX / innerWidth * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
-  ray.setFromCamera(mouse, camera);
-  const hit = ray.intersectObjects(world.children, true).find((h) => h.object.userData && h.object.userData.tip);
-  const tip = $("tip");
-  if (hit) { tip.innerHTML = hit.object.userData.tip; tip.style.display = "block"; tip.style.left = `${ev.clientX + 14}px`; tip.style.top = `${ev.clientY + 14}px`; }
-  else tip.style.display = "none";
-});
-
-$("play").addEventListener("click", () => { if (S && now >= S.end - S.start) now = 0; playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; });
-$("scrub").addEventListener("input", (e) => { now = +e.target.value; });
-$("follow").addEventListener("click", () => { follow = !follow; $("follow").textContent = follow ? "Following Aldric" : "Free camera"; $("follow").setAttribute("aria-pressed", String(follow)); });
-function load(text) { try { build(JSON.parse(text)); } catch (e) { $("doing").textContent = `That file isn't a scene: ${e.message}`; } }
-$("file").addEventListener("change", (e) => e.target.files[0]?.text().then(load));
-window.addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("show"); });
-window.addEventListener("dragleave", (e) => { if (e.target === $("drop")) $("drop").classList.remove("show"); });
-window.addEventListener("drop", (e) => { e.preventDefault(); $("drop").classList.remove("show"); e.dataTransfer.files[0]?.text().then(load); });
-
-const embedded = JSON.parse($("scene-data").textContent);
-if (embedded) build(embedded); else { $("empty").classList.add("show"); $("doing").textContent = "No scene loaded yet."; }
-requestAnimationFrame(frame);
-</script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

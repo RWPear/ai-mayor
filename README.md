@@ -4,8 +4,8 @@
 
 **New start (default in the living world):** the AI begins with nothing - a leaky shack in a field - and
 builds a kingdom by hand while followers arrive every week. See [docs/FRONTIER.md](docs/FRONTIER.md).
-Try it: `./kingdom test --scenario scenarios/frontier.yaml --reports`, then `./kingdom view` to watch the
-last day in 3D (viewer/index.html plays any `dayNNN.scene.json`).
+Try it: `./kingdom test --scenario scenarios/frontier.yaml --reports`, then `./kingdom serve` to walk around
+it in 3D, and `./kingdom record` for timelapses of the town growing (docs/WORLD.md).
 
 An AI king rules Emberfall, a kingdom whose subjects are real followers. Following moves you in and
 gives you a trade. Comments on each post are that day's actions (WORK, TRADE, TRAIN, GRUMBLE..., or
@@ -75,6 +75,8 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
   living/        the living world: world.py (clock, loop, GPU budget), agents.py (the minds), tools.py,
                  frontier.py + frontier_tools.py (the default start: alone in a shack, docs/FRONTIER.md),
                  scene.py (coordinates + a timeline per post for the 3D view, docs/SCENE.md),
+  recorder.py    ./kingdom serve and ./kingdom record (headless Chrome + ffmpeg timelapses)
+viewer/          the 3D world (three.js): terrain, buildings, people, cameras (docs/WORLD.md)
                  town.py (places, improvements, castle rooms), life.py (needs, passions, works, court,
                  docket), warcamp.py (the warlord's economy), intents.py (own-words comments, fights,
                  thefts, gifts), chronicle.py
@@ -84,6 +86,7 @@ seeds/           season plans for the living world (only the bones - the minds d
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going), LIVING.md (the living world),
                  ROLES.md (anyone can be anything), COMMENTS.md (reading comments, default replies),
                  FRONTIER.md (building a kingdom from nothing), SCENE.md (the 3D hand-off),
+                 WORLD.md (the 3D world, cameras and recorders),
                  COMMENTS.md (how comments are read: keywords, stories, trolls)
 packs/           command packs for posts
 scenarios/       test scenarios
