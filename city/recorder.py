@@ -10,7 +10,6 @@ day N at hh:mm from recorder X (window.kingdom.show), takes a screenshot, and ff
 
 On brainbox:  pip install playwright && python -m playwright install chromium   (and apt install ffmpeg)
 """
-import functools
 import http.server
 import json
 import shutil
@@ -136,26 +135,22 @@ def record(days, names=None, every=None, size="1280x720", quality="high", fps=10
         for rec in recs:
             folder = out / rec["name"]
             folder.mkdir(exist_ok=True)
-            for old in folder.glob("*.png"):
-                if only_day is None:
+            for d in index:                         # frames are named by day and time: re-recording a day replaces it
+                for old in folder.glob(f"day{d['day']:03d}_*.png"):
                     old.unlink()
-            n = len(list(folder.glob("*.png")))
-            for d in index:
                 for minute in _times(rec, every):
                     page.evaluate("(a) => window.kingdom.show(a)", {"day": d["day"], "minute": minute,
                                                                     "recorder": rec["name"], "frames": 4})
-                    n += 1
-                    name = folder / f"{n:05d}_day{d['day']:03d}_{minute // 60:02d}{minute % 60:02d}.png"
-                    page.screenshot(path=str(name))
-            made[rec["name"]] = n
-            print(f"  {rec['name']}: {n} frames")
+                    page.screenshot(path=str(folder / f"day{d['day']:03d}_{minute // 60:02d}{minute % 60:02d}.png"))
+            made[rec["name"]] = len(list(folder.glob("day*.png")))
+            print(f"  {rec['name']}: {made[rec['name']]} frames")
         browser.close()
     srv.shutdown()
     videos = []
     if shutil.which("ffmpeg"):
         for name in made:
             folder = out / name
-            frames = sorted(folder.glob("*.png"))
+            frames = sorted(folder.glob("day*.png"))
             if len(frames) < 2:
                 continue
             listing = folder / "frames.txt"

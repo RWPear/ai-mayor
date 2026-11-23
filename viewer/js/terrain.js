@@ -335,6 +335,7 @@ export class Land {
     const fc = U.horizon.value.clone();
     this.scene.fog.color.copy(fc);
     this.scene.fog.density = fog ? 0.02 : wet ? 0.0045 : grey ? 0.0018 : 0.0011;
+    if (this.recording) this.scene.fog.density = Math.min(this.scene.fog.density, 0.0035);   // a timelapse must see the town
     this.sky.visible = true;
     this.scene.background = null;
     if (TEX.water) { TEX.water.offset.y = this.uniforms.uTime.value * 0.04; TEX.water.offset.x = Math.sin(this.uniforms.uTime.value * 0.2) * 0.02; }

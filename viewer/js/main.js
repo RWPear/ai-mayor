@@ -72,6 +72,7 @@ async function showDay(i, keepTime = false) {
   S = data;
   if (!land) {
     land = new Land(scene, S, QUALITY);
+    land.recording = RECORD;
     nature = new Nature(scene, land, S);
     rig = new Rig(camera, renderer.domElement, land);
     crowd = new Crowd(scene, QUALITY === "low" ? 220 : 600);
@@ -456,7 +457,8 @@ window.kingdom = {
     const i = index.days.findIndex((d) => d.day === day);
     if (i < 0) throw new Error(`no day ${day}`);
     if (i !== dayIx || !S) await showDay(i);
-    const t = Math.floor(S.start / 1440) * 1440 + minute + (minute < (S.start % 1440) ? 1440 : 0);
+    let t = Math.floor(S.start / 1440) * 1440 + minute;          // the first time of day `minute` inside this post
+    if (t < S.start) t += 1440;
     now = clamp(t - S.start, 0, S.end - S.start);
     const r = typeof recorder === "object" ? recorder : index.recorders.find((x) => x.name === recorder) || index.recorders[0];
     rig.set("recorder", { recorder: r });
