@@ -69,6 +69,46 @@ label.cont { color: var(--muted); font-size: 13px; white-space: nowrap; display:
 .label { position: fixed; left: 0; top: 0; font: 700 12.5px var(--display); letter-spacing: .08em; color: rgba(243,234,216,.85); white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.6); }
 #loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); letter-spacing: .08em; color: var(--muted); pointer-events: none; }
 body.ready #loading { display: none; }
+/* live (./kingdom play): the panel takes the right side; replay-only controls go away */
+#live { right: 16px; top: 16px; bottom: 16px; width: min(400px, calc(100vw - 32px)); display: grid; grid-template-rows: auto auto auto auto auto 1fr auto; gap: 9px; overflow: hidden; }
+#live[hidden], body.live #feed, body.live #shots, body.live #prev, body.live #next, body.live #scrub, body.live #speed,
+body.live #play, body.live label.cont { display: none !important; }
+body.live #bar { right: 432px; }
+body.live #bar .top { grid-template-columns: auto 1fr; }
+#live h2 { font: 700 13px/1 var(--display); letter-spacing: .1em; color: var(--accent); margin: 0; }
+#live .lhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#lclock { font: 500 14px var(--display); font-variant-numeric: tabular-nums; }
+#lstatus, .muted { color: var(--muted); font-size: 13px; }
+#lwords { font-size: 13px; color: var(--muted); }
+#lform { display: grid; gap: 6px; }
+#lform label { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); }
+#lhandle, #ltext, #live textarea { font: 14px var(--body); color: var(--ink); background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; box-sizing: border-box; resize: vertical; }
+#live summary { cursor: pointer; font-size: 13px; }
+#lexamples { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+#lexamples .ex { font-size: 12px; padding: 3px 8px; font-weight: 500; }
+.lfeed[hidden] { display: none; }
+.lfeed { overflow-y: auto; display: grid; align-content: start; gap: 6px; padding-right: 4px; min-height: 0; }
+.reply { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; display: grid; gap: 5px; }
+.reply header { font-size: 13px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.reply p { margin: 0; font-size: 14px; }
+.reply .badge { margin-left: auto; font-size: 11.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.reply.pending { border-color: rgba(226,180,72,.55); }
+.reply.pending .badge { color: var(--accent); border-color: var(--accent); }
+.reply.approved .badge { color: #9fd38a; border-color: #9fd38a; }
+.reply.rejected { opacity: .55; }
+.reply button { padding: 4px 10px; font-size: 12.5px; }
+.lm { font-size: 13.5px; line-height: 1.35; border-left: 3px solid transparent; padding-left: 8px; }
+.lm .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.lm.comment { color: var(--accent); }
+.lm.post { font-weight: 700; border-left-color: var(--accent); }
+.lm.secret { color: var(--muted); }
+.lm.d2 { border-left-color: var(--accent); }
+.lm.d3 { border-left-color: var(--danger); }
+#lerror { white-space: normal; }
+@media (max-width: 760px) {
+  #live { top: auto; height: 55vh; }
+  body.live #bar, body.live #hud { display: none; }
+}
 @media (max-width: 760px) {
   #feed { top: auto; bottom: 200px; max-height: 24vh; }
   #shots { display: none; }
@@ -94,6 +134,37 @@ body.ready #loading { display: none; }
 </section>
 <section id="feed" class="panel"><h2>The last 24 hours</h2><div id="events"></div></section>
 <section id="shots" class="panel"><h2>The post's three shots</h2><div class="row" id="shotbtns"></div></section>
+<section id="live" class="panel" hidden aria-label="Live kingdom">
+  <div class="lhead"><h2>Live</h2><span id="lclock"></span></div>
+  <div id="lstatus"></div>
+  <div class="row" id="lctl">
+    <button id="lpause" type="button" aria-pressed="false">Pause</button>
+    <select id="lspeed" aria-label="How fast the game runs">
+      <option value="slow">a day = 48 min</option>
+      <option value="normal">a day = 24 min</option>
+      <option value="fast">a day = 6 min</option>
+      <option value="faster">a day = 1 min</option>
+    </select>
+    <button id="lstep" type="button" title="One half-hour tick (while paused)">+30 min</button>
+    <button id="lclose" type="button" title="Run to 19:00 and close today's post now">Close today's post</button>
+    <button id="larrive" type="button" title="Testing: everyone on the road arrives now instead of on arrival day">Bring the road in</button>
+  </div>
+  <div id="lwords"></div>
+  <form id="lform">
+    <label for="lhandle">Comment as <input id="lhandle" list="lhandles" placeholder="any_handle" autocomplete="off" spellcheck="false"></label>
+    <datalist id="lhandles"></datalist>
+    <textarea id="ltext" rows="2" aria-label="Your comment"></textarea>
+    <details><summary class="muted">Ideas</summary><div id="lexamples"></div></details>
+    <div class="row" style="align-items:center"><button type="submit">Comment</button><span id="lsent" class="muted"></span></div>
+  </form>
+  <div class="row" id="ltabs" style="align-items:center">
+    <button type="button" data-tab="replies" aria-pressed="true">Replies <span id="lpending"></span></button>
+    <button type="button" data-tab="log" aria-pressed="false">What happened</button>
+    <label class="muted" style="display:flex;gap:6px;align-items:center"><input id="lmine" type="checkbox"> only mine</label>
+  </div>
+  <div style="min-height:0;display:grid"><div id="lreplies" class="lfeed"></div><div id="llog" class="lfeed" hidden></div></div>
+  <div id="lerror" class="chip warn" hidden></div>
+</section>
 <div id="caption" class="panel"></div>
 <div id="tip" class="panel"></div>
 <section id="bar" class="panel">

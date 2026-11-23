@@ -13,8 +13,10 @@ import { Person, Crowd } from "./people.js";
 import { Rig, MODES } from "./camera.js";
 import { hash, rng, clamp } from "./noise.js";
 
+import { startLive, api as liveApi } from "./live.js";
 const params = new URLSearchParams(location.search);
 const RECORD = params.has("record");
+const LIVE = params.has("live");
 const QUALITY = params.get("quality") || (matchMedia("(max-width: 700px)").matches ? "low" : "high");
 const $ = (id) => document.getElementById(id);
 if (RECORD || params.get("hud") === "0") document.body.classList.add("nohud");
@@ -36,9 +38,16 @@ makeTextures();
 const index = { days: [], recorders: [] };
 let S = null, land = null, nature = null, rig = null, town = null, people = [], crowd = null, king = null;
 let now = 0, playing = !RECORD, speed = 6, lastEv = -1, captionUntil = 0, dayIx = 0;
-let smoke = null, fires = [], flags = [], lights = [], timed = [], projects = [], staged = [];
+let smoke = null, fires = [], flags = [], lights = [], timed = [], projects = [], staged = [], piles = null;
+let live = null, liveClock = null, liveRate = 1;
 
 async function loadIndex() {
+  if (LIVE) {                                  // ./kingdom play: today so far, straight from the running world
+    try { const d = await liveApi("/live/scene"); if (d) index.days = [{ day: d.day, data: d }]; } catch (e) { /* not running */ }
+    try { const r = await fetch("recorders.json"); if (r.ok) index.recorders = await r.json(); } catch (e) { /* defaults */ }
+    if (!index.recorders.length) index.recorders = DEFAULT_RECORDERS;
+    return;
+  }
   const embedded = JSON.parse($("scene-data").textContent || "null");
   if (embedded) index.days = (Array.isArray(embedded) ? embedded : [embedded]).map((d) => ({ day: d.day, data: d }));
   else {
@@ -115,7 +124,7 @@ async function showDay(i, keepTime = false) {
     projects.push({ p, mesh: null, shown: -1 });
   }
   town.add(tentsMesh(S.tents, land, ctx));
-  town.add(pilesMesh(S.piles, land));
+  piles = pilesMesh(S.piles, land); town.add(piles);
   if (S.peddler) { const cart = cartMesh(S.peddler.pos, land); cart.userData.until = S.peddler.until; town.add(cart); timed.push({ at: S.peddler.until, after: new THREE.Group(), before: cart, peddler: true }); }
   land.paint(S.trails || [], lots);
   land.placeGrass(lots, S.trails || []);
@@ -299,8 +308,9 @@ function makePool(where, proj) {
     }
   } else if (where === "field") {
     for (const b of S.buildings.filter((x) => x.shape === "plot" && x.state === "standing")) {      // one per row-step
-      const [w, d] = b.size;
-      for (let x = -w / 2 + 1.1; x < w / 2; x += 2.5) for (let z = -d / 2 + 1.1; z < d / 2; z += 2.6) out.push({ pos: [b.pos[0] + x, b.pos[1] + z], face: null, anim: "forage" });
+      const [w, d] = (b.rot || 0) % 180 ? [b.size[1], b.size[0]] : b.size, hw = w / 2 + 0.9, hd = d / 2 + 0.9;
+      for (let x = -hw + 0.8; x < hw; x += 2.2) for (const sz of [-1, 1]) out.push({ pos: [b.pos[0] + x, b.pos[1] + sz * hd], face: [b.pos[0] + x, b.pos[1]], anim: "forage" });   // along the beds' edges
+      for (let z = -hd + 2; z < hd - 1; z += 2.4) for (const sx of [-1, 1]) out.push({ pos: [b.pos[0] + sx * hw, b.pos[1] + z], face: [b.pos[0], b.pos[1] + z], anim: "forage" });
     }
     out.excl = out.length;
     for (let k = 0; k < 140; k++) { const a = R() * 6.28, r = 14 + R() * 40; out.push({ pos: [land.field[0] + Math.cos(a) * r, land.field[1] + Math.sin(a) * r], face: null, anim: R() < 0.5 ? "cut" : "forage" }); }
@@ -356,8 +366,12 @@ let last = performance.now();
 const tmp = new THREE.Vector3();
 function step(dtReal) {
   if (!S) return;
-  if (playing) now += dtReal * speed;
-  if (now >= S.end - S.start) {
+  if (LIVE) {                                  // follow the world's clock: smoothly up to where it is now
+    const target = (liveClock ?? S.end) - S.start;
+    now = Math.min(target, now + dtReal * Math.max(liveRate, (target - now) > 45 ? 30 : 0));
+    if (target - now > 150) now = target - 30;
+  } else if (playing) now += dtReal * speed;
+  if (!LIVE && now >= S.end - S.start) {
     if (playing && dayIx < index.days.length - 1 && $("cont").checked) { showDay(dayIx + 1); return; }
     now = S.end - S.start; playing = false; syncPlay();
   }
@@ -414,11 +428,12 @@ function step(dtReal) {
       const st = settlerAt(p, t);
       if (st.hidden) return { hidden: true, x: 0, y: -50, z: 0, heading: 0, bob: 0 };
       const y = land.height(st.pos[0], st.pos[1]);
-      const bob = st.walk ? Math.abs(Math.sin(clock * 9 + p.j)) * 0.12 : 0;           // only walking bobs
+      const bob = st.walk ? Math.abs(Math.sin(clock * 9 + p.j)) * 0.05 : 0;           // only walking bobs (and steps)
       const swing = (Math.sin(clock * 4.5 + p.j) + 1) / 2;
       const lean = st.walk ? -0.08 : st.anim === "chop" || st.anim === "mine" || st.anim === "hammer" ? -0.05 - swing * 0.22
         : st.anim === "forage" || st.anim === "dig" || st.anim === "cut" ? -0.3 - swing * 0.12 : st.anim === "fish" ? -0.05 : 0;
-      return { x: st.pos[0], y: y + (st.sit || st.anim === "sit" ? -0.22 : 0), z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100, bob, lean, lie: st.lie };
+      return { x: st.pos[0], y: y + (st.sit || st.anim === "sit" ? -0.3 : 0), z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100, bob, lean, lie: st.lie,
+        stride: st.walk ? Math.sin(clock * 9 + p.j) * 0.7 : 0, sit: st.sit || st.anim === "sit" };
     }));
   }
   // night: windows, fires, smoke
@@ -459,7 +474,7 @@ function directorShot(t, k) {
 // ------------------------------------------------------------------ HUD
 function buildHud() {
   const st = S.settlement;
-  $("title").textContent = `${S.city}, day ${S.day}`;
+  $("title").textContent = `${S.city}, day ${LIVE ? S.day + 1 : S.day}`;
   const chips = [[st.crowned ? "crowned" : "not crowned"], [st.stage], [`${st.settled} settlers`], [`${st.beds} beds, ${st.free_beds} free`],
     st.tents ? [`${st.tents} in tents`, "warn"] : null, st.on_road ? [`${st.on_road} on the road`] : null, [`arrivals day ${st.next_arrival}`]].filter(Boolean);
   $("stats").innerHTML = chips.map(([t, c]) => `<span class="chip ${c || ""}">${esc(t)}</span>`).join("");
@@ -563,6 +578,35 @@ function setMode(m) {
   syncMode();
 }
 
+// ------------------------------------------------------------------ live (./kingdom play)
+// A new scene arrives every tick. Only rebuild the town when something you'd see changed shape (a building
+// finished, a project started, a tent went up, new people); otherwise swap the data in place so nothing pops.
+const shapeOf = (d) => JSON.stringify([d.day, d.start, d.settlement.crowned, d.tents.length, d.actors.settlers.length,
+  Object.values(d.actors.crowd.day || {}).reduce((a, b) => a + b, 0) >> 3,
+  d.buildings.map((b) => [b.id, b.state, b.built_t, (b.upgrades || []).length]), d.projects.map((p) => p.id), !!d.peddler]);
+let liveShape = "";
+async function liveScene(d) {
+  const sh = shapeOf(d);
+  if (!S || sh !== liveShape) {
+    liveShape = sh;
+    const keep = S && S.start === d.start ? now : null;
+    index.days = [{ day: d.day, data: d }];
+    await showDay(0, true);
+    if (keep !== null) now = keep; else now = Math.max(0, (liveClock ?? d.end) - d.start - 60);
+    return;
+  }
+  const old = S;
+  S = d; land.S = d;
+  for (const pr of projects) pr.p = d.projects.find((p) => p.id === pr.p.id) || pr.p;
+  if (piles) town.remove(piles);
+  piles = pilesMesh(S.piles, land); town.add(piles);
+  if (old.events.length !== d.events.length) buildHud();
+}
+function liveState(st) {
+  if (liveClock === null && S) now = Math.max(0, st.clock - S.start - 1);   // open on "now", not the start of the day
+  liveClock = st.clock; liveRate = st.paused ? 0 : st.tick_min / st.tick_s;
+}
+
 // ------------------------------------------------------------------ the recorder's handle (headless capture)
 window.kingdom = {
   days: () => index.days.map((d) => d.day),
@@ -587,6 +631,7 @@ window.kingdom = {
   await loadIndex();
   if (!index.days.length) { $("empty").classList.add("show"); $("doing").textContent = "No scene loaded yet."; requestAnimationFrame(frame); return; }
   await showDay(index.days.length - 1);
+  if (LIVE) { liveShape = shapeOf(S); live = startLive({ onScene: (d) => liveScene(d), onState: liveState }); }
   if (!RECORD) { rig.set("follow"); syncMode(); }
   syncPlay();
   document.body.classList.add("ready");

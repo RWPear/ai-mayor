@@ -6,6 +6,8 @@
 builds a kingdom by hand while followers arrive every week. See [docs/FRONTIER.md](docs/FRONTIER.md).
 Try it: `./kingdom test --scenario scenarios/frontier.yaml --reports`, then `./kingdom serve` to walk around
 it in 3D, and `./kingdom record` for timelapses of the town growing (docs/WORLD.md).
+**Play it live:** `./kingdom play --fresh` runs the kingdom on a real clock in your browser; comment as any
+follower and approve the kingdom's replies (docs/PLAY.md).
 
 An AI king rules Emberfall, a kingdom whose subjects are real followers. Following moves you in and
 gives you a trade. Comments on each post are that day's actions (WORK, TRADE, TRAIN, GRUMBLE..., or
@@ -86,7 +88,7 @@ seeds/           season plans for the living world (only the bones - the minds d
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going), LIVING.md (the living world),
                  ROLES.md (anyone can be anything), COMMENTS.md (reading comments, default replies),
                  FRONTIER.md (building a kingdom from nothing), SCENE.md (the 3D hand-off),
-                 WORLD.md (the 3D world, cameras and recorders),
+                 WORLD.md (the 3D world, cameras and recorders), PLAY.md (the live test in your browser),
                  COMMENTS.md (how comments are read: keywords, stories, trolls)
 packs/           command packs for posts
 scenarios/       test scenarios

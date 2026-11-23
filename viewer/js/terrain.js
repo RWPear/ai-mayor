@@ -5,16 +5,59 @@ import { fbm, smoothstep, distToPath, distToSeg, rng, clamp, hash } from "./nois
 
 export const V = (x, z, y = 0) => new THREE.Vector3(x, y, -z);   // world (x east, z north) -> three (x, y, -z)
 
-export function farColor(x, z, c = new THREE.Color()) {
-  return c.setHex(C.grass).lerp(new THREE.Color(C.grassDry), clamp(fbm(x * 0.04 + 9, z * 0.04, 3) + 0.35, 0, 1) * 0.7)
-    .lerp(new THREE.Color(C.grassDark), clamp(fbm(x * 0.006, z * 0.006, 2) + 0.2, 0, 1) * 0.5);
-}
+// ------------------------------------------------------------------ the land around the valley
+// Emberfall sits in a broad valley floor. Behind it to the north a mountain range climbs to snow; a broken ridge
+// walls the west, and the river comes down through a gorge in it; low hills roll away east; the valley opens
+// south, where the old road leaves through a gap and the river widens into a lake. The settlement's own ground
+// (the field, the woods, the crag) is shaped in Land.height; this is everything around it.
+const RIVER_UP = [[-140, -84], [-200, -104], [-270, -96], [-360, -60], [-470, -20], [-620, 40]];   // up the gorge
+const RIVER_DOWN = [[70, -160], [96, -196], [118, -218]];                                                    // into the lake
+const ROAD_OUT = [[22, -170], [26, -260], [40, -420], [70, -700]];                              // out to the south
+export const LAKE = { pos: [128, -226], rx: 64, rz: 44 };
+const ridged = (x, z, oct = 4) => 1 - Math.abs(fbm(x, z, oct)) * 2.2;
 
-// the country beyond the map: flat at the edge, rolling further out, blue hills on the horizon
-export function farHeight(x, z) {
-  const r = Math.hypot(x, z);
-  return -0.6 + fbm(x * 0.004, z * 0.004, 3) * 14 * smoothstep(240, 900, r) + Math.max(0, fbm(x * 0.0015 + 4, z * 0.0015, 3) + 0.2) * 220 * smoothstep(650, 1500, r);
+export function landform(x, z) {
+  const dc = Math.hypot(x - 20, z - 5);
+  const open = smoothstep(90, 190, dc);                                   // the valley floor stays gentle
+  let h = (fbm(x * 0.006 + 3, z * 0.006, 3) + 0.18) * 26 * open;          // rolling country
+  h += Math.max(0, fbm(x * 0.0022 + 11, z * 0.0022, 3) + 0.05) * 70 * smoothstep(260, 700, dc);
+  // the mountains: north, curling a little east and west
+  const N = z + 0.12 * x - 0.0004 * x * x;
+  const m = smoothstep(230, 720, N);
+  if (m > 0) {
+    const rg = Math.max(0, ridged(x * 0.0021 + 7, z * 0.0021, 5));
+    h += m * (60 + 420 * rg * rg + 160 * m) + m * fbm(x * 0.01, z * 0.01, 3) * 40;
+  }
+  // the broken ridge in the west, behind the woods
+  const W = -x - 0.25 * z;
+  const w = smoothstep(150, 250, W) * (1 - m * 0.5);
+  if (w > 0) h += w * (34 + 60 * Math.max(0, ridged(x * 0.006 + 2, z * 0.006, 4))) * (0.6 + 0.4 * smoothstep(150, 400, W));
+  // the river's gorge and the road's gap keep low; the lake sits in a basin
+  const gorge = smoothstep(8, 70, distToPath(x, z, RIVER_UP));
+  const gap = smoothstep(14, 90, distToPath(x, z, ROAD_OUT));
+  h *= gorge * (0.35 + 0.65 * gap);
+  if (gorge < 0.45) h = Math.min(h, -3 + gorge * 8);
+  const dl = Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz);
+  if (dl < 1.6) h = h * smoothstep(0.9, 1.6, dl) + (dl < 1 ? -2.6 * (1 - dl) - 0.9 : 0);
+  const dd = distToPath(x, z, RIVER_DOWN);
+  if (dd < 16) h = Math.min(h, -1.6 + dd * 0.1);
+  return h;
 }
+export const farHeight = landform;
+
+// colour by what the ground is: meadow low down, darker grass and scrub up the hills, bare rock where it's steep
+// or high, snow on the peaks
+export function landColor(x, z, y, steep, c = new THREE.Color()) {
+  c.setHex(C.grass).lerp(new THREE.Color(C.grassDry), clamp(fbm(x * 0.02 + 9, z * 0.02, 3) + 0.35, 0, 1) * 0.6)
+    .lerp(new THREE.Color(C.grassDark), clamp(fbm(x * 0.004, z * 0.004, 2) + 0.15, 0, 1) * 0.55);
+  c.lerp(new THREE.Color(C.grassDark), smoothstep(25, 90, y) * 0.6);
+  const rockAmt = Math.max(smoothstep(0.22, 0.5, steep), smoothstep(120, 200, y + fbm(x * 0.01, z * 0.01) * 40));
+  c.lerp(new THREE.Color(C.rock).offsetHSL(0, 0, -0.06), rockAmt);
+  const snow = smoothstep(190, 240, y + fbm(x * 0.008, z * 0.008, 3) * 60) * (1 - smoothstep(0.55, 0.85, steep));
+  c.lerp(new THREE.Color(0xf4f6fb), snow);
+  return c;
+}
+export const farColor = (x, z, c) => landColor(x, z, landform(x, z), 0, c);
 
 export class Land {
   constructor(scene, S, quality) {
@@ -41,8 +84,17 @@ export class Land {
     let h = fbm(x * 0.012, z * 0.012, 4) * 2.4 + fbm(x * 0.05, z * 0.05, 2) * 0.35;
     const flat = smoothstep(30, 70, Math.hypot(x - this.field[0], z - this.field[1])) * smoothstep(8, 24, Math.hypot(x, z));
     h *= 0.25 + 0.75 * flat;                                         // the field and the shack sit on flat ground
-    const dh = Math.hypot(x - H.pos[0], z - H.pos[1]) / (H.r * 1.35);
-    if (dh < 1) h += H.height * Math.pow(1 - dh * dh, 1.6) + fbm(x * 0.15, z * 0.15, 2) * 0.8 * (1 - dh);
+    // the crag: steep rock sides and a flat top - where a castle belongs
+    // the crag: a flat top ringed by cliffs, with one long grassy ramp down toward the field - the way up
+    const cx = x - H.pos[0], cz = z - H.pos[1], d0 = Math.hypot(cx, cz);
+    const tf = [this.field[0] - H.pos[0], this.field[1] - H.pos[1]], tl = Math.hypot(...tf) || 1;
+    const toward = d0 > 0.01 ? Math.max(0, (cx * tf[0] + cz * tf[1]) / (d0 * tl)) : 0;
+    const dh = d0 / (H.r * 1.35) / (1 + 1.1 * Math.pow(toward, 3));
+    if (dh < 1.3) {
+      const edge = dh + fbm(x * 0.07, z * 0.07, 2) * 0.1;
+      const top = 1 - smoothstep(0.42, 0.62 + 0.3 * Math.pow(toward, 3), edge);
+      h += H.height * 1.3 * top + H.height * 0.2 * (1 - smoothstep(0.6, 1.3, dh)) + fbm(x * 0.2, z * 0.2, 2) * 0.6;
+    }
     const dr = distToPath(x, z, this.river.path);
     const w = this.river.width / 2;
     h -= 2.4 * (1 - smoothstep(w * 0.6, w + 5, dr));                 // the river cuts a bed
@@ -50,8 +102,8 @@ export class Land {
     const dw = Math.hypot(x - this.woods.pos[0], z - this.woods.pos[1]) / (this.woods.r * 1.3);
     if (dw < 1) h += 0.8 * (1 - dw);                                 // the woods rise a little
     const r = Math.hypot(x, z);
-    if (r > 175) h = h + (farHeight(x, z) - h) * smoothstep(175, 202, r);   // blend into the country beyond
-    return h;
+    const L = landform(x, z);
+    return L + h * (1 - smoothstep(175, 202, r));                    // and the country all around
   }
 
   buildGround() {
@@ -88,13 +140,22 @@ export class Land {
       if (FLAT) { x = (x + pos.getX(i0 + 1) + pos.getX(i0 + 2)) / 3; z = -(pos.getZ(i0) + pos.getZ(i0 + 1) + pos.getZ(i0 + 2)) / 3; y = (y + pos.getY(i0 + 1) + pos.getY(i0 + 2)) / 3; }
       const i = i0;
       const n = fbm(x * 0.04 + 9, z * 0.04, 3);
-      c.copy(grass).lerp(dry, clamp(n + 0.35, 0, 1) * 0.7);
+      c.copy(grass).lerp(dry, clamp(n + 0.35, 0, 1) * 0.7).lerp(dark, clamp(fbm(x * 0.004, z * 0.004, 2) + 0.15, 0, 1) * 0.55);
       const dw = Math.hypot(x - this.woods.pos[0], z - this.woods.pos[1]);
       c.lerp(dark, (1 - smoothstep(this.woods.r * 0.6, this.woods.r * 1.25, dw)) * 0.75);
-      const dr = distToPath(x, z, this.river.path);
+      const dr = Math.min(distToPath(x, z, this.river.path), distToPath(x, z, RIVER_UP), distToPath(x, z, RIVER_DOWN));
       c.lerp(sand, 1 - smoothstep(this.river.width / 2, this.river.width / 2 + 4, dr));
+      const dl = Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz);
+      c.lerp(sand, 1 - smoothstep(1.0, 1.12, dl));
       const hillUp = clamp((y - 3.5) / 7, 0, 1) * (1 - smoothstep(this.hill.r * 1.1, this.hill.r * 1.5, Math.hypot(x - this.hill.pos[0], z - this.hill.pos[1])));
-      c.lerp(rock, hillUp * (0.45 + 0.4 * clamp(fbm(x * 0.2, z * 0.2) + 0.5, 0, 1)));
+      c.lerp(rock, hillUp * 0.12);
+      if (FLAT) {                                                    // cliffs and steep slopes are bare rock
+        const ax = pos.getX(i0 + 1) - pos.getX(i0), ay = pos.getY(i0 + 1) - pos.getY(i0), az = pos.getZ(i0 + 1) - pos.getZ(i0);
+        const bx = pos.getX(i0 + 2) - pos.getX(i0), by = pos.getY(i0 + 2) - pos.getY(i0), bz = pos.getZ(i0 + 2) - pos.getZ(i0);
+        const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, steep = 1 - Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
+        c.lerp(rock, smoothstep(0.2, 0.45, steep));
+        if (y > 8) c.lerp(landColor(x, z, y, steep), smoothstep(8, 30, y) * smoothstep(110, 160, Math.hypot(x - 20, z - 5)));
+      }
       const droad = distToPath(x, z, this.road.path);
       c.lerp(dirt, (1 - smoothstep(this.road.width * 0.35, this.road.width * 0.75, droad)) * 0.95);
       if (camp && (this.S.tents || []).length) c.lerp(mud, (1 - smoothstep(10, 26, Math.hypot(x - camp[0], z - camp[1]))) * 0.75);
@@ -105,7 +166,7 @@ export class Land {
         if (d < w + 1) c.lerp(dirt, (1 - smoothstep(w * 0.4, w + 1, d)) * (0.35 + 0.55 * t.wear / maxWear));
       }
       const rr = Math.hypot(x, z);
-      if (rr > 165) c.lerp(farColor(x, z), smoothstep(165, 200, rr));                 // meet the country beyond seamlessly
+      if (rr > 165) c.lerp(landColor(x, z, y, 0), smoothstep(165, 200, rr));          // meet the country beyond seamlessly
       for (const L of lots) {                                                        // bare earth under buildings
         if (Math.abs(x - L.pos[0]) < L.hw + 1.5 && Math.abs(z - L.pos[1]) < L.hd + 1.5) c.lerp(dirt, 0.55);
       }
@@ -120,7 +181,7 @@ export class Land {
   }
 
   buildWater() {
-    const P = this.river.path, w = this.river.width / 2 + 1.5;
+    const P = [...RIVER_UP.slice(1).reverse(), ...this.river.path, ...RIVER_DOWN.slice(1)], w = this.river.width / 2 + 1.5;
     const pts = [];
     for (let i = 0; i < P.length - 1; i++) for (let k = 0; k < 12; k++) {
       const t = k / 12; pts.push([P[i][0] + (P[i + 1][0] - P[i][0]) * t, P[i][1] + (P[i + 1][1] - P[i][1]) * t]);
@@ -149,6 +210,9 @@ export class Land {
         normalScale: new THREE.Vector2(0.35, 0.35) }));
     this.water.receiveShadow = true;
     this.group.add(this.water);
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), this.water.material);
+    lake.scale.set(LAKE.rx * 1.05, 1, LAKE.rz * 1.05); lake.position.copy(V(LAKE.pos[0], LAKE.pos[1], -0.55));
+    lake.receiveShadow = true; this.group.add(lake); this.lake = lake;
   }
 
   // grass: a dense patch that travels with the camera. Each blade's place, height and colour come from a texture
@@ -282,13 +346,24 @@ export class Land {
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
     // the land doesn't stop at the edge of the map: rolling country and blue hills to the horizon
-    const far = new THREE.PlaneGeometry(5000, 5000, 120, 120); far.rotateX(-Math.PI / 2);
-    const fp = far.attributes.position, fc = new Float32Array(fp.count * 3), g1 = new THREE.Color(C.grass), g2 = new THREE.Color(C.grassDark);
+    // its grid lines up with the map's edge (every 30 m, or 70 on low), so the two meet without a seam: inside the
+    // map it hides under the ground, on the edge it sits just below the ground's rim, outside it is the land
+    const half = this.S.terrain.ground.size[0] / 2, cell = this.q === "low" ? 70 : 30, n = 2 * Math.ceil(2500 / cell);
+    let far = new THREE.PlaneGeometry(n * cell, n * cell, n, n); far.rotateX(-Math.PI / 2);
+    let fp = far.attributes.position;
     for (let i = 0; i < fp.count; i++) {
-      const x = fp.getX(i), z = -fp.getZ(i), r = Math.hypot(x, z);
-      fp.setY(i, r < 232 ? farHeight(x, z) - 2.5 : farHeight(x, z));      // tucked just under the map's edge
-      const c = farColor(x, z);
-      fc[i * 3] = c.r; fc[i * 3 + 1] = c.g; fc[i * 3 + 2] = c.b;
+      const x = fp.getX(i), z = -fp.getZ(i), q = Math.max(Math.abs(x), Math.abs(z));
+      fp.setY(i, farHeight(x, z) - (q < half - 1 ? 6 : q < half + 1 ? 0.5 : 0));
+    }
+    far = far.toNonIndexed(); fp = far.attributes.position;              // one colour per facet: big low-poly slopes
+    const fc = new Float32Array(fp.count * 3), col = new THREE.Color();
+    for (let i = 0; i < fp.count; i += 3) {
+      const x = (fp.getX(i) + fp.getX(i + 1) + fp.getX(i + 2)) / 3, z = -(fp.getZ(i) + fp.getZ(i + 1) + fp.getZ(i + 2)) / 3, y = (fp.getY(i) + fp.getY(i + 1) + fp.getY(i + 2)) / 3;
+      const ax = fp.getX(i + 1) - fp.getX(i), ay = fp.getY(i + 1) - fp.getY(i), az = fp.getZ(i + 1) - fp.getZ(i);
+      const bx = fp.getX(i + 2) - fp.getX(i), by = fp.getY(i + 2) - fp.getY(i), bz = fp.getZ(i + 2) - fp.getZ(i);
+      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, steep = 1 - Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
+      landColor(x, z, y, steep, col).offsetHSL(0, 0, ((hash(i) % 100) / 100 - 0.5) * 0.04);
+      for (let k = 0; k < 3; k++) { fc[(i + k) * 3] = col.r; fc[(i + k) * 3 + 1] = col.g; fc[(i + k) * 3 + 2] = col.b; }
     }
     far.setAttribute("color", new THREE.BufferAttribute(fc, 3)); far.computeVertexNormals();
     this.far = new THREE.Mesh(far, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: FLAT }));

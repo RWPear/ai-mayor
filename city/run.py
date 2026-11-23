@@ -308,6 +308,12 @@ def cmd_serve(args):
     serve(args.days, args.port)
 
 
+def cmd_play(args):
+    from .play import Play, serve
+    serve(Play(args.state, mayor=args.mayor, fresh=args.fresh, speed=args.speed, crowd=args.crowd, seed=args.seed),
+          args.port)
+
+
 def cmd_record(args):
     from .recorder import record
     record(args.days, names=args.recorders.split(",") if args.recorders else None, every=args.every, size=args.size,
@@ -360,6 +366,15 @@ def main():
     sv = sub.add_parser("serve", help="open the 3D world in your browser (http://localhost:8765)")
     sv.add_argument("--days", default="runs/latest/days", help="a run's days folder")
     sv.add_argument("--port", type=int, default=8765)
+    py = sub.add_parser("play", help="a live kingdom in your browser: comment as any follower, approve replies")
+    py.add_argument("--state", default="data/play", help="where it's saved (picks up where it left off)")
+    py.add_argument("--fresh", action="store_true", help="start a new kingdom (the king alone in his field)")
+    py.add_argument("--king", "--mayor", dest="mayor", default="rules", choices=["rules", "llm"])
+    py.add_argument("--speed", default="normal", choices=["slow", "normal", "fast", "faster"],
+                    help="a day takes 48 / 24 / 6 / about 1 minute (change it in the browser too)")
+    py.add_argument("--crowd", type=int, default=0, help="made-up followers commenting in the background")
+    py.add_argument("--seed", type=int, default=1)
+    py.add_argument("--port", type=int, default=8765)
     rc = sub.add_parser("record", help="timelapse videos from the recorders in content/recorders.yaml")
     rc.add_argument("--days", default="runs/latest/days", help="a run's days folder")
     rc.add_argument("--recorders", help="comma-separated names (default: all)")
@@ -383,7 +398,7 @@ def main():
     c.add_argument("--plan", default="seasons")
     args = p.parse_args()
     {"test": cmd_test, "day": cmd_day, "status": cmd_status, "plan": cmd_plan, "event": cmd_event,
-     "check": cmd_check, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record}[args.cmd](args)
+     "check": cmd_check, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record, "play": cmd_play}[args.cmd](args)
 
 
 if __name__ == "__main__":

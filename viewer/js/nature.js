@@ -3,7 +3,8 @@
 import * as THREE from "three";
 import { C, M } from "./materials.js";
 import { rng, hash, distToPath, fbm } from "./noise.js";
-import { V } from "./terrain.js";
+import { V, landform, LAKE } from "./terrain.js";
+import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
 
 export class Nature {
   constructor(scene, land, S) {
@@ -49,6 +50,33 @@ export class Nature {
     this.felled = -1; this.hauled = -1;
     this.setFelled(S.trees_felled || 0); this.setHauled(S.stones_hauled || 0);
     this.buildDecor(S);
+    this.buildFarForest();
+  }
+
+  // forests on the hills and the lower mountain slopes around the valley, so the country isn't bare
+  buildFarForest() {
+    const R = rng(77), spots = [];
+    for (let k = 0; k < 40000 && spots.length < 2600; k++) {
+      const a = R() * Math.PI * 2, r = 200 + Math.pow(R(), 0.7) * 1300;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (fbm(x * 0.006 + 40, z * 0.006, 3) < -0.02) continue;                     // in woods, with open slopes between
+      const y = landform(x, z);
+      if (y < 2 || y > 230) continue;
+      const sl = Math.abs(landform(x + 6, z) - y) + Math.abs(landform(x, z + 6) - y);
+      if (sl > 6) continue;                                                       // not on cliffs
+      if (Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz) < 1.3) continue;
+      spots.push([x, z, y, 0.8 + R() * 0.9]);
+    }
+    const cone = (r, h, y) => new THREE.ConeGeometry(r, h, 5).translate(0, y, 0);
+    const geo = BufferGeometryUtils.mergeGeometries([new THREE.CylinderGeometry(0.5, 0.7, 3, 4).translate(0, 1.5, 0), cone(3.4, 6, 5), cone(2.6, 5, 8.2), cone(1.7, 4, 11)]);
+    const mesh = new THREE.InstancedMesh(geo, M(0xffffff, null, { flatShading: true }), spots.length);
+    const o = new THREE.Object3D(), col = new THREE.Color();
+    spots.forEach(([x, z, y, sc], i) => {
+      o.position.copy(V(x, z, y - 0.5)); o.rotation.set(0, i, 0); o.scale.set(sc * 1.4, sc * 1.6, sc * 1.4); o.updateMatrix(); mesh.setMatrixAt(i, o.matrix);
+      mesh.setColorAt(i, col.setHex(hash(i * 7) % 9 === 0 ? C.leaf2 : C.pine).offsetHSL(0, 0, ((hash(i) % 100) / 100 - 0.5) * 0.08 - y / 2000));
+    });
+    mesh.castShadow = false; mesh.receiveShadow = true;
+    this.group.add(mesh); this.farForest = mesh;
   }
 
   // the little things that make a field look lived-in from far off: bushes, flowers, pebbles, a lone tree here

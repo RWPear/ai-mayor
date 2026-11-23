@@ -36,6 +36,11 @@ walls, turquoise water, a soft cyan sky, warm sun and soft blue shadows. Bushes,
 trees dot the meadow. `?style=textured` brings back the older painted look (planks, stones, thatch
 textures, dense grass).
 
+- **The valley:** Emberfall sits on a broad valley floor. A mountain range climbs to snow behind it in the
+  north, with pine forests on its lower slopes; a broken ridge walls the west, and the river comes down
+  through a gorge in it; low hills roll away east; the valley opens south, where the old road leaves through
+  a gap and the river widens into a lake. Near the field, the rocky hill is a crag: cliffs all round, a flat
+  top, and one long grassy ramp down toward the field. It's where a castle belongs.
 - **The land:**
   - real terrain: the field and the shack sit flat, the rocky hill rises with outcrops, and the river cuts a
     bed with sandy banks
@@ -60,9 +65,9 @@ textures, dense grass).
 - **The camp:** canvas tents in rows by the road, with campfires.
 - **The stores:** heaps by the shack (or the storehouse): log stacks, stone, clay, thatch bundles, sacks and
   crates. They grow and shrink hour by hour.
-- **People, Prison Architect style:**
-  - a chunky egg of a body in their role's colours, a big round head, little floating hands, no legs, and
-    a dark outline
+- **People, low-poly:**
+  - a six-sided tunic in their role's colours, a big faceted head, block legs that step when they walk, and
+    little floating hands (a nod to Prison Architect)
   - hats and tools say who they are and what they're doing: Aldric's battered hat becomes a crown when he's
     crowned; there's a smith's apron, a guard's helmet, a thief's hood, a farmer's straw hat, a wizard's
     point
