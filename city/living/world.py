@@ -411,7 +411,7 @@ class World:
                     "3 the whole kingdom would hear about it.",
                     f"Where: {where}. {things.stock_line(self.city, loc)} When: {self.now_str()}, "
                     f"{self.city.living.get('weather', 'a mild day')}. "
-                    f"How he feels: {life.feeling(me)}\nWhat he does: {what}", self.NARRATE, max_tokens=220,
+                    f"How he feels: {life.feeling(me)}\nWhat he does: {what}", self.NARRATE, max_tokens=350,
                     temperature=0.9)
                 out = {k: out.get(k) for k in self.NARRATE["properties"]}
                 for k in life.NEEDS:

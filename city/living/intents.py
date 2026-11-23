@@ -373,8 +373,10 @@ def resolve(world, r, hostile_today):
                          if trades.knack(c, i) == "learned" else ""))
         r["reply_rule"] = "You've been added to the list at court. The king hears cases in the throne room."
         r["drama_floor"] = 1
+    elif act == "gift_king" and _money(r.get("item") or "", r.get("text", "")) is not None:
+        _give_money(world, r, i, _money(r.get("item") or "", r.get("text", "")))
     elif act == "gift_king":
-        item = re.sub(r"[^a-zA-Z' -]", "", r.get("item") or "").strip()[:40] or "a small gift"
+        item = re.sub(r"[^a-zA-Z0-9,' -]", "", r.get("item") or "").strip()[:40] or "a small gift"
         king = world.agent("king")
         inv = king.setdefault("life", life.new_life()).setdefault("inventory", [])
         inv.append({"item": item, "from": u, "day": city.day + 1, "used": 0})
@@ -548,7 +550,7 @@ def process(world, free, llm=None, ai_people=0):
                  f"{free[u]}" for u in batch]
         try:
             res = llm.json(READ, _context(city) + "\n\nSubjects:\n" + "\n".join(lines), READ_SCHEMA,
-                           max_tokens=60 * len(batch), temperature=0.3)["results"]
+                           max_tokens=150 + 120 * len(batch), temperature=0.3)["results"]
             for x in res:
                 h = str(x.get("handle", "")).lstrip("@").lower()
                 if h in batch and x.get("action") in ACTIONS:
@@ -587,7 +589,7 @@ def process(world, free, llm=None, ai_people=0):
                  + (f" (they also tried: {r['also']} - mention it in passing if it fits)" if r.get("also") else "")
                  for r in batch]
         try:
-            res = llm.json(TELL, "\n".join(lines), TELL_SCHEMA, max_tokens=90 * len(batch), temperature=0.9)["results"]
+            res = llm.json(TELL, "\n".join(lines), TELL_SCHEMA, max_tokens=150 + 170 * len(batch), temperature=0.9)["results"]
             for x in res:
                 told[str(x.get("handle", "")).lstrip("@").lower()] = x
         except Exception:
@@ -700,6 +702,49 @@ def rule_effort(text):
     return 2 if n >= 30 else (1 if n >= 12 else 0)
 
 
+MONEY = r"(gold|coins?|crowns?|silver|pennies|pence|money|purse|savings)"
+
+
+def _money(item, text):
+    """'2,000 coins' -> 2000; 'a bag of gold' -> -1 (some, unsaid); not money -> None."""
+    for t in (item, text):
+        m = re.search(r"(\d[\d,\.]*)\s*(?:k\b)?\s*(?:gold\s+)?" + MONEY, t or "", re.I)
+        if m:
+            n = float(m.group(1).replace(",", ""))
+            return int(n * (1000 if re.search(r"\d\s*k\b", m.group(0), re.I) else 1))
+    if re.search(r"\b(?:a|some|my|all my|a bag of|a purse of|a sack of|a chest of)\s+(?:\w+\s+)?" + MONEY, item or "", re.I):
+        return -1
+    return None
+
+
+def _give_money(world, r, i, amount):
+    """Money for the king: only what their character actually has. Claiming more gets laughed at, like any other
+    unbacked claim - but they still give what they can."""
+    city, c, u = world.city, world.city.citizens, r["user"]
+    have = int(c.wealth[i])
+    if amount < 0:
+        amount = max(1, have // 4)
+    give = min(amount, have)
+    short = amount > have
+    if short:
+        give = have // 3
+    c.wealth[i] -= give
+    city.treasury += give
+    c.loyalty[i] = float(np.clip(c.loyalty[i] + (0.04 if give else 0), 0, 1))
+    if short:
+        r["facts"] = (f"tried to leave {amount:,} coins on the king's doorstep - but only has {have:,} to their name. "
+                      f"They left {give:,} and kept the rest for bread")
+        r["reply_rule"] = (f"You went to leave {amount:,} coins at Aldric's door, turned out your pockets, and found "
+                           f"{have:,}. Sure you're rich. You left {give:,} and kept enough for bread.")
+    else:
+        r["facts"] = f"left {give:,} coins on the king's doorstep"
+        r["reply_rule"] = f"Aldric found {give:,} coins on his doorstep. The kingdom is {give:,} gold richer."
+    r["drama_floor"] = 2 if give >= 200 else 1
+    world.moment("world", f"@{u} left {give:,} coins at Aldric's door." + (" (They'd promised a lot more.)" if short
+                                                                             else ""), r["drama_floor"],
+                 public=True, handles=[u])
+
+
 def _rule_reply(r):
     """Without the model: a short, second-person reply that says what came of it (not what they wrote)."""
     if r.get("reply_rule"):
@@ -756,7 +801,7 @@ def stories(world, story, pack, llm=None, ai_people=0):
                            "story about how their character did it. They know what they wrote - never retell it. Write "
                            "each a reply (second person, 1-2 sentences) that picks up where their story ends: what "
                            "happened next, using their details. Nobody dies; nobody gets magic or riches. PG-13.\n"
-                           + _context(world.city), "\n".join(lines), STORY_SCHEMA, max_tokens=90 * len(batch),
+                           + _context(world.city), "\n".join(lines), STORY_SCHEMA, max_tokens=120 + 150 * len(batch),
                            temperature=0.9)["results"]
             for x in res:
                 h = str(x.get("handle", "")).lstrip("@").lower()

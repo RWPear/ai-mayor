@@ -59,12 +59,10 @@ class Play:
         from . import llm
         llm.CLOCK = self.world.now_str
         self.model = llm.check() if mayor == "llm" else {"ok": False, "off": True, "error": None}
-        if mayor == "llm":
-            print(("The model: " + self.model["model"] + " at " + self.model["url"]) if self.model["ok"] else
-                  "\n!!! " + self.model["error"] + "\n!!! Aldric will run on rules until it answers.\n")
         self._model_checked = time.time()
         self.inbox = queue.Queue()
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()        # the world (held through a tick, which can take a while with the model)
+        self.rlock = threading.Lock()       # the replies
         self.tick_s = SPEEDS.get(speed, 30)
         self.paused = False
         self.version = 0
@@ -79,10 +77,22 @@ class Play:
         self.handles = []
         self._start_crowd()
         if fresh or self.world.clock < 0:             # a new kingdom opens at dawn, not in the dark
-            while self.world.clock % 1440 != 6 * 60 + 30:
-                self.world.tick()
-            self._collect()
+            self._to_dawn()
         self._publish()
+
+    def _to_dawn(self):
+        """Skips the first night fast: he's asleep anyway, so instincts run it, not the model (which would take
+        minutes before the page could open)."""
+        w = self.world
+        saved = (dict(w.brains), w.crowd_llm, w.voice_llm, w.director_llm)
+        w.brains = {k: w.rules for k in w.brains}
+        w.crowd_llm = w.voice_llm = w.director_llm = None
+        try:
+            while w.clock % 1440 != 6 * 60 + 30:
+                w.tick()
+        finally:
+            w.brains, w.crowd_llm, w.voice_llm, w.director_llm = saved[0], saved[1], saved[2], saved[3]
+        self._collect()
 
     # ------------------------------------------------------------------ the loop
     def run(self):
@@ -228,7 +238,7 @@ class Play:
         return stepped
 
     def set_reply(self, body):
-        with self.lock:
+        with self.rlock:                            # (not the world's lock: approving never waits on a tick)
             r = next((x for x in self.replies if x["id"] == body.get("id")), None)
             if not r:
                 return {"ok": False}
@@ -249,8 +259,9 @@ class Play:
                              "drama": m.get("drama", 1), "text": m.get("text"), "place": m.get("place")})
         self.n_moments = len(lv.get("moments", []))
         out = lv.get("outbox", [])
-        for x in out[self.seen_out:]:
-            self.replies.append({**x, "id": f"r{len(self.replies)}", "status": "pending"})
+        with self.rlock:
+            for x in out[self.seen_out:]:
+                self.replies.append({**x, "id": f"r{len(self.replies)}", "status": "pending"})
         self.seen_out = len(out)
         del self.log[:-1500]
         self.version += 1
@@ -279,17 +290,16 @@ class Play:
                  "pending": sum(1 for r in self.replies if r["status"] == "pending")}
         self.cache["state"] = json.dumps(state, default=str).encode()
 
-    def feed(self, since=0):
-        with self.lock:
-            return {"log": [m for m in self.log if m["n"] >= since][-300:], "replies": self.replies[-300:],
-                    "handles": self.handles, "version": self.version}
+    def feed(self, since=0):                        # read without waiting for the tick (the browser shouldn't hang)
+        return {"log": [m for m in list(self.log) if m["n"] >= since][-300:], "replies": list(self.replies)[-300:],
+                "handles": self.handles, "version": self.version}
 
 
     def mind(self, since=0):
         """What the minds chose and why: every decision (model or rules), every call to the model with what it was
         told and what it said, and who the king is right now."""
         from . import llm
-        with self.lock:
+        if True:                                    # (no lock: a slightly stale read beats waiting on the model)
             k = self.world.agent("king")
             from .living import life
             fr = self.world.frontier
@@ -302,7 +312,7 @@ class Play:
                     if getattr(self.world.brains["king"], "name", "") == "llm" else "rules",
                     "needs": {a: round(b, 2) for a, b in k.get("life", {}).get("needs", {}).items()},
                     "location": k.get("location")}
-            dec = [d for d in self.world.decisions if d["n"] >= since][-150:]
+            dec = [d for d in list(self.world.decisions) if d["n"] >= since][-150:]
             calls = [c for c in list(llm.CALLS) if c["n"] >= since][-60:]
             return {"king": card, "decisions": dec, "calls": calls,
                     "stats": {a: b for a, b in self.world.stats.items() if not a.startswith("focus.")}}
@@ -362,7 +372,13 @@ def serve(play, port=8765):
 
     srv = http.server.ThreadingHTTPServer(("0.0.0.0", port), H)
     threading.Thread(target=play.run, daemon=True).start()
-    print(f"{play.city.name} is live at http://localhost:{port}/?live  ({play.world.now_str()}; "
+    import socket
+    try:
+        so = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); so.connect(("10.255.255.255", 1))
+        host = so.getsockname()[0]; so.close()
+    except OSError:
+        host = "localhost"
+    print(f"{play.city.name} is live at http://{host}:{port}/?live  ({play.world.now_str()}; "
           f"a tick every {play.tick_s:g}s; saved in {play.state}; Ctrl+C to stop)")
     try:
         srv.serve_forever()

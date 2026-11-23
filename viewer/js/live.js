@@ -164,7 +164,7 @@ export function startLive({ onScene, onState }) {
       ${calls.length ? calls.map((c) => `<div class="call ${c.error ? "err" : ""}">
         <div><strong>${esc(c.who)}</strong> <span class="muted">· ${esc((c.time || "").split(", ")[1] || "")} · ${c.ms} ms · ${esc(c.model)} · temp ${c.temperature}</span></div>
         <details data-k="u${c.n}" ${openState.has(`u${c.n}`) ? "open" : ""}><summary>What it was told (${(c.system.length + c.user.length).toLocaleString()} characters)</summary><pre>${esc(c.system)}</pre><pre>${esc(c.user)}</pre></details>
-        <details data-k="r${c.n}" ${openState.has(`r${c.n}`) ? "" : "open"}><summary>What it said</summary><pre>${esc(c.error || c.response)}</pre></details>
+        <details data-k="r${c.n}" ${openState.has(`r${c.n}`) ? "" : "open"}><summary>What it said</summary>${c.error ? `<pre style="color:var(--danger)">${esc(c.error)}</pre>` : ""}${c.response ? `<pre>${esc(c.response)}</pre>` : ""}</details>
       </div>`).join("") : `<p class="muted">No calls to the model yet. ${k.brain === "rules" ? "Start it with --king llm to see them." : ""}</p>`}`;
     el.scrollTop = top;
   }

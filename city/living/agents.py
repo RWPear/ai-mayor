@@ -391,7 +391,7 @@ class LLMBrain:
         one = self.llm.json(self._identity(p, "king") + "You live in this world in real time. What do you want to "
                             "focus on next?\n" + menu + "\nReply with JSON: thought (one private sentence), focus, "
                             "intention (what you mean to do, in your own words), new_goal (a new personal goal if "
-                            "your situation changed, else \"\").", "\n".join(overview), schema1, max_tokens=200,
+                            "your situation changed, else \"\").", "\n".join(overview), schema1, max_tokens=400,
                             temperature=1.0)
         focus = one.get("focus")
         if focus not in options:
@@ -413,7 +413,7 @@ class LLMBrain:
                             "\n".join(detail), {"type": "object", "properties": {
                                 "tool": {"type": "string", "enum": names},
                                 "args": {"type": "object", "properties": {a: {"type": "string"} for a in argnames}}},
-                                "required": ["tool", "args"]}, max_tokens=300, temperature=0.95)
+                                "required": ["tool", "args"]}, max_tokens=450, temperature=0.95)
         tool = two.get("tool")
         if tool not in available:
             raise ValueError(f"tool {tool}")
@@ -444,7 +444,7 @@ class LLMBrain:
                   "needs), new_goal (a new personal goal if your situation changed, else \"\"). Act like yourself "
                   "and don't repeat yourself.")
         try:
-            out = self.llm.json(system, perceive(world, who), schema(names, argnames), max_tokens=350)
+            out = self.llm.json(system, perceive(world, who), schema(names, argnames), max_tokens=500)
             tool = out.get("tool")
             if tool not in available:
                 raise ValueError(tool)

@@ -127,4 +127,11 @@ class LLM:
         return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
 
     def json(self, system, user, schema, max_tokens=900, temperature=0.8):
-        return json.loads(self.chat(system, user, schema, max_tokens, temperature))
+        text = self.chat(system, user, schema, max_tokens, temperature)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:            # usually cut off: say so where people look (the mind tab)
+            if CALLS and CALLS[-1].get("response") == text:
+                CALLS[-1]["error"] = (f"the answer isn't valid JSON - probably cut off at max_tokens={max_tokens} "
+                                      f"(so the game fell back to rules for this)")
+            raise

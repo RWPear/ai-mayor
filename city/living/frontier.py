@@ -278,7 +278,7 @@ def design(world, idea):
     elif world.voice_llm and world.can_think():
         world.spend_calls(1)
         try:
-            d = world.voice_llm.json(DESIGN_SYSTEM, f"His idea: {idea}", DESIGN, max_tokens=220, temperature=0.3)
+            d = world.voice_llm.json(DESIGN_SYSTEM, f"His idea: {idea}", DESIGN, max_tokens=400, temperature=0.3)
         except Exception:
             d = None
     if not d:

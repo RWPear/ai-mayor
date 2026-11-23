@@ -307,7 +307,7 @@ def lookup(label, book, llm=None, jobs=()):
         rec = {"kind": "role", "job": h}
     elif llm is not None:
         try:
-            d = llm.json(SYSTEM.format(jobs=", ".join(jobs)), f"Role: {label}", SCHEMA, max_tokens=160,
+            d = llm.json(SYSTEM.format(jobs=", ".join(jobs)), f"Role: {label}", SCHEMA, max_tokens=300,
                          temperature=0.2)
             rec = _clean(d, jobs)
         except Exception:

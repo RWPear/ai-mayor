@@ -150,7 +150,7 @@ def _surprise(world):
                 {"type": "object", "properties": {"place": {"type": "string", "enum": list(POOLS)},
                                                   "thing": {"type": "string"},
                                                   "kind": {"type": "string", "enum": ["food", "goods", "material", "curio"]}},
-                 "required": ["place", "thing", "kind"]}, max_tokens=80, temperature=1.0)
+                 "required": ["place", "thing", "kind"]}, max_tokens=200, temperature=1.0)
             if out.get("place") in POOLS and out.get("thing"):
                 pid, text, kind = out["place"], str(out["thing"])[:80], out.get("kind", "curio")
         except Exception:
@@ -244,7 +244,7 @@ def _decide(world, name):
                 "You are the world of a small, ordinary medieval kingdom (no magic, no modern things). The king wants "
                 "something. Decide honestly how he could get it: path = delivery (traders bring it; days 1-6), made "
                 "(a local craftsperson could make it; days 1-5), people (only someone in the kingdom might have one), or "
-                "impossible. how = a few words on how.", f"The king wants: {name}", WANT_SCHEMA, max_tokens=80,
+                "impossible. how = a few words on how.", f"The king wants: {name}", WANT_SCHEMA, max_tokens=200,
                 temperature=0.4)
             if out.get("path") in ("delivery", "made", "people", "impossible"):
                 return out["path"], int(np.clip(int(out.get("days") or 2), 1, 6)), str(out.get("how") or "")[:100]
