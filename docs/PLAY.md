@@ -40,6 +40,20 @@ and approve. Nothing is posted anywhere (in the Instagram version, this is where
 **What happened** is the running log: your comments, Aldric's moves, arrivals and the post closing.
 "Only mine" filters both to the handle you're commenting as.
 
+## Aldric's mind
+
+The third tab shows what the king is thinking and why:
+
+- **Who he is:** each new kingdom gets a different man: who he was before (a shipwright's son, a monk who
+  lost his faith, a poacher...), his temper, what he loves and can't stand, sometimes a technique from his
+  old trade. Plus his goal, the goals he's set himself, who he's becoming, his last thought and his needs.
+- **What he chose:** every decision, marked `model` or `rules` (no model, model out of budget, or the model's
+  answer didn't work), with the arguments and his thought.
+- **What the model was asked, and what it said:** every call (the king's two steps, designs, the crowd, the
+  narrator), with the exact system prompt and situation it was given, its raw answer, how long it took and
+  the temperature. This is where to look when he's predictable: if the prompt hands him an example, he'll
+  usually take it.
+
 ## Under the hood
 
 `city/play.py`: the world ticks in a background thread; comments go into a queue that's drained before
