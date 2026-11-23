@@ -77,6 +77,7 @@ def stats_ns(city):
     ns.update({f"faction_{f}": (fm.get(f) if fm.get(f) is not None else 0.5) for f in FACTIONS})
     camp = (getattr(city, "living", None) or {}).get("warcamp") or {}
     ns.update({f"camp_{k}": camp.get(k, 0) for k in ("warriors", "food", "morale", "raids_won", "raids_lost")})
+    ns["camp_arrived"] = camp.get("arrived") or 999
     rooms = ((getattr(city, "living", None) or {}).get("town") or {}).get("rooms", {})
     ns["room"] = lambda r: bool(rooms.get(r))
     return ns
@@ -117,6 +118,8 @@ def maybe_start_event(city, quiet=False):
     mode = (city.plan or {}).get("storyteller", "on")
     if mode == "off" or (mode == "fill" and quiet):
         return None
+    if (getattr(city, "living", None) or {}).get("director"):
+        return None          # the living world's director invents events instead of drawing from the list
     if len(city.events) >= city.cfg["max_active_events"] or city.population() < 5:
         return None
     last = max([e["started"] for e in city.events + city.event_log[-3:]] or [-99])

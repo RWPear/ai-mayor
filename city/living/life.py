@@ -196,7 +196,10 @@ def advance_works(world, minutes, boost=None, by=0.0):
         if w["progress"] < 1:
             continue
         t["works"].remove(w)
-        p = SUCCESS[w.get("size", "medium")] + 0.05 * min(3, w.get("hands", 0)) + 0.03 * min(5, lf.get("builds", 0))
+        know = sum(1 for k in lf.get("knowledge", []) if set(re.findall(r"[a-z]{4,}", k.lower()))
+                   & set(re.findall(r"[a-z]{4,}", w["name"].lower())))     # he read up on it
+        p = (SUCCESS[w.get("size", "medium")] + 0.05 * min(3, w.get("hands", 0)) + 0.03 * min(5, lf.get("builds", 0))
+             + 0.05 * min(3, know))
         roll = city.rng.random()
         result = "success" if roll < p else ("shoddy" if roll < p + 0.6 * (1 - p) else "failed")
         feats = t["features"].setdefault(w["place"], {})
@@ -210,6 +213,8 @@ def advance_works(world, minutes, boost=None, by=0.0):
             else:
                 feats[w["feature"]] = w["name"] + ("" if result == "success" else " (shoddy - already cracking)")
             effects.apply(city, _scaled(FLAVORS.get(w["flavor"], {}), 1.0 if result == "success" else 0.5))
+            if w["flavor"] == "walls" or re.search(r"\bwalls?\b|palisade|rampart", w["name"].lower()):
+                T.build_walls(world, result)
             lf["builds"] = lf.get("builds", 0) + 1
             t["done"].append(w["id"])
         lf["outcomes"] = (lf.get("outcomes", []) + [{"name": w["name"], "result": result, "day": city.day + 1}])[-20:]

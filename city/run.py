@@ -106,7 +106,7 @@ def make_world(city, kind):
     if kind == "llm":
         from .llm import LLM
         main, crowd = LLM(), LLM(crowd=True)
-        return World(city, LLMBrain(main), LLMBrain(main), crowd_llm=crowd, voice_llm=crowd)
+        return World(city, LLMBrain(main), LLMBrain(main), crowd_llm=crowd, voice_llm=crowd, director_llm=main)
     return World(city)
 
 
@@ -124,28 +124,36 @@ def cmd_live(args):
     inbox = Path(args.inbox)
     inbox.mkdir(parents=True, exist_ok=True)
     print(f"{city.name} is alive. {world.now_str()}. Next post closes at {world.now_str(world.next_post_clock())}.")
-    print(f"Comments for each post go in {inbox}/comments-dayN.json - keep appending through the day; new ones "
-          f"play out within the hour. A follower export can go in {inbox}/followers.")
-    seen = 0
+    print(f"Comments go in {inbox}/comments-dayN.json, one file per post (N = the post's day). Every post stays "
+          f"live: keep appending to any of them and new comments play out within the hour. A follower export can go "
+          f"in {inbox}/followers.")
+    seen, arrived = {}, []
     while True:
-        d = city.day + 1
-        f = inbox / f"comments-day{d}.json"
-        comments = json.loads(f.read_text()) if f.exists() else []
-        if len(comments) > seen:          # new comments since the last tick: they play out within the hour
-            world.queue_comments(comments[seen:], spread=False)
-            seen = len(comments)
+        # every post stays live: read all posts' comment files, and play out whatever is new
+        for f in sorted(inbox.glob("comments-day*.json")):
+            try:
+                post = int(f.stem.split("day")[-1])
+                comments = json.loads(f.read_text())
+            except (ValueError, json.JSONDecodeError):
+                continue
+            new = [{**cm, "post": post} for cm in comments[seen.get(f.name, 0):]]
+            if new:
+                world.queue_comments(new, spread=False)
+                arrived += new
+                seen[f.name] = len(comments)
         if world.clock + W.TICK > world.next_post_clock():
+            d = city.day + 1
             fol = inbox / "followers"
             followers = read_followers(fol) if fol.exists() else []
-            r = world.post(mayor, followers, comments, None, already_queued=True)
-            seen = 0
+            r = world.post(mayor, followers, arrived, None, already_queued=True)
+            arrived = []
             report.save(city, r, state / "days")
             print(f"\n=== POST {d} closed: {report.headline(r)}  ->  next words: "
                   f"{', '.join(r['next_pack']['commands'])}\n")
         else:
-            seen = len(city.living["moments"])
+            n = len(city.living["moments"])
             world.tick()
-            for m in city.living["moments"][seen:]:
+            for m in city.living["moments"][n:]:
                 print(f"{m['time']}  {'' if m['public'] else '(secret) '}[{m['who']}] {m['text']}")
         city.save(state)
         if args.speed > 0:

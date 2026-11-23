@@ -1,3 +1,8 @@
 # Override any value from city/config.py here, then rerun a scenario to see the effect.
 # ward_cap: 500
 # start_tax_rate: 0.15
+
+# living world (examples - uncomment to change)
+# gpu_calls_per_hour: 120      # model calls per hour: the crowd gets first claim, the minds get the rest
+# warlord_arrives_day: 4       # Skarn shows up on this day (rumours the day before)
+# intents_cap: 400

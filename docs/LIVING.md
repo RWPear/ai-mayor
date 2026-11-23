@@ -30,9 +30,9 @@ The minds get what's left, and their pace follows:
 
 | The hour is... | Budget left for the minds | The king acts every | What the post is about |
 |---|---|---|---|
-| **quiet** | more than half | ~30 min | the king's life, his projects, the war |
-| **busy** | 20-50% | ~1 hour | a mix |
-| **viral** | under 20% | ~2 hours (big decisions only) | the crowd: thefts, duels, feuds, the king's court cases |
+| **quiet** | more than half | ~20 min | the king's life, his projects, the war |
+| **busy** | 20-50% | ~45 min | a mix |
+| **viral** | under 20% | ~1.5 hours (big decisions only) | the crowd: thefts, duels, feuds, the king's court cases |
 
 Whenever the budget runs out, the rule-based versions fill in, so nothing ever stops.
 
@@ -43,8 +43,11 @@ No personality, no hobbies, no plans. Who he becomes is his:
 
 - **Needs** - hunger, energy, company, fun. Just a body. They push him to eat, sleep (23:00-7:00), find
   someone to talk to, do something for fun.
-- **Pastimes** - he can do anything for its own sake (paint, sing, carve, fish, write poems...). Whatever he
-  keeps coming back to becomes a passion, and he gets better at it (skill 1-10). Nothing is pre-chosen.
+- **He can do anything.** There's no menu of activities: his `do` tool takes his own words ("go for a run
+  around the walls", "sit in the garden and read", "try to bake bread"). The world answers (a narrator call):
+  what happened, how long it took, how his needs changed (a run tires him, reading is quiet fun), and
+  anything he learned, found or made. What he learns is remembered - and reading up on something makes his
+  projects about it more likely to work. Whatever he keeps coming back to becomes a passion.
 - **Self** - every night at 23:00 he reflects on his day and rewrites who he is: traits, likes, dislikes,
   passions, wants, fears, and one sentence about who he's becoming. It's saved in
   `living.agents.king.self` and fed into everything he does after. Day 1 he's nobody; by day 30 he's
@@ -87,17 +90,51 @@ keep clashing become a **feud** - news across the kingdom.
 
 ## The warlord
 
-| | Skarn the Red |
-|---|---|
-| Lives in | the Frostfang camp in the north (sleeps 10:00-16:00 - barbarians like the dark) |
-| Wants | to sit on Aldric's throne |
-| Starts with | scout, raid (from day 3), recruit, hunt, taunt, feast |
-| Unlocks | **march** (the whole horde) once the camp is big and confident · **sabotage** after two winning raids |
+Skarn the Red, like the king, is a name and one goal (`content/warlord.yaml`): take Emberfall. He doesn't
+exist for the first few days (`warlord_arrives_day`, default 4) - the king has time to build. The day before,
+a shepherd swears he saw riders on the northern hills (nobody believes him). Then, before dawn, smoke rises
+over the hills. Raids are possible from the next day; the full horde a week after that.
 
 His camp is a small economy: warriors eat food, food comes from hunting and raiding, morale rises with
 victories and falls with defeats and hunger, and the camp only holds as many warriors as its reputation
-allows. A raid's difficulty depends on how many warriors he sends, the kingdom's defenses, garrisons, and
-luck. Nobody schedules the war.
+allows. A raid's difficulty depends on how many warriors he sends, the kingdom's defenses, garrisons, how
+many houses are behind walls, and luck. Nobody schedules the war. He reflects at dawn (his bedtime) like the
+king does at night. Whether followers can ever join his side is undecided - for now he's the raider.
+
+## Houses and walls
+
+Every follower who moves in gets a house in their hold. **There are no walls at the start** - the town just
+trails off into fields. If the king decides to build walls (his idea, his project), everyone living there at
+the time - plus a bit of room - ends up inside. People who move in after that build outside, until he
+expands them. A raid that gets through **burns houses outside the walls** - real followers' houses, named in
+the post ("12 houses outside the walls of Millbrook burned - @a, @b, @c and 9 more"). Neighbours rebuild them
+after three days. The town's size (houses inside / outside / burned) is part of what the king sees.
+
+## Events nobody wrote (the director)
+
+Twice a day (06:00 and 14:00) the director looks at what's actually happening - the king's projects and how
+they turned out, what he's becoming, the crowd, the houses outside the walls, the war, the weather - and
+decides whether something should happen. It prefers **consequences**: things that grow out of what people
+actually did. It writes the event itself (title, comment words, what happens either way, what the king could
+do). The words are free; the mechanics come from a fixed set of consequences with a size, capped by the
+season:
+
+| Days | Tier | Feels like |
+|---|---|---|
+| 1-7 | 1 | everyday trouble: a cart in a ditch, a stolen pig, a leaky roof |
+| 8-18 | 2 | serious: a fire, a failed harvest, sick herds, a scandal |
+| 19+ | 3 | disasters: "the king's new dam burst and drowned half the livestock - the town is starving" |
+
+Nobody real dies. Every invented event is saved with the kingdom and sent as a notification. With the
+director on, the hand-written list in `content/events.yaml` stays quiet; without a model it keeps the game
+going, and the season plan's few beats (coronation, the Reckoning...) still happen either way.
+
+## Every post stays live
+
+A post from a week ago can blow up. Comments on **any** post count, the day they arrive: own-words moves
+always work; an old post's words still work if what they were for is still going (WORK always does; FIGHT
+only while that battle is on). Words for something that's over get a friendly reply pointing to today's
+post. In live mode, each post has its own file: `inbox/comments-dayN.json`.
 
 ## Invented decrees
 

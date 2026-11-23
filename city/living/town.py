@@ -56,8 +56,8 @@ PLACES = {
     "fields":         {"name": "the fields outside the walls", "area": "outside", "walk": 30,
                        "features": {"fields": "thin rows of wheat on dry ground"},
                        "people": {(5, 19): ["farmer", "shepherd", "miller"]}},
-    "city_walls":     {"name": "the city walls", "area": "town", "walk": 20,
-                       "features": {"walls": "a wooden palisade with gaps you could walk through"},
+    "city_walls":     {"name": "the edge of town", "area": "town", "walk": 20,
+                       "features": {"edge": "no wall at all - houses just trail off into open fields"},
                        "people": {(0, 24): ["guard", "archer", "scout"]}},
 }
 
@@ -78,9 +78,83 @@ def cost(size, pop):
 
 
 def new_town():
-    """The town's state for a new kingdom (saved in city.living['town'])."""
+    """The town's state for a new kingdom (saved in city.living['town']). There are no walls to start with."""
     return {"features": {pid: dict(p.get("features", {})) for pid, p in PLACES.items()},
-            "rooms": {r: False for r in ROOMS}, "works": [], "done": [], "invented": {}}
+            "rooms": {r: False for r in ROOMS}, "works": [], "done": [], "invented": {},
+            "walls": {"capacity": 0, "built": None}}
+
+
+# ---------------------------------------------------------------- houses and walls
+def settle(world, start):
+    """New subjects (index >= start) get a house in their hold: inside the walls if there's room, else outside."""
+    import numpy as np
+    city, c = world.city, world.city.citizens
+    t = city.living["town"]
+    new = np.arange(start, len(c.handles))
+    if not len(new):
+        return 0
+    room = max(0, t["walls"]["capacity"] - int((c.walled == 1).sum()))
+    inside = new[:room]
+    c.walled[inside] = 1
+    outside = len(new) - len(inside)
+    if t["walls"]["capacity"] and outside:
+        world.moment("world", f"{len(new)} new families moved to Emberfall. {outside} of them had to build outside the "
+                              f"walls.", 1, public=True)
+    elif len(new) >= 3:
+        world.moment("world", f"{len(new)} new families moved to Emberfall and put up houses.", 1, public=True)
+    return len(new)
+
+
+def build_walls(world, quality):
+    """The king's walls are finished: everyone living now (and a little more) fits inside."""
+    import numpy as np
+    city, c = world.city, world.city.citizens
+    t = city.living["town"]
+    houses = int(c.active().sum())
+    extra = {"success": 1.3, "shoddy": 1.05}.get(quality, 1.0)
+    t["walls"]["capacity"] = max(t["walls"]["capacity"], int(houses * extra) + 20)
+    t["walls"]["built"] = city.day + 1
+    t["features"]["city_walls"]["edge"] = ("stone walls around the town" if quality == "success"
+                                           else "crooked walls around the town, with a few weak spots")
+    room = t["walls"]["capacity"] - int((c.walled == 1).sum())
+    out = np.where(c.active() & (c.walled == 0))[0][:max(0, room)]
+    c.walled[out] = 1
+
+
+def burn_houses(world, ward, raiders):
+    """A raid that got through burns houses outside the walls in that hold. Returns the handles hit."""
+    import numpy as np
+    city, c = world.city, world.city.citizens
+    pool = np.where(c.active() & (c.ward == ward) & (c.walled == 0) & (c.burned == 0))[0]
+    if not len(pool):
+        return []
+    n = min(len(pool), max(1, raiders // 3))
+    hit = np.array(city.rng.sample(pool.tolist(), n), np.int64)
+    c.burned[hit] = city.day + 1
+    c.wealth[hit] *= 0.7
+    c.mood[hit] = np.clip(c.mood[hit] - 0.15, 0, 1)
+    for i in hit[:50]:
+        c.log(int(i), city.day + 1, "lost their house to the raiders' fire")
+    return [c.handles[i] for i in hit]
+
+
+def rebuild(world):
+    """Three days after a fire, neighbours have helped put the house back up."""
+    c = world.city.citizens
+    back = (c.burned > 0) & (c.burned <= world.city.day + 1 - 3)
+    c.burned[back] = 0
+    return int(back.sum())
+
+
+def summary(world):
+    c = world.city.citizens
+    a = c.active()
+    houses = int(a.sum())
+    inside = int((a & (c.walled == 1)).sum())
+    burned = int((a & (c.burned > 0)).sum())
+    t = world.city.living["town"]
+    walls = "no walls" if not t["walls"]["capacity"] else f"{inside} inside the walls, {houses - inside} outside"
+    return f"{houses} houses ({walls}" + (f", {burned} burned down" if burned else "") + ")"
 
 
 def ruins(town):

@@ -90,23 +90,27 @@ def talk(world, me, args):
                                 f'"{reply}"', 2, public=True, place=me.get("location"), handles=[c.handles[i]])
 
 
-def pastime(world, me, args):
-    """Anything he feels like doing for its own sake. Whatever he keeps doing becomes a passion."""
-    activity = str(args.get("activity") or "").strip()
-    if not activity:
+def do(world, me, args):
+    """Anything at all: go for a run, sit and read, fish, bake, pray, practise the sword, nap in the garden...
+    The world decides what comes of it (a narrator call): how he feels after, what he learned, found or made."""
+    what = str(args.get("what") or "").strip()[:160]
+    if not what:
         return None
-    title = str(args.get("title") or "").strip() or "something"
-    desc = str(args.get("description") or "").strip().rstrip(".")
-    item, level, practice = life.pastime(world, me, activity, title, desc)
-    first = practice == 1
-    better = practice % 3 == 0
-    text = (f"The king tried {item['kind']} for the first time" if first else f"The king spent time on {item['kind']}")
-    if item["title"] != "something":
-        text += f' and made "{item["title"]}"'
-    text += (f": {desc[:140]}" if desc else "") + "."
-    if better:
-        text += f" He's getting better (skill {level}/10)."
-    return world.moment("king", text, 2 if (first or better) else 1, public=True, place=me.get("location"))
+    out = world.narrate_activity(me, what)
+    lf = me.setdefault("life", life.new_life())
+    for need in life.NEEDS:
+        life.satisfy(me, need, out.get(need, 0.0))
+    act = life._slug(out.get("activity") or what)
+    lf["skills"][act] = lf["skills"].get(act, 0) + 1
+    if out.get("learned"):
+        lf["knowledge"] = (lf.get("knowledge", []) + [out["learned"]])[-20:]
+    if out.get("found"):
+        lf["inventory"] = (lf.get("inventory", []) + [out["found"]])[-20:]
+    if out.get("made"):
+        lf["creations"] = (lf.get("creations", []) + [{"title": out["made"], "kind": act, "day": world.city.day + 1}])[-60:]
+    me["next_act"] = world.clock + int(out.get("minutes", 30))
+    drama = int(out.get("drama", 1))
+    return world.moment("king", out["outcome"], drama, public=drama >= 1, place=me.get("location"))
 
 
 def start_work(world, me, args):
@@ -115,8 +119,8 @@ def start_work(world, me, args):
     pid = me.get("location")
     name = str(args.get("name") or "").strip()[:90]
     # a project at a ruined room rebuilds it if that's what he means (or if he doesn't say)
-    ruin = pid in T.ROOMS and not t["rooms"].get(pid) and (
-        not name or re.search(r"rebuil|restor|repair|fix|renovat|room|tower|hall|dungeon|roof|walls", name.lower()))
+    ruin = bool(pid in T.ROOMS and not t["rooms"].get(pid) and (
+        not name or re.search(r"rebuil|restor|repair|fix|renovat|room|tower|hall|dungeon|roof|walls", name.lower())))
     if ruin and not name:
         name = f"rebuilding {T.ROOMS[pid]['name']}"
     if not name:
@@ -194,20 +198,6 @@ def hold_court(world, me, args):
     return world.moment("king", f"At court: {case['text']}. The king's verdict: {verdict.upper()}{effect}."
                         + (f' "{words}"' if words else ""), 2, public=True, place="throne_room",
                         handles=[case["who"]])
-
-
-def eat(world, me, args):
-    where = me.get("location")
-    good = where in ("kitchens", "great_hall", "tavern")
-    life.satisfy(me, "hunger", 0.7 if good else 0.4)
-    if where == "tavern":
-        life.satisfy(me, "company", 0.2)
-    return None if not good else world.moment("king", f"The king ate at {T.PLACES[where]['name']}.", 0, public=False)
-
-
-def rest(world, me, args):
-    life.satisfy(me, "energy", 0.35 if me.get("location") == "bedchamber" else 0.15)
-    return None
 
 
 def royal_feast(world, me, args):
@@ -446,8 +436,7 @@ def sabotage(world, me, args):
 
 ARG = {"place": "where to walk: " + ", ".join(p["name"] for p in T.PLACES.values()),
        "person": "'steward', 'captain', 'jester', or a subject's @handle", "text": "the words, in your voice",
-       "activity": "anything at all: what you feel like doing", "title": "a title, if you made something",
-       "description": "what it is like, honestly, in one or two sentences",
+       "what": "what you do, in your own words",
        "name": "your idea for this place, in your own words",
        "size": "small (2 days), medium (4) or large (7) - bigger is riskier",
        "purpose": "what it's mainly for: " + ", ".join(BUILD_FLAVORS),
@@ -463,14 +452,12 @@ TOOLS = {
     "king": {
         "walk":       (walk, "walk somewhere in the castle or town (the tavern means going in disguise)", ["place"], None),
         "talk":       (talk, "talk to someone here: a member of your court or a subject (@handle)", ["person", "text"], None),
-        "pastime":    (pastime, "do something for its own sake - anything you like (paint, sing, carve, fish...)",
-                       ["activity", "title", "description"], None),
+        "do":         (do, "do anything at all, in your own words: go for a run, sit and read, fish, bake, practise "
+                           "the sword, nap in the garden... (the world decides what comes of it)", ["what"], None),
         "start_work": (start_work, "start a project of your own right where you are (it costs gold and might fail)",
                        ["name", "size", "purpose"], None),
         "work_on":    (work_on, "roll up your sleeves and help build the project where you are", [], None),
         "hold_court": (hold_court, "in the throne room: rule on the next case on the docket", ["case", "verdict", "words"], None),
-        "eat":        (eat, "eat something", [], None),
-        "rest":       (rest, "rest, sulk, or sleep", [], None),
         "proclaim":   (proclaim, "make a public proclamation to the kingdom", ["text"], None),
         "summon":     (summon, "summon a subject (a real person) to the castle", ["handle", "why"], None),
         "decree":     (decree, "invent a new decree for the people to vote on tomorrow (one a day)",
@@ -483,13 +470,13 @@ TOOLS = {
     },
     "warlord": {
         "scout":     (scout, "send scouts to study a hold's defenses", ["hold"], None),
-        "raid":      (raid, "raid a hold (only one raid at a time)", ["hold", "warriors"], "day >= 3"),
+        "raid":      (raid, "raid a hold (only one raid at a time)", ["hold", "warriors"], "day >= camp_arrived + 1"),
         "recruit":   (recruit, "recruit more warriors (costs food)", [], None),
         "hunt":      (hunt, "hunt for food", [], None),
         "taunt":     (taunt, "send the king an insulting letter (everyone will hear about it)", ["text"], None),
         "feast":     (feast, "feast with your warriors (morale)", [], None),
         "march":     (march, "march the WHOLE horde on the capital", [],
-                      "day >= 10 and camp_warriors >= 120 and camp_morale >= 0.55 and camp_raids_won >= 1"),
+                      "day >= camp_arrived + 7 and camp_warriors >= 120 and camp_morale >= 0.55 and camp_raids_won >= 1"),
         "sabotage":  (sabotage, "secretly burn a hold's granary at night", ["hold"], "camp_raids_won >= 2"),
     },
 }
@@ -498,6 +485,8 @@ TOOLS = {
 def unlocked(world, who):
     """The tools this mind can use right now."""
     out = {}
+    if who == "warlord" and not warcamp.camp(world.city).get("arrived"):
+        return out                                    # he hasn't come yet
     for name, (fn, desc, args, cond) in TOOLS[who].items():
         if cond is None or world.condition(cond):
             out[name] = (fn, desc, args)

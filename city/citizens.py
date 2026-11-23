@@ -22,6 +22,8 @@ class Citizens:
         self.wealth, self.mood, self.loyalty, self.activism = z(np.float32), z(np.float32), z(np.float32), z(np.float32)
         self.low_days, self.status = z(np.int16), z(np.int8)
         self.temper = z(np.float32)   # personal outlook: some people are just grumpier (stable per handle)
+        self.walled = z(np.int8)      # 1 = their house is inside the town walls (living world)
+        self.burned = z(np.int16)     # day their house burned down (0 = it's standing)
         self.joined, self.last_cmd = z(np.int32), z(np.int32)
         self.counts = {k: z(np.int32) for k in COUNTERS}
         self.today = {}          # per-day command flags, rebuilt each day
@@ -77,6 +79,8 @@ class Citizens:
         self.temper = cat([self.temper, np.array([(_h(h, "temper") % 1000) / 1000 * 0.3 - 0.15 for h in new],
                                                  np.float32)])
         self.status = cat([self.status, np.zeros(n, np.int8)])
+        self.walled = cat([self.walled, np.zeros(n, np.int8)])
+        self.burned = cat([self.burned, np.zeros(n, np.int16)])
         self.joined = cat([self.joined, np.full(n, day, np.int32)])
         self.last_cmd = cat([self.last_cmd, np.full(n, -1, np.int32)])
         for k in COUNTERS:
@@ -118,7 +122,7 @@ class Citizens:
     # ------------------------------------------------------------------ save / load
     def save(self, path):
         arrays = {k: getattr(self, k) for k in ("job", "faction", "ward", "wealth", "mood", "loyalty", "activism",
-                                                "low_days", "status", "joined", "last_cmd", "temper")}
+                                                "low_days", "status", "joined", "last_cmd", "temper", "walled", "burned")}
         arrays.update({f"count_{k}": v for k, v in self.counts.items()})
         np.savez_compressed(path / "citizens.npz", **arrays)
         (path / "citizens.json").write_text(json.dumps({"handles": self.handles, "names": self.names,
@@ -137,6 +141,8 @@ class Citizens:
             setattr(c, k, data[k])
         c.counts = {k: (data[f"count_{k}"] if f"count_{k}" in data else np.zeros(len(c.handles), np.int32))
                     for k in COUNTERS}
+        c.walled = data["walled"] if "walled" in data else np.zeros(len(c.handles), np.int8)
+        c.burned = data["burned"] if "burned" in data else np.zeros(len(c.handles), np.int16)
         c.temper = data["temper"] if "temper" in data else np.array(
             [(_h(h, "temper") % 1000) / 1000 * 0.3 - 0.15 for h in c.handles], np.float32)
         return c

@@ -12,7 +12,8 @@ whether the hold has a garrison. When the event resolves, the camp feels it.
 import numpy as np
 
 START = {"name": "the Frostfang camp", "warriors": 40, "food": 120, "morale": 0.6, "intel": {},
-         "raids_won": 0, "raids_lost": 0, "active_raid": None, "last_result_seen": 0, "defeated": False}
+         "raids_won": 0, "raids_lost": 0, "active_raid": None, "last_result_seen": 0, "defeated": False,
+         "arrived": None}   # he isn't there at the start - see World._warlord_arrival
 
 
 def camp(city):
@@ -28,6 +29,10 @@ def strength(city, warriors, ward=None):
     s = (0.55 + 0.55 * ratio ** 0.5) * (1.15 - 0.15 * city.quality["defense"]) * city.rng.uniform(0.85, 1.15)
     if ward is not None and city.wards[ward].get("garrison_until", -1) >= city.day:
         s *= 0.75
+    c = city.citizens
+    people = c.active() if ward is None else (c.active() & (c.ward == ward))
+    if people.any():                     # houses behind walls are much harder to raid
+        s *= 1 - 0.4 * float((c.walled[people] == 1).mean())
     return float(np.clip(s, 0.5, 2.0))
 
 
@@ -39,6 +44,8 @@ def cap(c, day=0):
 def daily_upkeep(city):
     """Once a day: warriors eat; hunger costs morale and deserters; morale drifts back toward normal."""
     c = camp(city)
+    if not c.get("arrived"):
+        return None
     c["morale"] += (0.5 - c["morale"]) * 0.1
     eat = c["warriors"] * 0.5
     if c["food"] >= eat:
@@ -52,7 +59,7 @@ def daily_upkeep(city):
     return None
 
 
-def settle(city):
+def settle(city, world=None):
     """Called every tick: if one of the warlord's raids just resolved, the camp feels it. Returns a moment text."""
     c = camp(city)
     rid = c.get("active_raid")
@@ -74,6 +81,13 @@ def settle(city):
             c["defeated"] = c["warriors"] < 25
         return (f"The raid failed. {lost} warriors never came home to {c['name']}. "
                 f"The warlord broke a table.")
+    if world is not None and done.get("ward") is not None:     # the fire spreads to houses outside the walls
+        from .town import burn_houses
+        hit = burn_houses(world, done["ward"], sent)
+        if hit:
+            names = ", ".join("@" + h for h in hit[:3]) + (f" and {len(hit) - 3} more" if len(hit) > 3 else "")
+            world.moment("world", f"{len(hit)} houses outside the walls of {city.wards[done['ward']]['name']} burned "
+                                  f"to the ground - {names}.", 3, public=True, handles=hit[:10])
     loot = sent * 1.0
     c["food"] += loot
     c["warriors"] += int(sent * 0.1)

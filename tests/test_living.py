@@ -24,12 +24,25 @@ def test_clock_runs_between_posts_and_minds_act():
     w.post(RuleMayor(), [], [])
     assert city.day == 2
     assert len(city.living["moments"]) > before
-    assert any(k.startswith("king.") for k in w.stats) and any(k.startswith("warlord.") for k in w.stats)
+    assert any(k.startswith("king.") for k in w.stats)
+    assert not any(k.startswith("warlord.") for k in w.stats)        # he hasn't arrived yet
+
+
+def test_the_warlord_arrives_after_a_few_days():
+    city, w = _world()
+    from city.living import warcamp
+    for _ in range(5):
+        w.post(RuleMayor(), [], [])
+    texts = [m["text"] for m in city.living["moments"]]
+    assert any("shepherd" in t for t in texts) and any("smoke rose over the northern hills" in t.lower() for t in texts)
+    assert warcamp.camp(city)["arrived"] == 3
+    assert any(k.startswith("warlord.") for k in w.stats)
 
 
 def test_raid_waits_for_its_first_post_and_feeds_the_camp():
     city, w = _world(80)
-    city.day = 5   # past the warlord's grace period
+    city.day = 5   # past the warlord's arrival
+    city.living["warcamp"]["arrived"] = 3
     a = tools.raid(w, w.agent("warlord"), {"hold": city.wards[0]["name"], "warriors": "20"})
     assert a and warcamp.camp(city)["active_raid"]
     raid = next(e for e in city.events if e["id"] == "warlord_raid")
@@ -230,9 +243,9 @@ def test_a_blank_king_grows_a_self():
     king = w.agent("king")
     assert not life.who_am_i(king)                                   # nobody in particular yet
     for _ in range(3):
-        tools.pastime(w, king, {"activity": "Whittling little boats", "title": "Boat", "description": "Lopsided."})
+        tools.do(w, king, {"what": "whittle little boats by the river"})
     life.reflect(w, king, None)
-    assert "whittling little boats" in king["self"]["passions"]
+    assert "whittle little boats" in king["self"]["passions"]
     mind = FakeLLM({"traits": ["curious", "stubborn"], "likes": ["the river"], "dislikes": ["mud"],
                     "passions": ["whittling"], "wants": ["a bridge over the river"], "fears": ["the warlord"],
                     "becoming": "a king who builds things with his own hands"})
@@ -245,7 +258,7 @@ def test_a_blank_king_grows_a_self():
         def json(self, system, user, schema, **k):
             grab["system"] = system
             return super().json(system, user, schema)
-    LLMBrain(Spy({"thought": "x", "tool": "rest", "args": {}, "new_goal": ""})).choose(w, "king", tools.unlocked(w, "king"))
+    LLMBrain(Spy({"thought": "x", "tool": "walk", "args": {}, "new_goal": ""})).choose(w, "king", tools.unlocked(w, "king"))
     assert "Nobody has told you who to be" in grab["system"] and "builds things" in grab["system"]
     assert "vain" not in grab["system"].lower() and "flaw" not in grab["system"].lower()
 
@@ -271,3 +284,74 @@ def test_a_viral_day_hands_the_gpu_to_the_crowd():
     busy_king = sum(v for k, v in w.stats.items() if k.startswith("king."))
     assert w.stats.get("pace.viral", 0) > 0 and w.stats["crowd_moves"] >= 1900
     assert busy_king < quiet_king                                   # the king steps back when the crowd shows up
+
+
+# ---------------------------------------------------------------- events nobody wrote
+def test_the_director_invents_a_consequence_capped_by_the_season():
+    from city.living import director
+    city, w = _world(60)
+    story = {"happen": True, "title": "The king's new dam burst and drowned half the sheep",
+             "kind": "crisis", "where": city.wards[0]["name"], "days": 2, "help_words": ["SALVAGE", "status"],
+             "hinder_words": ["LOOT"], "difficulty": "hard",
+             "at_start": {"text": "", "consequence": "food_loss", "size": 3},
+             "if_helped": {"text": "The town saved what it could.", "consequence": "mood_gain", "size": 1},
+             "if_not": {"text": "Emberfall is starving.", "consequence": "food_loss", "size": 3},
+             "choices": [], "king_options": [{"label": "Buy grain", "text": "The king bought grain.", "cost": "large",
+                                              "consequence": "food_gain", "size": 2, "helps": True}]}
+    w.city.living["budget"]["left"] = 99
+    a = director.consider(w, FakeLLM(story))
+    assert a and "dam burst" in a["title"]
+    ev = storyteller.catalog()[a["id"]]
+    assert set(ev["commands"]) == {"SALVAGE", "LOOT"}          # reserved words (STATUS) are dropped
+    assert ev["on_timeout"]["service.food"] == -0.04            # tier 1 on day 1: a size-3 disaster is capped at 1
+    assert ev["options"][0]["effects"]["progress"] == 0.3
+    assert any("New event" in n["text"] for n in city.living["notifications"])
+    assert director.consider(w, FakeLLM({**story, "happen": False})) is None
+
+
+def test_with_a_director_the_hand_written_list_stays_quiet():
+    city = City(config.load(), seed=4)
+    w = World(city, director_llm=FakeLLM({"happen": False}))
+    assert city.living["director"] and storyteller.maybe_start_event(city) is None
+
+
+def test_he_can_do_anything_and_the_world_answers():
+    from city.living import tools
+    city, w = _world(60)
+    king = w.agent("king")
+    w.voice_llm = FakeLLM({"outcome": "The king ran three laps of the walls and threw up behind the chapel.",
+                           "activity": "running", "minutes": 300, "hunger": -0.9, "energy": -0.4, "company": 0,
+                           "fun": 0.2, "learned": "", "found": "a muddy coin", "made": "", "drama": 2})
+    w.city.living["budget"]["left"] = 99
+    before = king["life"]["needs"]["energy"]
+    m = tools.do(w, king, {"what": "go for a long run around the town"})
+    assert "threw up" in m["text"] and m["drama"] == 2
+    assert king["life"]["needs"]["energy"] < before
+    assert "a muddy coin" in king["life"]["inventory"]
+    assert king["next_act"] == w.clock + 240                    # the world's numbers are clamped (300 -> 240)
+
+
+# ---------------------------------------------------------------- houses, walls, fire
+def test_newcomers_get_houses_and_walls_protect_them():
+    from city.living import town as T
+    city, w = _world(40)
+    c = city.citizens
+    assert int((c.walled == 1).sum()) == 0                      # no walls at the start
+    T.build_walls(w, "success")
+    assert int((c.walled == 1).sum()) == 40 and city.living["town"]["walls"]["capacity"] >= 60
+    w.post(RuleMayor(), [f"u{i}" for i in range(40)] + [f"n{i}" for i in range(80)], [])
+    cap = city.living["town"]["walls"]["capacity"]
+    assert int((c.walled == 1).sum()) == cap and int((c.walled == 0).sum()) == 120 - cap   # the rest live outside
+    hit = T.burn_houses(w, int(c.ward[c.index["n79"]]), 30)
+    assert hit and all(c.walled[c.index[h]] == 0 for h in hit)  # only houses outside the walls burn
+
+
+def test_old_posts_stay_live():
+    city, w = _world(30)
+    w.post(RuleMayor(), [], [])
+    old_day = city.day                                         # a post whose words were WORK/TRADE/...
+    city.living["posts"][str(old_day)] = {"commands": {"WORK": "work", "FIGHT": "event.help:gone_event"}, "event": None}
+    r = w.post(RuleMayor(), [], [{"username": "u1", "text": "WORK", "timestamp": 1, "post": old_day},
+                                 {"username": "u2", "text": "FIGHT", "timestamp": 2, "post": old_day}])
+    assert r["tallies"].get("WORK", 0) >= 1
+    assert any(x["username"] == "u2" and "over" in x["reply"] for x in r["status_replies"])

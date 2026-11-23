@@ -79,6 +79,26 @@ def merge(pack, events):
     return out
 
 
+def with_old_posts(pack, posts, today, active_events):
+    """Every post stays live. Today's words win; older posts' words still work if what they were for is still
+    going (WORK always works; FIGHT only while that battle is on). Returns (pack, words whose moment has passed)."""
+    out = dict(pack, commands=dict(pack["commands"]))
+    closed = set()
+    for day in sorted((int(k) for k in posts if int(k) < today), reverse=True):
+        old = posts[str(day)]
+        for w, eff in old.get("commands", {}).items():
+            e, _, target = eff.partition(":")
+            target = target or old.get("event")
+            if e.startswith(("event.", "vote.")):
+                if not target or target not in active_events or e.startswith("vote."):
+                    if w not in out["commands"]:
+                        closed.add(w)
+                    continue
+                eff = f"{e}:{target}"
+            out["commands"].setdefault(w, eff)
+    return out, closed - set(out["commands"])
+
+
 def parse(comments, pack, jobs=None, free=None):
     """comments: [{username, text, timestamp}] -> ({username: word}, {status users}, {join users}).
     Latest valid action per user wins. Unknown words are ignored.

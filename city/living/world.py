@@ -33,19 +33,21 @@ AWAKE = {"king": lambda h: 7 <= h < 23, "warlord": lambda h: not (10 <= h < 16)}
 
 
 class World:
-    def __init__(self, city, king_brain=None, warlord_brain=None, crowd_llm=None, voice_llm=None):
+    def __init__(self, city, king_brain=None, warlord_brain=None, crowd_llm=None, voice_llm=None, director_llm=None):
         self.city = city
         self.rules = agents.RuleBrain()
         self.brains = {"king": king_brain or self.rules, "warlord": warlord_brain or self.rules}
         self.crowd_llm = crowd_llm        # subjects' own-words moves
-        self.voice_llm = voice_llm        # subjects and the court answering the king
+        self.voice_llm = voice_llm        # subjects and the court answering the king, the world narrating
+        self.director_llm = director_llm  # invents events from what's going on (else: the hand-written list)
         self.stats = {}
         self.pending = []                 # comments that arrived but haven't been played out yet
         self._hour_free = {}
         if city.living is None:
             self._new()
         self._upgrade()
-        for ev in city.living.get("custom_events", {}).values():   # the king's invented decrees
+        city.living["director"] = bool(director_llm)
+        for ev in city.living.get("custom_events", {}).values():   # invented decrees and events
             storyteller.register(ev)
 
     def _new(self):
@@ -200,6 +202,67 @@ class World:
                             "Long live the king - well, long-ish."]}
         return city.rng.choice(lines.get(key, ["Yes, your majesty."]))
 
+    NARRATE = {"type": "object", "properties": {
+        "outcome": {"type": "string"}, "activity": {"type": "string"}, "minutes": {"type": "integer"},
+        "hunger": {"type": "number"}, "energy": {"type": "number"}, "company": {"type": "number"},
+        "fun": {"type": "number"}, "learned": {"type": "string"}, "found": {"type": "string"},
+        "made": {"type": "string"}, "drama": {"type": "integer"}},
+        "required": ["outcome", "activity", "minutes", "hunger", "energy", "company", "fun", "learned", "found",
+                     "made", "drama"]}
+
+    def narrate_activity(self, me, what):
+        """The world's answer to 'the king does X here, now'. Bounded numbers, free words."""
+        loc = me.get("location", "throne_room")
+        t = self.city.living["town"]
+        where = f"{T.place_of(loc, t)} ({T.describe(t, loc)})"
+        if self.voice_llm and self.can_think():
+            self.spend_calls(1)
+            try:
+                out = self.voice_llm.json(
+                    "You are the world of the kingdom of Emberfall, narrating what happens when its king does something. "
+                    "He's a person, not a hero: things can go well, badly, or funny. Be concrete and grounded in the "
+                    "place, the time and the weather. outcome: 1-2 sentences, third person ('The king...'). activity: a "
+                    "2-3 word label. minutes: how long it took (10-240). hunger/energy/company/fun: how his needs "
+                    "changed, each -0.5 to 0.5 (running tires you, reading is quiet fun, eating fills you). learned: "
+                    "something he actually learned, or "". found: an object he ended up with, or "". made: a title "
+                    "if he made something, or "". drama: 0 nothing to tell, 1 nice moment, 2 people would talk, "
+                    "3 the whole kingdom would hear about it.",
+                    f"Where: {where}. When: {self.now_str()}, {self.city.living.get('weather', 'a mild day')}. "
+                    f"How he feels: {life.feeling(me)}\nWhat he does: {what}", self.NARRATE, max_tokens=220,
+                    temperature=0.9)
+                out = {k: out.get(k) for k in self.NARRATE["properties"]}
+                for k in life.NEEDS:
+                    out[k] = float(np.clip(float(out.get(k) or 0), -0.5, 0.5))
+                out["minutes"] = int(np.clip(int(out.get("minutes") or 30), 10, 240))
+                out["drama"] = int(np.clip(int(out.get("drama") or 0), 0, 3))
+                for k in ("outcome", "activity", "learned", "found", "made"):
+                    out[k] = str(out.get(k) or "").strip()[:220]
+                if out["outcome"]:
+                    return out
+            except Exception:
+                self.stats["narrate_fallbacks"] = self.stats.get("narrate_fallbacks", 0) + 1
+        return self._narrate_rules(what)
+
+    def _narrate_rules(self, what):
+        w = what.lower()
+        out = {"outcome": f"The king decided to {what.rstrip('.')}.", "activity": what, "minutes": 40, "hunger": -0.05,
+               "energy": -0.05, "company": 0.0, "fun": 0.15, "learned": "", "found": "", "made": "", "drama": 0}
+        rules = [(("run", "jog", "sprint", "ride", "sword", "spar", "swim", "climb"), {"energy": -0.3, "fun": 0.2, "hunger": -0.15, "minutes": 60}),
+                 (("read", "study", "book", "letters", "write"), {"fun": 0.2, "energy": 0.05, "minutes": 90,
+                                                                  "learned": "a few pages of an old book"}),
+                 (("eat", "lunch", "dinner", "breakfast", "snack", "bread", "feast"), {"hunger": 0.6, "fun": 0.1, "minutes": 30}),
+                 (("nap", "sleep", "rest", "lie down", "doze"), {"energy": 0.35, "minutes": 60}),
+                 (("talk", "chat", "drink", "tavern", "visit", "dance"), {"company": 0.3, "fun": 0.15}),
+                 (("paint", "draw", "sing", "lute", "carve", "whittle", "sculpt", "poem", "bake"),
+                  {"fun": 0.35, "minutes": 90, "made": "something he made today", "drama": 1}),
+                 (("fish", "hunt", "forage", "garden", "plant"), {"fun": 0.25, "minutes": 120, "found": "a small catch"}),
+                 (("pray", "think", "walk", "stroll", "watch", "sit"), {"fun": 0.1, "energy": 0.05, "minutes": 45})]
+        for words, eff in rules:
+            if any(x in w for x in words):
+                out.update(eff)
+                break
+        return out
+
     def court_here(self):
         """Which members of the court are where the king is right now."""
         loc = self.agent("king").get("location")
@@ -275,15 +338,24 @@ class World:
             case = life.visitors(self) if self.city.rng.random() < 0.35 else None
             if case:
                 self.moment("world", f"At the castle gate: {case['text']}.", 0, public=False)
-        settled = warcamp.settle(self.city)
+        self._warlord_arrival()
+        settled = warcamp.settle(self.city, self)
         if settled:
             self.moment("warlord", settled, 1, public=False)
         if self.clock % 1440 == 0:
+            if T.rebuild(self):
+                self.moment("world", "Neighbours helped rebuild the burned houses.", 0, public=False)
             hungry = warcamp.daily_upkeep(self.city)
             if hungry:
                 self.moment("warlord", hungry, 1, public=False)
         if self.clock % 1440 == 12 * 60:
             self._steward_skims()
+        if self.director_llm and self.clock % 1440 in (6 * 60, 14 * 60):
+            from . import director
+            director.consider(self, self.director_llm)
+        if self.clock % 1440 == 6 * 60 or "weather" not in lv:
+            lv["weather"] = self.city.rng.choice(["clear and cold", "grey drizzle", "a warm sunny day", "thick fog",
+                                                  "a windy day", "heavy rain", "a crisp bright morning", "muggy heat"])
         self.announce_works(life.advance_works(self, TICK))
         self._check_unlocks()
         king = self.agent("king")
@@ -292,9 +364,12 @@ class World:
             if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
                 life.reflect(self, king, getattr(self.brains["king"], "llm", None))
             king["location"] = "bedchamber"
+        if self.clock % 1440 == 10 * 60 and warcamp.camp(self.city).get("arrived"):   # the warlord turns in at dawn
+            life.reflect(self, self.agent("warlord"), getattr(self.brains["warlord"], "llm", None))
         for who in ("king", "warlord"):
             me = self.agent(who)
-            if warcamp.camp(self.city).get("defeated") and who == "warlord":
+            camp = warcamp.camp(self.city)
+            if who == "warlord" and (camp.get("defeated") or not camp.get("arrived")):
                 continue
             if AWAKE[who](hour) and self.clock >= me.get("next_act", 0):
                 self.act(who)
@@ -303,8 +378,8 @@ class World:
         self.stats[f"pace.{p}"] = self.stats.get(f"pace.{p}", 0) + 1
 
     def _interval(self, who):
-        """Quiet hour: the king acts every ~30 min. Viral hour: every ~2 hours. The warlord a bit slower."""
-        base = {"quiet": 30, "busy": 60, "viral": 120}[self.pace()] * (1 if who == "king" else 1.5)
+        """Free time: the king acts every ~20 min. Viral hour (the crowd has the GPU): every ~1.5 hours."""
+        base = {"quiet": 20, "busy": 45, "viral": 90}[self.pace()] * (1 if who == "king" else 1.5)
         return int(base * self.city.rng.uniform(0.8, 1.25))
 
     def act(self, who):
@@ -339,6 +414,25 @@ class World:
                     "failed": f"{name} FAILED. The work fell apart and {w['cost']:,.0f} gold is gone."}[result]
             self.moment("king", text, 3 if result == "failed" else 2, public=True, place=w["place"])
             self.notify(f"{w['name']}: {result}")
+
+    def _warlord_arrival(self):
+        """The antagonist doesn't exist for the first few days - then rumours, then smoke in the north."""
+        camp = warcamp.camp(self.city)
+        if camp.get("arrived"):
+            return
+        day = self.city.day + 1                                   # the post this moment belongs to
+        when = int(self.city.cfg.get("warlord_arrives_day", 4))
+        t = self.clock % 1440
+        if day == when - 1 and t == 15 * 60:
+            hold = self.city.rng.choice([w["name"] for w in self.city.wards]) if self.city.wards else "the hills"
+            self.moment("world", f"A shepherd from {hold} swears he saw riders on the northern hills. Nobody believes "
+                                 f"him.", 1, public=True)
+        if day >= when and t == 3 * 60:
+            camp["arrived"] = self.city.day
+            self.moment("world", "Before dawn, smoke rose over the northern hills. Someone has made camp up there - "
+                                 "a lot of someones.", 2, public=True)
+            self.agent("warlord")["next_act"] = self.clock
+            self.notify(f"{self.agent('warlord')['name']} has arrived in the north")
 
     def _steward_skims(self):
         if self.city.treasury <= 0:

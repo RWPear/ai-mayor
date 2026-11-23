@@ -36,7 +36,9 @@ def king_view(world, me):
     city, c = world.city, world.city.citizens
     t = city.living["town"]
     loc = me.get("location", "throne_room")
-    lines = [f"It is {world.now_str()}. You are in {T.place_of(loc, t)}. You see: {T.describe(t, loc)}."]
+    lines = [f"It is {world.now_str()}, {city.living.get('weather', 'a mild day')}. You are in "
+             f"{T.place_of(loc, t)}. You see: {T.describe(t, loc)}.",
+             f"Emberfall: {T.summary(world)}."]
     court = life.court()
     here = world.court_here()
     if here:
@@ -73,7 +75,12 @@ def king_view(world, me):
                  + (f": {me_now}." if me_now else "."))
     t_ = life.tried(me)
     if t_:
-        lines.append(f"Things you've done for their own sake: {t_}.")
+        lines.append(f"Things you've spent your time on: {t_}.")
+    lf = me.get("life", {})
+    if lf.get("knowledge"):
+        lines.append("Things you've learned: " + "; ".join(lf["knowledge"][-4:]) + ".")
+    if lf.get("inventory"):
+        lines.append("You have: " + ", ".join(lf["inventory"][-5:]) + ".")
     lines.append(f"Kingdom: {city.population()} subjects, loyalty {city.approval():.0%}, treasury "
                  f"{city.treasury:,.0f} gold, tax {city.tax_rate:.0%}. The Reckoning (the vote on your crown) is in "
                  f"{city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
@@ -191,9 +198,10 @@ class RuleBrain:
         low = min(n, key=n.get) if n else None
         if low and n[low] < 0.3:
             if low == "hunger":
-                return ("eat", {}) if loc in ("kitchens", "great_hall", "tavern") else ("walk", {"place": "kitchens"})
+                return ("do", {"what": "eat something hot"}) if loc in ("kitchens", "great_hall", "tavern") \
+                    else ("walk", {"place": "kitchens"})
             if low == "energy":
-                return ("rest", {}) if loc == "bedchamber" else ("walk", {"place": "bedchamber"})
+                return ("do", {"what": "take a nap"}) if loc == "bedchamber" else ("walk", {"place": "bedchamber"})
             if low == "company":
                 who = rng.choice(world.court_here() or ["steward"])
                 if who not in world.court_here() and loc != "throne_room":
@@ -201,9 +209,8 @@ class RuleBrain:
                 return "talk", {"person": who, "text": rng.choice(["What do people say about me?",
                                                                     "Tell me something true.", "Well?"])}
             if low == "fun":
-                return "pastime", {"activity": rng.choice(["painting", "whittling", "singing", "fishing", "chess"]),
-                                   "title": rng.choice(["Untitled", "Study No. %d" % rng.randint(2, 40), "Morning"]),
-                                   "description": "It's not very good yet."}
+                return "do", {"what": rng.choice(["paint the view", "whittle a little boat", "sing to himself",
+                                                  "go fishing", "read an old book", "go for a run"])}
         raid = any(a["id"] in ("warlord_raid", "warlord_horde") for a in city.events)
         open_holds = [w["name"] for w in city.wards if w.get("garrison_until", -1) < city.day]
         if raid and "garrison" in available and open_holds and rng.random() < 0.4:
@@ -263,10 +270,11 @@ class LLMBrain:
                         "you get hungry, tired, lonely and bored, and your ideas can fail.\n"
                         + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
         else:
-            identity = (f"You are {p['name']}, the warlord of {p.get('camp', 'the war camp')} in the frozen north. Your "
-                        "enemy is the king of Emberfall, a soft southern kingdom whose people are real followers online. "
-                        f"{p.get('personality', '')}\nAmbition: {p.get('ambition', '')} Flaw: {p.get('flaw', '')} "
-                        f"Voice: {p.get('voice', '')}.\n")
+            me_now = life.who_am_i(p)
+            identity = (f"You are {p['name']}, a warlord who has just made camp ({p.get('camp', 'the war camp')}) in the "
+                        "frozen hills north of Emberfall, a kingdom whose people are real followers online. Nobody has "
+                        f"told you who to be. Your one goal: {p.get('goal', '')}\n"
+                        + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
         system = (identity +
                   "You live in this world in real time. Every so often you choose ONE thing to do next.\n"
                   f"Your tools:\n{tool_lines}\nArguments:\n{arg_lines}\n"

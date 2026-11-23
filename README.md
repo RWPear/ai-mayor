@@ -29,7 +29,10 @@ Reckoning: the people KNEEL or REVOLT.
 Between posts the kingdom keeps living. **King Aldric** (protagonist) starts blank - a name and one goal - and
 grows his own self: needs push him around, he tries pastimes, has his own ideas for the town (which can fail),
 rebuilds castle ruins (which quietly unlocks powers), talks with his court and judges the docket, and every
-night he rewrites who he is. **Skarn the Red** (the barbarian warlord,
+night he rewrites who he is. He can do anything in his own words ("go for a run", "sit and read") and the
+world narrates what comes of it. Events come from a director that invents consequences of what actually
+happened, tame at first and nastier as the season goes on. Followers get houses (outside the walls, if any);
+raids burn the ones outside. Skarn shows up on day 4. Every post stays live. **Skarn the Red** (the barbarian warlord,
 antagonist) runs his war camp and decides when to raid. Comments in people's own words give their
 character a turn - including stealing from, fighting, or befriending other followers (nobody dies).
 One GPU budget per hour: the crowd gets first claim, the king gets the rest - so a quiet day is about the

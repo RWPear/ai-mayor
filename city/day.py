@@ -108,10 +108,20 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
 
     # 1-2. people
     jobs, free = {}, ({} if world else None)
+    closed = []
+    if world is not None and city.living.get("posts"):     # every post stays live: old posts' words still count
+        pack, closed_words = packs.with_old_posts(pack, city.living["posts"], city.day,
+                                                  {a["id"] for a in city.events})
+        closed = [cm["username"].lower() for cm in comments if cm.get("post") and int(cm["post"]) < city.day
+                  and any(f" {w} " in f" {str(cm.get('text', '')).upper()} " for w in closed_words)]
     actions, status_users, joins = packs.parse(comments, pack, jobs, free)
     before = city.population()
+    n_before = len(c.handles)
     c.add_many(list(followers), city.day, city.ward_for, revive=False)
     c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
+    if world is not None:          # every newcomer gets a house - inside the walls if there's room
+        from .living import town as _town
+        _town.settle(world, n_before)
     joined = city.population() - before
     for u, job in jobs.items():      # BECOME <JOB>
         i = c.index.get(u)
@@ -210,6 +220,11 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
                          "events": len(city.events), "joined": joined, "left": sim_report.get("left", 0)})
     city.history = city.history[-400:]
     city.pack = next_pack(city, plan_pack)
+    if world is not None:                                  # remember every post's words
+        posts = city.living.setdefault("posts", {})
+        posts[str(city.day + 1)] = city.pack
+        for k in sorted(posts, key=int)[:-60]:
+            del posts[k]
 
     result = {"city": city.name, "day": city.day, "season": city.season, "season_day": season_day,
               "joined": joined, "tallies": tallies, "stats": stats, "sim": sim_report,
@@ -221,5 +236,8 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
               "chronicle": chron,
               "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)) if world else [],
               "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}
-                                 for i in dict.fromkeys(ctx.status_requests)]}
+                                 for i in dict.fromkeys(ctx.status_requests)]
+              + [{"username": u, "reply": "That one's over - but today's post is live, and you can always tell your "
+                                          "character what to do in your own words."} for u in dict.fromkeys(closed)
+                 if u not in actions]}
     return result
