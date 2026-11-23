@@ -90,12 +90,14 @@ TEACH_JOB = {"woodcutter": ["timber framing", "carpentry"], "farmer": ["thatchin
 
 KINDS = ["housing", "food", "storage", "workshop", "tool", "defense", "comfort", "gathering", "path", "other"]
 SCALES = {   # bigger = more people per unit of work, but needs know-how
-    "tiny":   {"units": 12,  "hours": 4,   "cap": 1,  "know": [],                                   "ok": 0.95},
-    "small":  {"units": 30,  "hours": 10,  "cap": 3,  "know": ["thatching"],                        "ok": 0.88},
-    "medium": {"units": 80,  "hours": 28,  "cap": 10, "know": ["thatching", "timber framing"],      "ok": 0.78},
-    "large":  {"units": 200, "hours": 70,  "cap": 30, "know": ["timber framing", "stone foundations"], "ok": 0.68},
-    "huge":   {"units": 480, "hours": 160, "cap": 90, "know": ["timber framing", "stone foundations", "mortar",
-                                                               "multi-storey building"],            "ok": 0.58},
+    # crew = how many people can usefully work on one at once (8 hours a day each), so even a crowd takes days
+    "tiny":   {"units": 12,  "hours": 4,   "cap": 1,  "crew": 1,  "know": [],                        "ok": 0.95},
+    "small":  {"units": 30,  "hours": 15,  "cap": 3,  "crew": 3,  "know": ["thatching"],             "ok": 0.88},
+    "medium": {"units": 80,  "hours": 48,  "cap": 10, "crew": 8,  "know": ["thatching", "timber framing"], "ok": 0.78},
+    "large":  {"units": 200, "hours": 140, "cap": 30, "crew": 14, "know": ["timber framing", "stone foundations"],
+               "ok": 0.68},
+    "huge":   {"units": 480, "hours": 380, "cap": 90, "crew": 24, "know": ["timber framing", "stone foundations", "mortar",
+                                                                          "multi-storey building"], "ok": 0.58},
 }
 MIX = {"wood": {"wood": .65, "thatch": .25, "rope": .10}, "stone": {"stone": .6, "wood": .25, "clay": .15},
        "clay": {"clay": .55, "thatch": .25, "wood": .20},
@@ -346,6 +348,36 @@ def _priced(d, idea):
 
 
 # ---------------------------------------------------------------- projects
+ORDER = ["tiny", "small", "medium", "large", "huge"]
+HANDS = [(0, "small"), (1, "medium"), (10, "large"), (50, "huge")]      # settlers -> the biggest they could raise
+EXAMPLE = {"tiny": "a bed, a stone axe", "small": "a cottage, a garden, a shed", "medium": "a longhouse, a barn",
+           "large": "a row of houses, a hall, a palisade", "huge": "a tenement block, a stone keep"}
+
+
+def max_scale(world):
+    """The biggest thing that's realistic right now: limited by how many hands there are, and by experience -
+    one size up from the biggest thing he's actually finished. One man alone raises cottages, not tenements."""
+    L = land(world)
+    n = settled(world.city)
+    hands = max(ORDER.index(s) for need, s in HANDS if n >= need)
+    done = max([ORDER.index(b.get("scale", "tiny")) for b in L["buildings"] if b["id"] != "b0"] or [0])
+    return ORDER[min(hands, done + 1)]
+
+
+def too_big(world, d):
+    """None if he could take it on, else why not (in the world's words)."""
+    cap = max_scale(world)
+    if ORDER.index(d["scale"]) <= ORDER.index(cap):
+        return None
+    n = settled(world.city)
+    who = "one man alone" if not n else f"{n} settler{'s' if n > 1 else ''} and him"
+    built = max([ORDER.index(b.get("scale", "tiny")) for b in land(world)["buildings"] if b["id"] != "b0"] or [0])
+    if ORDER.index(d["scale"]) > built + 1:
+        return (f"nothing he's built comes close to that size - he'd need to raise something "
+                f"{ORDER[built + 1]} first ({EXAMPLE[ORDER[built + 1]]})")
+    return f"that's far too much for {who} - for now, think {cap}: {EXAMPLE[cap]}"
+
+
 def start_project(world, idea, place=None):
     """Returns (project, None) or (None, why)."""
     L = land(world)
@@ -354,6 +386,9 @@ def start_project(world, idea, place=None):
         return None, "no idea"
     if not d["possible"]:
         return None, d["why_not"]
+    why = too_big(world, d)
+    if why:
+        return None, why
     if len([p for p in L["projects"] if not p.get("done")]) >= 3:
         return None, "too many things on the go already"
     pid = match(world, place) or world.agent("king").get("location", "field")
@@ -389,6 +424,14 @@ def work(world, p, hours, who="king"):
     s = L["stock"]
     if p.get("done") or hours <= 0:
         return 0.0, []
+    day = world.city.day + 1                       # only so many hands fit on one building in a day
+    if p.get("hours_day") != day:
+        p["hours_day"], p["hours_today"] = day, 0.0
+    room = SCALES[p["scale"]]["crew"] * 8 + (4 if who == "king" else 0) - p["hours_today"]
+    hours = min(hours, max(0.0, room))
+    if hours <= 0:
+        return 0.0, []
+    p["hours_today"] += hours
     df = min(hours / p["hours"], 1 - p["progress"])
     blocked = []
     for m, n in p["needs"].items():
@@ -582,8 +625,10 @@ def forecast(world):
     elif 0 < days_to < warn and f.get("for") == L["next_arrival"] and n > max(2 * f.get("seen", 0), f.get("seen", 0) + 5):
         est = round(n * city.rng.uniform(0.9, 1.4))
         L["forecast"].update({"est": est, "seen": n})
-        world.moment("world", f"More travellers on the road than anyone has ever seen - maybe {_about(est)}. They'll be "
-                              f"here in {days_to} day{'s' if days_to > 1 else ''}.", 3, public=True, place="road")
+        when = f"They'll be here in {days_to} day{'s' if days_to > 1 else ''}."
+        text = (f"More travellers on the road than anyone has ever seen - maybe {_about(est)}. {when}" if est >= 40
+                else f"More people on the road than the traveller thought - maybe {_about(est)}. {when}")
+        world.moment("world", text, 3 if est >= 40 else 2, public=True, place="road")
         world.notify(f"Surge: about {est} on the road")
 
 

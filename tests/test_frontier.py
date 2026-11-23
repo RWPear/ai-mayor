@@ -85,10 +85,11 @@ def test_building_uses_materials_and_teaches():
     for m, n in p["needs"].items():
         L["stock"][m] = n + 1
     city.rng.random = lambda: 0.01                                          # it goes well
-    for _ in range(20):
+    for k in range(20):
         if p.get("done"):
             break
         me["life"]["needs"]["energy"] = 1.0
+        p["hours_day"] = k                                  # a new day each time (one man can only do so much a day)
         FT.build(w, me, {})
     assert p.get("done") and F.capacity(city) >= 2 and "thatching" in L["know"]
     assert L["stock"]["wood"] < 5
@@ -128,7 +129,7 @@ def test_settlers_work_on_his_projects():
     F.arrive(w)
     me = w.agent("king")
     me["location"] = "field"
-    FT.plan(w, me, {"idea": "a longhouse for the newcomers"})
+    FT.plan(w, me, {"idea": "a small cottage with a thatched roof"})
     p = L["projects"][0]
     for m, n in p["needs"].items():
         L["stock"][m] = n
@@ -232,3 +233,35 @@ def test_the_peddler_sells_tools():
     city.treasury = 40
     FT.trade(w, me, {"buy": "iron axe"})
     assert F.tool_x(city, "wood") == 2.0 and city.treasury == 15
+
+
+def test_ambition_grows_with_the_place():
+    city, w = _world(followers=0)
+    L = F.land(w)
+    assert F.max_scale(w) == "small"                                # one man alone: cottages, not tenements
+    p, why = F.start_project(w, "a tall apartment building of stone and timber", "field")
+    assert p is None and "far too much" in why or "comes close" in why
+    L["buildings"].append({"id": "b9", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": 3,
+                           "place": "field", "quality": "good", "day": 1})
+    assert F.max_scale(w) == "small"                                # experience alone isn't enough without hands
+    c = city.citizens
+    c.add_many([f"s{i}" for i in range(12)], city.day, city.ward_for)
+    assert F.max_scale(w) == "medium"                               # hands, but he's only ever built small
+    L["buildings"].append({"id": "b10", "name": "a longhouse", "kind": "housing", "scale": "medium", "capacity": 8,
+                           "place": "field", "quality": "good", "day": 2})
+    assert F.max_scale(w) == "large"
+    me = w.agent("king")
+    out = FT.plan(w, me, {"idea": "a tall apartment building of stone and timber"})
+    assert out and "laughed at himself" in out["text"]
+
+
+def test_even_a_crowd_takes_days_on_a_big_building():
+    city, w = _world(followers=0)
+    L = F.land(w)
+    p = {"id": "px", "name": "a tenement", "place": "field", "progress": 0.0, "hours": F.SCALES["huge"]["hours"],
+         "needs": {"wood": 10}, "used": {}, "kind": "housing", "scale": "huge", "capacity": 90, "know": [],
+         "boosts": "", "look": "", "missing": [], "helpers": []}
+    L["projects"].append(p)
+    L["stock"]["wood"] = 1000
+    F.work(w, p, 5000, who="settlers")                      # 500 people for 10 hours: still only one crew's worth
+    assert 0 < p["progress"] < 0.6 and not p.get("done")

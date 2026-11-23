@@ -69,7 +69,7 @@ def test_the_woods_thin_out_as_wood_is_cut():
 
 def test_collapses_leave_ruins_where_they_stood():
     city, w, _ = _world()
-    p, _ = F.start_project(w, "a longhouse for the newcomers", "field")
+    p, _ = F.start_project(w, "a small cottage", "field")
     for m, n in p["needs"].items():
         F.land(w)["stock"][m] = n
     city.rng.random = lambda: 0.999

@@ -42,7 +42,7 @@ STONES = 240
 
 # footprints: width (x), depth (z), height
 SIZE = {"tiny": [3, 3, 2.2], "small": [6, 5, 3.6], "medium": [13, 7, 5.5], "large": [24, 9, 6.5],
-        "huge": [18, 14, 16]}
+        "huge": [20, 13, 11]}     # a 3-4 storey tenement, not a tower
 
 ANIM_DO = [(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|snack)", "eat"),
            (r"\b(sleep|nap|doze|rest|lie down)", "sleep"), (r"\b(read|book|study|letters)", "read"),

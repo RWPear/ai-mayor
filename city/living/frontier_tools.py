@@ -63,6 +63,10 @@ def plan(world, me, args):
         return None
     p, why = F.start_project(world, idea, args.get("place"))
     if not p:
+        if why and ("far too much" in why or "comes close" in why):
+            me["nudge"] = f"You paced out {idea} in the field, then stopped: {why}."
+            return world.moment("king", f"Aldric paced out {idea} in the field, then stopped and laughed at himself: "
+                                        f"{why}.", 1, public=True)
         if why and "too many" not in why and why != "no idea":
             return world.moment("king", f"Aldric dreamed up {idea} - but {why}.", 1, public=True)
         me["nudge"] = f"You can't start that: {why}."
@@ -361,6 +365,10 @@ def sections(world, me):
     S["kingdom"].append(f"Next arrival day: day {L['next_arrival']} (in {days_to} day{'s' if days_to != 1 else ''}). "
                         + (f"A traveller said about {F._about(f['est'])} are coming." if f else
                            "Nobody knows yet how many will come."))
+    cap = F.max_scale(world)
+    S["building"].append(f"The biggest thing you could realistically take on now: something {cap} "
+                         f"({F.EXAMPLE[cap]}). Bigger needs more hands, and you get there by building bigger "
+                         f"one step at a time.")
     if L.get("idle_yesterday", 0) >= 5:
         S["kingdom"].append(f"Yesterday the settlers had {L['idle_yesterday']} hours with nothing to do - nothing "
                             "of yours left to build or gather for.")
@@ -420,8 +428,8 @@ def identity(p):
 
 
 # ---------------------------------------------------------------- instincts (no model)
-TEST_LADDER = [(2, "a small cottage with a thatched roof"), (8, "a longhouse for the newcomers"),
-               (25, "a row of timber houses"), (10 ** 9, "a tall apartment building of stone and timber")]
+TEST_LADDER = [("small", 3, "a small cottage with a thatched roof"), ("medium", 10, "a longhouse for the newcomers"),
+               ("large", 30, "a row of timber houses"), ("huge", 90, "a tall apartment building of stone and timber")]
 TEST_OTHERS = ["a new roof for the shack", "a vegetable garden", "a stone axe", "a storehouse for food",
                "a fish trap in the river", "a meeting hall", "a well"]
 
@@ -495,7 +503,9 @@ def _next_idea(world):
     expected = (L.get("forecast") or {}).get("est", F.on_road(city))
     gap = expected + F.tents(city) - F.free_beds(city)
     if gap > 0 or not any(b["kind"] == "housing" for b in L["buildings"]):
-        idea = next(i for need, i in TEST_LADDER if max(1, gap) <= need)
+        cap = F.ORDER.index(F.max_scale(world))
+        fits = [(s, n, i) for s, n, i in TEST_LADDER if F.ORDER.index(s) <= cap]
+        idea = next((i for s, n, i in fits if max(1, gap) <= n), fits[-1][2])     # the biggest he can manage
         open_ = sum(p.get("capacity", 0) for p in L["projects"])
         if any(p["idea"] == idea for p in L["projects"]) or (open_ and open_ >= gap):
             return None                          # already building enough

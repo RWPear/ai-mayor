@@ -302,19 +302,32 @@ function scaffold(b, R, out) {
     if (bb.min.y > cut) o.visible = false;
     else if (bb.max.y > cut && bb.max.y - bb.min.y > 0.5 && !o.isInstancedMesh) { const keep = (cut - bb.min.y) / (bb.max.y - bb.min.y); o.scale.y *= Math.max(0.05, keep); o.position.y -= (bb.max.y - bb.min.y) * (1 - keep) / 2; }
   });
+  const [w, d] = [bbox.max.x - bbox.min.x, bbox.max.z - bbox.min.z];
+  if ((b.progress || 0) < 0.06) {                      // just planned: stakes and string in the grass, a first pile
+    const stake = M(0xc9a26a), str = new THREE.LineBasicMaterial({ color: 0xf2e6c8 });
+    const pts = [];
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 5), stake); st.position.set(sx * w / 2, 0.45, sz * d / 2); g.add(st);
+      pts.push(new THREE.Vector3(sx * w / 2, 0.75, sz * d / 2));
+    }
+    pts.push(pts[0].clone());
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), str));
+    for (let k = 0; k < 4; k++) { const pl = mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.2, 6), M(C.trunk)); pl.rotation.z = Math.PI / 2; pl.position.set(-w / 2 - 1.5, 0.2 + (k > 2 ? 0.36 : 0), -d / 4 + (k % 3) * 0.42); g.add(pl); }
+    return g;
+  }
   g.add(full);
   if (b.shape === "wall_ring" || b.shape === "plot" || b.shape === "road") return g;
-  const [w, d] = [bbox.max.x - bbox.min.x, bbox.max.z - bbox.min.z];
   const pole = M(0xb08a58);
+  const poleTop = Math.min(top + 1, cut + 2.4);       // scaffolding only rises as fast as the walls do
   const nx = Math.max(2, Math.round(w / 2.5)), nz = Math.max(2, Math.round(d / 2.5));
-  for (let i = 0; i <= nx; i++) for (const s of [-1, 1]) { const pl = mesh(new THREE.CylinderGeometry(0.07, 0.07, top + 1, 5), pole); pl.position.set(bbox.min.x + i * w / nx, (top + 1) / 2, s * (d / 2 + 0.8)); g.add(pl); }
-  for (let i = 0; i <= nz; i++) for (const s of [-1, 1]) { const pl = mesh(new THREE.CylinderGeometry(0.07, 0.07, top + 1, 5), pole); pl.position.set(s * (w / 2 + 0.8), (top + 1) / 2, bbox.min.z + i * d / nz); g.add(pl); }
-  for (let y = 2; y < top; y += 2) for (const s of [-1, 1]) {
+  for (let i = 0; i <= nx; i++) for (const s of [-1, 1]) { const pl = mesh(new THREE.CylinderGeometry(0.07, 0.07, poleTop, 5), pole); pl.position.set(bbox.min.x + i * w / nx, poleTop / 2, s * (d / 2 + 0.8)); g.add(pl); }
+  for (let i = 0; i <= nz; i++) for (const s of [-1, 1]) { const pl = mesh(new THREE.CylinderGeometry(0.07, 0.07, poleTop, 5), pole); pl.position.set(s * (w / 2 + 0.8), poleTop / 2, bbox.min.z + i * d / nz); g.add(pl); }
+  for (let y = 2; y < poleTop; y += 2) for (const s of [-1, 1]) {
     const lx = mesh(new THREE.CylinderGeometry(0.06, 0.06, w + 1.8, 5), pole); lx.rotation.z = Math.PI / 2; lx.position.set(0, y, s * (d / 2 + 0.8)); g.add(lx);
     const lz = mesh(new THREE.CylinderGeometry(0.06, 0.06, d + 1.8, 5), pole); lz.rotation.x = Math.PI / 2; lz.position.set(s * (w / 2 + 0.8), y, 0); g.add(lz);
     if (y < cut + 1) { const plank = mesh(box(w + 1.4, 0.08, 0.6), M(C.plank, "plank")); plank.position.set(0, y + 0.06, s * (d / 2 + 0.8)); g.add(plank); }
   }
-  const lad = mesh(box(0.6, Math.min(top, cut + 2), 0.08), M(C.plank)); lad.position.set(w / 2 + 1.3, Math.min(top, cut + 2) / 2, 0); lad.rotation.z = 0.2; g.add(lad);
+  const lad = mesh(box(0.6, poleTop, 0.08), M(C.plank)); lad.position.set(w / 2 + 1.3, poleTop / 2, 0); lad.rotation.z = 0.2; g.add(lad);
   for (let k = 0; k < 6; k++) { const pl = mesh(box(0.3, 0.12, 3), M(C.plank, "plank")); pl.position.set(-w / 2 - 2.2, 0.08 + k * 0.13, -d / 4); g.add(pl); }
   return g;
 }
