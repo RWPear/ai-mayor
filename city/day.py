@@ -108,13 +108,17 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
 
     # 1-2. people
     jobs, free = {}, ({} if world else None)
+    story, flagged = ({}, []) if world else (None, None)
+    if world is not None:
+        from .living.intents import muted
+        comments = [cm for cm in comments if not muted(world, str(cm.get("username", "")).lower())]
     closed = []
     if world is not None and city.living.get("posts"):     # every post stays live: old posts' words still count
         pack, closed_words = packs.with_old_posts(pack, city.living["posts"], city.day,
                                                   {a["id"] for a in city.events})
         closed = [cm["username"].lower() for cm in comments if cm.get("post") and int(cm["post"]) < city.day
                   and any(f" {w} " in f" {str(cm.get('text', '')).upper()} " for w in closed_words)]
-    actions, status_users, joins = packs.parse(comments, pack, jobs, free)
+    actions, status_users, joins = packs.parse(comments, pack, jobs, free, story, flagged)
     if world is not None:
         for cm in comments:
             world.note_comment(cm)
@@ -137,7 +141,7 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
     tallies = packs.apply(city, ctx, actions, pack)
     if world is not None:
         from .living import intents
-        world.finish_crowd(free)          # most own-words moves were already played out during the day
+        world.finish_crowd(free, story, flagged)   # most own-words moves were already played out during the day
         tallies.update(intents.finish_day(world, ctx, pack))
     for u in status_users:
         i = c.index.get(u)
@@ -245,6 +249,7 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
               "credits": (city.living.get("credits_today", []) if world else []),
               "wanted": (__import__("city.living.things", fromlist=["wanted"]).wanted(city) if world else []),
               "outbox": (city.living.get("outbox", []) if world else []),
+              "moderation": ([m for m in city.living.get("moderation", []) if m["day"] == city.day] if world else []),
               "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)) if world else [],
               "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}
                                  for i in dict.fromkeys(ctx.status_requests)]

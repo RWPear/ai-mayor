@@ -42,7 +42,7 @@ class World:
         self.director_llm = director_llm  # invents events from what's going on (else: the hand-written list)
         self.stats = {}
         self.pending = []                 # comments that arrived but haven't been played out yet
-        self._hour_free = {}
+        self._hour_free, self._hour_story = {}, {}
         if city.living is None:
             self._new()
         self._upgrade()
@@ -130,11 +130,17 @@ class World:
 
     # ------------------------------------------------------------------ talking back to followers
     def note_comment(self, cm):
-        """Remembers each follower's latest comment, so replies can go to it (Instagram replies need a comment)."""
-        u = str(cm.get("username", "")).lower()
+        """Remembers each follower's latest comment, so replies can go to it (Instagram replies need a comment),
+        and counts comments per day (people who post 15+ a day stop getting replies to their moves)."""
+        u = str(cm.get("username", "")).strip().lstrip("@").lower()
         if u:
-            self.city.living.setdefault("last_comment", {})[u] = {"id": cm.get("id"), "post": cm.get("post"),
-                                                                   "day": self.city.day + 1}
+            lv = self.city.living
+            lv.setdefault("last_comment", {})[u] = {"id": cm.get("id"), "post": cm.get("post"), "day": self.city.day + 1}
+            counts = lv.setdefault("comment_counts", {})
+            if counts.get("_day") != self.city.day + 1:
+                counts.clear()
+                counts["_day"] = self.city.day + 1
+            counts[u] = counts.get(u, 0) + 1
 
     def reply(self, handle, text, kind, credit=None):
         """Something happened to/with a follower's character. They hear about it (a reply to their latest comment,
@@ -142,7 +148,8 @@ class World:
         lv = self.city.living
         handle = str(handle).lstrip("@").lower()
         last = lv.get("last_comment", {}).get(handle)
-        if last and last["day"] >= self.city.day + 1 - 7:
+        spammy = kind in ("your_move", "your_story") and lv.get("comment_counts", {}).get(handle, 0) > 15
+        if last and last["day"] >= self.city.day + 1 - 7 and not spammy and not intents.muted(self, handle):
             lv.setdefault("outbox", []).append({"to": handle, "text": text[:600], "kind": kind, "time": self.now_str(),
                                                 "comment_id": last.get("id"), "post": last.get("post")})
         if credit:
@@ -335,24 +342,44 @@ class World:
         self.stats["crowd_moves"] = self.stats.get("crowd_moves", 0) + len(out)
         return out
 
+    def process_stories(self, story, final=False):
+        """Keyword + a story around it: the reply builds on the story (within what's left of the budget)."""
+        if not story or not self.crowd_llm:
+            return 0
+        b = self._budget_hour()
+        ai = min(len(story), int(max(0, b["left"] * (1.0 if final else 0.5))) * 8)
+        return intents.stories(self, story, self.city.pack, self.crowd_llm, ai)
+
     def _release_comments(self):
         due = [cm for at, cm in self.pending if at <= self.clock]
         self.pending = [(at, cm) for at, cm in self.pending if at > self.clock]
         if not due:
             return
+        due = [cm for cm in due if not intents.muted(self, str(cm.get("username", "")).lower())]
         for cm in due:
             self.note_comment(cm)
-        free = {}
-        packs.parse(due, self.city.pack or {"commands": {}}, None, free)
+        free, story, flagged = {}, {}, []
+        packs.parse(due, self.city.pack or {"commands": {}}, None, free, story, flagged)
+        for f in flagged:
+            intents.flag(self, f["user"], f["kind"], f["text"])
         self._hour_free.update(free)
+        self._hour_story.update(story)
 
-    def finish_crowd(self, free):
+    def finish_crowd(self, free, story=None, flagged=None):
         """At the close: anyone whose own-words move hasn't been played out yet gets it now."""
+        for f in flagged or []:
+            if not any(m["user"] == f["user"] and m["text"] == f["text"]
+                       for m in self.city.living.get("moderation", [])[-50:]):
+                intents.flag(self, f["user"], f["kind"], f["text"])
         acted = set(self.city.living.get("acted_today", []))
-        left = {u: t for u, t in free.items() if u not in acted}
+        left = {u: t for u, t in free.items() if u not in acted and not intents.muted(self, u)}
         left.update({u: t for u, t in self._hour_free.items() if u not in acted})
         self._hour_free = {}
         self.process_crowd(left, final=True)
+        told = {x["to"] for x in self.city.living.get("outbox", []) if x["kind"] == "your_story"}
+        rest = {u: t for u, t in {**(story or {}), **self._hour_story}.items() if u not in told}
+        self._hour_story = {}
+        self.process_stories(rest, final=True)
 
     # ------------------------------------------------------------------ the loop
     def tick(self):
@@ -363,7 +390,9 @@ class World:
         self._release_comments()
         if self.clock % 60 == 0:                                  # on the hour: the crowd, then visitors
             hf, self._hour_free = self._hour_free, {}
+            hs, self._hour_story = self._hour_story, {}
             self.process_crowd(hf)
+            self.process_stories(hs)
             case = life.visitors(self) if self.city.rng.random() < 0.35 else None
             if case:
                 self.moment("world", f"At the castle gate: {case['text']}.", 0, public=False)

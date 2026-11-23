@@ -13,7 +13,8 @@ Always available on every post (not one of the post's actions):
   STATUS            - get your subject card
   JOIN / MOVE IN    - move into the kingdom (or come back after leaving)
   BECOME <JOB>      - change trade, e.g. BECOME BLACKSMITH (see city/roles.py)
-One action counts per person per post - their latest valid comment wins.
+One action counts per person per post - their latest valid comment wins. How comments are read (short vs
+long, capitals, votes, people's own words, trolls) is in city/comments.py.
 """
 import re
 from pathlib import Path
@@ -99,37 +100,48 @@ def with_old_posts(pack, posts, today, active_events):
     return out, closed - set(out["commands"])
 
 
-def parse(comments, pack, jobs=None, free=None):
+def parse(comments, pack, jobs=None, free=None, story=None, flagged=None):
     """comments: [{username, text, timestamp}] -> ({username: word}, {status users}, {join users}).
-    Latest valid action per user wins. Unknown words are ignored.
-    If `jobs` is a dict, BECOME <JOB> requests are written into it ({username: job}).
-    If `free` is a dict, comments in people's own words ("I sneak into the kitchens...") go into it
-    ({username: text}) - the living world gives those characters a mind for the day."""
+    Latest valid action per user wins. How each comment is read is in city/comments.py.
+    jobs:    filled with BECOME <JOB> requests ({username: job})
+    free:    filled with comments in people's own words ({username: text}) - their move for the day
+    story:   filled with the story around a keyword ({username: text}) - so the reply can build on it
+    flagged: filled with comments that were abusive or tried to talk to the machine ([{user, kind, text}])"""
+    from .comments import route
     words = dict(pack["commands"])
     actions, status, joins = {}, set(), set()
     for cm in sorted(comments, key=lambda c: c.get("timestamp", 0)):
-        user = str(cm.get("username", "")).strip().lstrip("@").lower()
-        text = " " + re.sub(r"[^A-Za-z ]", " ", str(cm.get("text", ""))).upper() + " "
-        if not user:
+        r = route(cm, words)
+        user = r["user"]
+        if not user or r["kind"] == "ignore":
             continue
-        if " STATUS " in text:
+        if r["kind"] in ("abuse", "injection"):
+            if flagged is not None:
+                flagged.append({"user": user, "kind": r["kind"], "text": r["text"][:300]})
+            continue
+        if r["status"]:
             status.add(user)
-        if " MOVE IN " in text or " MOVEIN " in text or " JOIN " in text:
+        if r["join"]:
             joins.add(user)
-        m = re.search(r" BECOME (?:AN? )?([A-Z]+) ", text)
-        if m and job_from_word(m.group(1)):
+        if r["job"]:
             if jobs is not None:
-                jobs[user] = job_from_word(m.group(1))
+                jobs[user] = r["job"]
             joins.add(user)
-        hit = next((w for w in words if f" {w} " in text), None)
-        if hit:
-            actions[user] = hit
-            joins.add(user)  # any command moves you in
+        if r["kind"] in ("keyword", "vote"):
+            actions[user] = r["word"]
+            joins.add(user)                       # any command moves you in
             if free is not None:
                 free.pop(user, None)
-        elif free is not None and len(text.split()) >= 3 and " STATUS " not in text and not m:
-            free[user] = str(cm.get("text", ""))[:300]
+            if story is not None:
+                if r["story"]:
+                    story[user] = r["text"]
+                else:
+                    story.pop(user, None)
+        elif r["kind"] == "own" and free is not None:
+            free[user] = r["text"]
             actions.pop(user, None)
+            if story is not None:
+                story.pop(user, None)
             joins.add(user)
     return actions, status, joins
 

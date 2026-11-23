@@ -72,7 +72,8 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
 content/         events, projects, milestones, ruler persona, balance overrides (all YAML)
 seasons/         season plans: season1.yaml (written), season2.yaml (outline)
 seeds/           season plans for the living world (only the bones - the minds do the rest)
-docs/            EVENTS.md (writing events), SEASONS.md (where this is going)
+docs/            EVENTS.md (writing events), SEASONS.md (where this is going), LIVING.md (the living world),
+                 COMMENTS.md (how comments are read: keywords, stories, trolls)
 packs/           command packs for posts
 scenarios/       test scenarios
 tests/           .venv/bin/python -m pytest -q
