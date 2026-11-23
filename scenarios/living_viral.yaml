@@ -10,4 +10,5 @@ growth: {daily: 10, viral: [{day: 8, add: 1500}, {day: 9, add: 2500}, {day: 11, 
 engagement: 0.25
 free_text: 0.4
 balance:
+  start: kingdom        # the castle start (see scenarios/frontier.yaml for the new one)
   gpu_calls_per_hour: 16

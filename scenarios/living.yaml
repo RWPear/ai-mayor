@@ -9,3 +9,5 @@ start_followers: 80
 growth: {daily: 8, viral_chance: 0.05, viral_size: [40, 120]}
 engagement: 0.18
 free_text: 0.12       # share of commenters who write their own move instead of a keyword
+balance:
+  start: kingdom        # the castle start (see scenarios/frontier.yaml for the new one)

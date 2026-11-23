@@ -63,11 +63,11 @@ def _town(world):
 
 # ---------------------------------------------------------------------------- the king's life
 def walk(world, me, args):
-    pid = T.match_place(args.get("place"))
+    pid = T.match_place(args.get("place"), _town(world))
     if not pid or pid == me.get("location"):
         return None
     me["location"] = pid
-    me["next_act"] = world.clock + T.PLACES[pid]["walk"]        # walking takes a while
+    me["next_act"] = world.clock + T.places(_town(world))[pid].get("walk", 10)   # walking takes a while
     name = T.place_of(pid, _town(world))
     disguise = pid == "tavern"
     return world.moment("king", f"The king {'slipped into' if disguise else 'walked to'} {name}"
@@ -97,15 +97,24 @@ def talk(world, me, args):
     i = c.index.get(h)
     if i is None or c.status[i] != 0:
         return None
-    reply = world.voice_subject(int(i), f'The king, at {T.PLACES[me["location"]]["name"]}, says to you: "{said}"'
+    where = T.place_of(me["location"], _town(world))
+    reply = world.voice_subject(int(i), f'The king, at {where}, says to you: "{said}"'
                                 if said else "The king stops to talk to you.")
     c.loyalty[i] = float(np.clip(c.loyalty[i] + 0.04, 0, 1))
     c.log(int(i), world.city.day + 1, "talked with the king himself")
-    world.reply(c.handles[i], f'👑 The king stopped your character at {T.PLACES[me["location"]]["name"]} and said: '
+    world.reply(c.handles[i], f'👑 The king stopped your character at {where} and said: '
                               f'"{said or "Hello there."}" You answered: "{reply}"', "king_talked",
                 credit="talked with the king")
+    taught = ""
+    if world.frontier:
+        from . import frontier
+        k = frontier.learn_from(world, int(i))
+        if k:
+            taught = f" @{c.handles[i]} showed him a thing or two about {k}."
+            world.reply(c.handles[i], f"🔨 You showed Aldric how {k} works. He's going to use it.", "taught",
+                        credit=f"taught Aldric {k}")
     return world.moment("king", f'The king stopped to talk with @{c.handles[i]}: "{said or "Hello there."}" - '
-                                f'"{reply}"', 2, public=True, place=me.get("location"), handles=[c.handles[i]])
+                                f'"{reply}"' + taught, 2, public=True, place=me.get("location"), handles=[c.handles[i]])
 
 
 def do(world, me, args):
@@ -117,7 +126,18 @@ def do(world, me, args):
     out = world.narrate_activity(me, what)
     lf = me.setdefault("life", life.new_life())
     label = f"{out.get('activity', '')} {what}".lower()
-    if re.search(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|feast|snack|food)", label):
+    eating = re.search(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|feast|snack|food)", label)
+    if eating and world.frontier:                                 # on the frontier a meal comes out of the stores
+        from . import frontier
+        st = frontier.land(world)["stock"]
+        if st.get("food", 0) >= 1:
+            st["food"] -= 1
+        else:
+            eating = None
+            out["hunger"] = min(out.get("hunger", 0.0), 0.0)
+            out["outcome"] = "There was nothing left to eat. Aldric's stomach growled at the empty pot."
+            out["drama"] = max(int(out.get("drama", 0)), 1)
+    if eating:
         out["hunger"] = max(out.get("hunger", 0.0), 0.5)          # a meal is a meal
     if re.search(r"\b(nap|sleep|doze|lie down)", label):
         out["energy"] = max(out.get("energy", 0.0), 0.3)
@@ -127,6 +147,11 @@ def do(world, me, args):
     lf["skills"][act] = lf["skills"].get(act, 0) + 1
     if out.get("learned"):
         lf["knowledge"] = (lf.get("knowledge", []) + [out["learned"]])[-20:]
+    if world.frontier:
+        from . import frontier
+        k = frontier.learn_by_doing(world, f"{what} {out.get('learned', '')}")
+        if k:
+            out["outcome"] = out["outcome"].rstrip(".") + f". Somewhere in there, he worked out {k}."
     if out.get("found"):
         lf["inventory"] = (lf.get("inventory", []) + [{"item": out["found"], "from": None, "day": world.city.day + 1}])[-20:]
     if out.get("made"):
@@ -250,7 +275,7 @@ def work_on(world, me, args):
 def hold_court(world, me, args):
     """At the throne room: rule on a case from the docket (petitioners, criminals, visitors)."""
     from .intents import set_condition
-    if me.get("location") != "throne_room":
+    if me.get("location") != T.court_place(world):
         return None
     docket = world.city.living.get("docket", [])
     case = next((k for k in docket if k["id"] == args.get("case")), docket[0] if docket else None)
@@ -290,7 +315,7 @@ def hold_court(world, me, args):
                     + (f' He said: "{words}"' if words else ""), "court",
                     credit=f"had their case heard at court ({verdict})" if verdict in ("grant", "reward") else None)
     return world.moment("king", f"At court: {case['text']}. The king's verdict: {verdict.upper()}{effect}."
-                        + (f' "{words}"' if words else ""), 2, public=True, place="throne_room",
+                        + (f' "{words}"' if words else ""), 2, public=True, place=me.get("location"),
                         handles=[case["who"]])
 
 
@@ -328,7 +353,7 @@ def summon(world, me, args):
     if i is None or c.status[i] != 0:
         return None
     why = str(args.get("why") or "").strip()[:160]
-    reply = world.voice_subject(int(i), f"The king summoned you to {T.PLACES.get(me.get('location'), T.PLACES['throne_room'])['name']}"
+    reply = world.voice_subject(int(i), f"The king summoned you to {T.place_of(me.get('location', 'throne_room'), _town(world))}"
                                         + (f" because: {why}" if why else "") + ". What do you tell him?")
     good = float(c.mood[i]) > 0.5
     c.loyalty[i] = float(np.clip(c.loyalty[i] + (0.06 if good else -0.03), 0, 1))
@@ -507,7 +532,8 @@ def taunt(world, me, args):
     if not text:
         return None
     world.agent("king").setdefault("letters", []).append({"day": world.city.day, "from": me["name"], "text": text})
-    return world.moment("warlord", f'A letter from {me["name"]} arrived at the castle: "{text}"', 2, public=True)
+    where = "Aldric's door" if world.frontier else "the castle"
+    return world.moment("warlord", f'A letter from {me["name"]} arrived at {where}: "{text}"', 2, public=True)
 
 
 def feast(world, me, args):
@@ -531,7 +557,7 @@ def sabotage(world, me, args):
     return world.moment("warlord", f"{me['name']}'s men set the fire in {city.wards[wi]['name']}.", 1, public=False)
 
 
-ARG = {"place": "where to walk: " + ", ".join(p["name"] for p in T.PLACES.values()),
+ARG = {"place": "where to walk (one of the Places)",
        "person": "'steward', 'captain', 'jester', or a subject's @handle", "text": "the words, in your voice",
        "what": "what you do, in your own words (you can use anything that's here)",
        "thing": "what you want, in a few words",
@@ -584,6 +610,9 @@ TOOLS = {
 
 def unlocked(world, who):
     """The powers this mind has (unlocks are announced as they happen)."""
+    if who == "king" and world.frontier:
+        from . import frontier_tools
+        return frontier_tools.unlocked(world)
     out = {}
     if who == "warlord" and not warcamp.camp(world.city).get("arrived"):
         return out                                    # he hasn't come yet
@@ -594,7 +623,8 @@ def unlocked(world, who):
 
 
 # how long before a tool makes sense again (minutes) - stops letter spam and speech loops
-COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120},
+COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120,
+                     "plan": 90, "organize": 240, "appoint": 720, "trade": 30},
             "warlord": {"taunt": 720, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
 
 
@@ -636,4 +666,15 @@ def _ready(world, who, name):
 
 def available(world, who):
     """What this mind can sensibly do right now: its powers, minus what's on cooldown or makes no sense here."""
+    if who == "king" and world.frontier:
+        from . import frontier_tools
+        return {n: v for n, v in unlocked(world, who).items() if frontier_tools.ready(world, n)}
     return {n: v for n, v in unlocked(world, who).items() if _ready(world, who, n)}
+
+ARG.update({   # the frontier's tools (city/living/frontier_tools.py)
+    "material": "wood, stone, clay, thatch, rope or food (only what's here)",
+    "how": "how you go about it, in a few words (optional)",
+    "idea": "what you want to build, in your own words - anything at all",
+    "project": "which project (its name)", "task": "a project's name, or a material to gather",
+    "people": "how many settlers", "title": "the job you're giving them",
+    "buy": "what to buy from the peddler", "sell": "e.g. '20 wood'"})

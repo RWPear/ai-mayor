@@ -53,6 +53,15 @@ DEFAULTS = {
     "event_effort": 0.6,          # lower = events need fewer helpers (tune to your real comment rate)
     "event_cooldown_days": 2,     # at least this many days between new events
     "protest_contagion": 0.02,    # approval lost by everyone in a ward with a street protest, per day
+    # ---- the living world's start (city/living/frontier.py)
+    "start": "frontier",          # frontier = the king alone in a shack; kingdom = a castle, a court and a treasury
+    "frontier_gold": 15,          # coins in his pocket at the start
+    "frontier_arrival_every": 7,  # days between arrival days (the first is day 7: week one he's alone)
+    "frontier_warn_days": 3,      # a traveller brings word this many days before arrival day
+    "frontier_passive_hours": 1.5,   # hours a settler works on an ordinary day
+    "frontier_work_hours": 5.0,      # ...and on a day they comment WORK (or describe their work)
+    "frontier_crown_at": 10,      # settlers needed before they vote on crowning him
+    "frontier_warlord_pop": 15,   # Skarn comes once this many people live there (and it's day 6+)
 }
 
 

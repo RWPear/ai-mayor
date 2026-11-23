@@ -62,6 +62,10 @@ def feeling(me):
     return "You feel " + ", ".join(("desperately " if v < 0.15 else "") + WORDS[k] for v, k in bad) + "."
 
 
+def needs_of(me):
+    return me.setdefault("life", new_life()).setdefault("needs", {k: 0.8 for k in NEEDS})
+
+
 def satisfy(me, need, amount):
     n = me.setdefault("life", new_life())["needs"]
     if need in NEEDS:
@@ -120,8 +124,11 @@ def reflect(world, me, llm=None):
         world.spend_calls(1)
         try:
             out = llm.json(
-                f"You are {me['name']}, king of {world.city.name}. Nobody told you who to be; you're figuring it out. "
-                f"Your goal: {me.get('goal', '')} It's late and you're going to sleep. Look back on today and update "
+                (f"You are Aldric, building {world.city.name} from nothing - you want to be its king. "
+                 if world.frontier and not world.city.living["town"]["land"].get("crowned") else
+                 f"You are {me['name']}, king of {world.city.name}. ")
+                + "Nobody told you who to be; you're figuring it out. "
+                f"Your goal: {me.get('frontier_goal') if world.frontier else me.get('goal', '')} It's late and you're going to sleep. Look back on today and update "
                 "who you are: traits (what you're like), likes, dislikes, passions (only things you really keep "
                 "coming back to), wants (your own goals beyond the crown), fears. Keep what still fits, change what "
                 "doesn't, add only what today actually showed. Short phrases. 'becoming': one honest sentence about "
@@ -266,7 +273,14 @@ def visitors(world):
     if not act.any() or city.rng.random() > 0.25:
         return None
     i = int(city.rng.choice(np.where(act)[0].tolist()))
-    asks = ["wants the king to settle a dispute about a stolen goat", "asks for a loan to fix their roof",
+    if city.living.get("town", {}).get("land"):
+        asks = ["wants to know when their house will be ready", "says someone's been taking from the woodpile",
+                "wants permission to plant a garden by the river", "found a strange old coin in the field",
+                "complains that the tents leak", "wants Aldric to settle a fight over the last dry blanket",
+                "says there are wolf tracks by the stores", "offers to teach the children their letters"]
+    else:
+        asks = None
+    asks = asks or ["wants the king to settle a dispute about a stolen goat", "asks for a loan to fix their roof",
             "complains that the tax collector was rude", "wants permission to marry a soldier",
             "offers the king a suspiciously large turnip", "says a ghost lives in the old mill",
             "asks the king to bless their new shop", "reports strange lights near the northern pass"]

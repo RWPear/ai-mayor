@@ -1,0 +1,12 @@
+# The frontier start: Aldric alone in a leaky shack in a field. He gathers, invents what to build, and gets
+# ready for the people arriving every 7 days (a traveller warns him 3 days before). A slow-growing account:
+# a handful of people a week, with the odd good post.
+# ./kingdom test --scenario scenarios/frontier.yaml               (rules minds, a few seconds)
+# ./kingdom test --scenario scenarios/frontier.yaml --king llm    (real minds, takes a while)
+kingdom: Emberfall
+living: true
+days: 30
+start_followers: 3
+growth: {daily: 1.5, viral_chance: 0.05, viral_size: [10, 30]}
+engagement: 0.3
+free_text: 0.35

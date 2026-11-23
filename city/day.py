@@ -18,6 +18,7 @@ from .effects import DayContext
 from .roles import a_job
 
 BASICS = {"WORK": "work", "TRADE": "shop", "TRAIN": "train", "GRUMBLE": "protest"}
+FRONTIER_BASICS = {"WORK": "work", "BUILD": "volunteer", "CHEER": "support", "GRUMBLE": "protest"}   # settlers' words
 
 
 def default_pack():
@@ -36,13 +37,17 @@ def next_pack(city, plan_pack=None):
     cat = storyteller.catalog()
     evs = [a for a in city.events if (cat.get(a["id"]) or {}).get("commands") or (cat.get(a["id"]) or {}).get("choices")]
     evs.sort(key=lambda a: (a.get("source") != "warlord", -a["started"]))
-    base = plan_pack or (election_pack() if sd == city.cfg["season_days"] else None)
+    land = ((getattr(city, "living", None) or {}).get("town") or {}).get("land")
+    reckoning = sd == city.cfg["season_days"] and (not land or land.get("crowned"))   # no crown, nothing to vote on
+    base = plan_pack or (election_pack() if reckoning else None)
     if base is not None:
         war = [{**cat[a["id"]], "id": a["id"]} for a in evs if a.get("source") == "warlord"
                and a["id"] != base.get("event")]
         return packs.merge(base, war[:1]) if war else base
     if evs:
         return packs.from_events([{**cat[a["id"]], "id": a["id"]} for a in evs[:2]])
+    if ((getattr(city, "living", None) or {}).get("town") or {}).get("land"):
+        return {**default_pack(), "commands": dict(FRONTIER_BASICS)}
     return default_pack()
 
 
@@ -124,9 +129,12 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
             world.note_comment(cm)
     before = city.population()
     n_before = len(c.handles)
-    c.add_many(list(followers), city.day, city.ward_for, revive=False)
-    c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
-    if world is not None:          # every newcomer gets a house - inside the walls if there's room
+    new1 = c.add_many(list(followers), city.day, city.ward_for, revive=False)
+    new2 = c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
+    if world is not None and world.frontier:   # on the frontier, newcomers set off on the road (arrive weekly)
+        from .living import frontier as _frontier
+        _frontier.join_road(world, np.concatenate([np.asarray(new1, np.int64), np.asarray(new2, np.int64)]))
+    elif world is not None:        # every newcomer gets a house - inside the walls if there's room
         from .living import town as _town
         _town.settle(world, n_before)
     joined = city.population() - before
@@ -161,7 +169,8 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
 
     # 6. recall vote on the season finale
     election = None
-    if season_day == cfg["season_days"]:
+    land = ((city.living or {}).get("town") or {}).get("land") if world is not None else None
+    if season_day == cfg["season_days"] and (not land or land.get("crowned")):
         a = c.active()
         silent = a.copy()
         voted = 0
@@ -197,6 +206,9 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
     # 8. mayor
     log_before = len(city.event_log)
     decision = mayor.decide(city)
+    if world is not None and world.frontier:     # on the frontier, Aldric builds things himself - no royal treasury
+        decision.pop("project", None)
+        decision.pop("speech", None)
     from .mayor import apply_decision
     lines, speech = apply_decision(city, decision)
     # events the mayor settled outright today count as ended today too
@@ -231,6 +243,9 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
         heard = {x["to"] for x in city.living.get("outbox", []) if x.get("day") in (city.day, city.day + 1)}
         world.welcome([u for u in today if u not in bad and u not in heard])
         world.counted({u: w for u, w in actions.items() if u not in bad}, tallies)
+    if world is not None and world.frontier:
+        from .living import frontier as _frontier
+        _frontier.after_post(world)
     chron = world.chronicle() if world is not None else None
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
                + ([m["text"] for m in chron["top"]] if chron else [])
@@ -257,6 +272,8 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
               "decided_by": decision.get("_by", mayor.name), "thought": decision.get("thought", ""),
               "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,
               "chronicle": chron,
+              "frontier": (__import__("city.living.frontier", fromlist=["summary"]).summary(world)
+                           if world is not None and world.frontier else None),
               "credits": (city.living.get("credits_today", []) if world else []),
               "wanted": (__import__("city.living.things", fromlist=["wanted"]).wanted(city) if world else []),
               "outbox": (city.living.get("outbox", []) if world else []),

@@ -3,6 +3,8 @@
 **An AI king and an AI warlord live in a world that never stops. Follow and you're born into it.
 Comment a word to act, or tell your character what to do in your own words. Once a day: the story so far.**
 
+**The start:** by default the king begins on the frontier: alone in a leaky shack with nothing, building a kingdom by hand while followers arrive weekly. See [FRONTIER.md](FRONTIER.md). The castle start described in places below is `start: kingdom`.
+
 ## How a day works
 
 ```

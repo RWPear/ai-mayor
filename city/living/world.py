@@ -25,6 +25,7 @@ import numpy as np
 from .. import packs, storyteller, trades
 from ..roles import JOB_NAMES
 from . import agents, chronicle, intents, life, things, tools, warcamp
+from . import frontier as F
 from . import town as T
 
 TICK = 30            # minutes per tick
@@ -55,9 +56,16 @@ class World:
         camp = copy.deepcopy(warcamp.START)
         camp["name"] = w.get("camp", camp["name"])
         start = self.city.day * 1440 + POST_HOUR * 60 - 1440      # one full day of life before the next post
+        frontier = self.city.cfg.get("start", "frontier") == "frontier"
+        if frontier:                    # he starts with nothing (city/living/frontier.py)
+            self.city.treasury = float(self.city.cfg.get("frontier_gold", 15))
+            for ward, name in zip(self.city.wards, ["Riverside", "Hillfoot", "Woodedge"]):
+                ward["name"] = name     # the corners of a settlement, not the holds of a kingdom
+            k["frontier_goal"] = k.get("frontier_goal") or "build a kingdom out of nothing, and be crowned its king"
         self.city.living = {
-            "clock": start,
-            "agents": {"king": {**k, "location": "throne_room", "goals": [], "next_act": start},
+            "clock": start, "town": F.new_town() if frontier else T.new_town(),
+            "agents": {"king": {**k, "location": "shack" if frontier else "throne_room", "goals": [],
+                                "next_act": start},
                        "warlord": {**w, "location": camp["name"], "goals": [w.get("ambition", "")][:1],
                                    "next_act": start + 60}},
             "warcamp": camp, "moments": [], "custom_events": {}, "unlocked": {"king": [], "warlord": []},
@@ -75,8 +83,8 @@ class World:
         king = lv["agents"]["king"]
         king.setdefault("life", life.new_life())
         king.setdefault("self", life.new_self())
-        if king.get("location") not in T.PLACES:
-            king["location"] = "throne_room"
+        if king.get("location") not in T.places(lv["town"]):
+            king["location"] = "shack" if self.frontier else "throne_room"
         persona = agents.persona("king")
         for k in ("personality", "ambition", "flaw", "voice", "passions"):   # older saves had a preset personality
             if k not in persona:
@@ -87,6 +95,11 @@ class World:
                 lv["unlocked"][who] = sorted(tools.unlocked(self, who))
 
     # ------------------------------------------------------------------ helpers the tools use
+    @property
+    def frontier(self):
+        """The king started with nothing (city/living/frontier.py) - rather than a castle and a treasury."""
+        return F.is_frontier(self.city)
+
     @property
     def clock(self):
         return self.city.living["clock"]
@@ -114,6 +127,8 @@ class World:
         return None
 
     def moment(self, who, text, drama=1, public=True, place=None, handles=None, hold=None):
+        if who == "king" or who == "world":
+            text = F.title(self.city, text)
         m = {"clock": self.clock, "time": self.now_str(), "day": self.city.day + 1, "who": who, "text": text,
              "drama": int(drama), "public": bool(public), "place": place, "handles": handles or [], "hold": hold or "",
              "kind": getattr(self, "_doing", None) or "world"}
@@ -147,6 +162,7 @@ class World:
         if they commented in the last 7 days), and if it's their doing it goes on their record and maybe the post."""
         lv = self.city.living
         handle = str(handle).lstrip("@").lower()
+        text = F.title(self.city, text)
         last = lv.get("last_comment", {}).get(handle)
         spammy = kind in ("your_move", "your_story") and lv.get("comment_counts", {}).get(handle, 0) > 15
         if last and last["day"] >= self.city.day + 1 - 7 and not spammy and not intents.muted(self, handle):
@@ -164,7 +180,7 @@ class World:
         """'BECOME THIEF' / 'i am a thief!': the role is theirs (or the kingdom laughs). They hear about it."""
         c = self.city.citizens
         i = c.index.get(str(handle).lstrip("@").lower())
-        if i is None or c.status[i] != 0:
+        if i is None or c.status[i] not in (0, F.ROAD):
             return None
         llm = None
         if self.crowd_llm and trades.normalize(label) not in c.role_book and self.can_think():
@@ -189,7 +205,16 @@ class World:
         n = 0
         for u in dict.fromkeys(users):
             i = c.index.get(u)
-            if i is None or u in seen or c.status[i] != 0 or intents.muted(self, u):
+            if i is None or u in seen or c.status[i] not in (0, F.ROAD) or intents.muted(self, u):
+                continue
+            if c.status[i] == F.ROAD:
+                day = F.land(self)["next_arrival"]
+                self.reply(u, f"👋 You're on the road to Emberfall as {c.names[i]}, {trades.a_(c.label(i))}. Everyone "
+                              f"on the road arrives together on day {day}. Until then: send Aldric something useful "
+                              f"(\"I send an axe ahead\"), leave him a word of advice, or decide who you'll be when "
+                              f"you get there (\"I become a mason\"). Comment STATUS to see your character.", "welcome")
+                seen[u] = self.city.day + 1
+                n += 1
                 continue
             hold = self.city.wards[int(c.ward[i])]["name"]
             home = "with no roof over your head" if c.homeless(i) else (
@@ -207,8 +232,9 @@ class World:
         lv = self.city.living
         day = self.city.day
         heard = {x["to"] for x in lv.get("outbox", []) if x.get("day") in (day, day + 1)}
+        c = self.city.citizens
         for u, w in actions.items():
-            if u in heard:
+            if u in heard or u not in c.index or c.status[c.index[u]] != 0:
                 continue
             n = int(tallies.get(w, 1))
             self.reply(u, f"Counted: {w}" + (f" - you and {n - 1:,} others." if n > 1 else " - you were the only one!"),
@@ -282,15 +308,28 @@ class World:
         if self.voice_llm and self.can_think():
             self.spend_calls(1)
             story = "; ".join((c.story.get(int(i)) or [])[-3:])
+            where = (f"a settler in Emberfall - a new settlement Aldric is building from nothing"
+                     + (", living in a tent by the road" if int(c.walled[i]) == -2 else "")
+                     if self.frontier else f"{trades.a_(job)} of {hold} in the kingdom of Emberfall")
+            if self.frontier:
+                where = f"{trades.a_(job)}, " + where
             try:
                 return self.voice_llm.chat(
-                    f"You are {c.names[i]}, {trades.a_(job)} of {hold} in the kingdom of Emberfall"
+                    f"You are {c.names[i]}, {where}"
                     f"{' (you have no house and sleep at the chapel)' if c.homeless(i) else ''}. Mood {float(c.mood[i]):.2f} "
                     f"(0 miserable - 1 thrilled), loyalty to the king {float(c.loyalty[i]):.2f}. Recently: {story}. "
                     "Answer in one or two short sentences, in character, plain words. Don't mention numbers.",
                     situation, max_tokens=80).strip().strip('"')[:200]
             except Exception:
                 pass
+        if self.frontier:
+            tent = int(c.walled[i]) == -2
+            if tent or float(c.mood[i]) < 0.45:
+                return city.rng.choice(["It's cold in the tents at night.", "When's my house coming, Aldric?",
+                                        "We need more food, not more plans.", "My back's killing me from all the hauling."])
+            return city.rng.choice(["It's starting to feel like a real place.", "The new house doesn't leak. Much.",
+                                    "I've never worked this hard in my life. I like it.",
+                                    "Do you really think you'll be king one day?"])
         if float(c.mood[i]) < 0.45:
             return city.rng.choice(["Bread costs twice what it did, your majesty.", "We need walls, not speeches.",
                                     "People in my hold are scared.", "With respect, sire, the roads are a disgrace."])
@@ -304,8 +343,10 @@ class World:
             self.spend_calls(1)
             recent = "; ".join(m["text"] for m in self.moments_since(self.clock - 12 * 60) if m["public"])[-600:]
             try:
+                court = ("in Emberfall, a rough new settlement Aldric is building from nothing" if self.frontier
+                         else "at the court of King Aldric of Emberfall")
                 return self.voice_llm.chat(
-                    f"You are {npc.get('name')}, at the court of King Aldric of Emberfall: {npc.get('personality')}. "
+                    f"You are {npc.get('name')}, {court}: {npc.get('personality')}. "
                     f"Recently in the kingdom: {recent or 'not much'}. Treasury {city.treasury:,.0f} gold, "
                     f"loyalty {city.approval():.0%}. Answer in one or two sentences, in character.",
                     situation, max_tokens=90, temperature=0.9).strip().strip('"')[:220]
@@ -333,9 +374,12 @@ class World:
         if self.voice_llm and self.can_think():
             self.spend_calls(1)
             try:
+                who = ("You are the world around Aldric, a man building a settlement called Emberfall from nothing (he "
+                       "wants to be king one day), narrating what happens when he does something. He has almost nothing: "
+                       "rough hands, a dull axe, a leaky shack. " if self.frontier else
+                       "You are the world of the kingdom of Emberfall, narrating what happens when its king does something. ")
                 out = self.voice_llm.json(
-                    "You are the world of the kingdom of Emberfall, narrating what happens when its king does something. "
-                    "He's a person, not a hero: things can go well, badly, or funny. Be concrete and grounded in the "
+                    who + "He's a person, not a hero: things can go well, badly, or funny. Be concrete and grounded in the "
                     "place, the time and the weather. outcome: 1-2 sentences, third person ('The king...'). activity: a "
                     "2-3 word label. minutes: how long it took (10-240). hunger/energy/company/fun: how his needs "
                     "changed, each -0.5 to 0.5 (running tires you, reading is quiet fun, eating fills you). learned: "
@@ -382,6 +426,12 @@ class World:
     def court_here(self):
         """Which members of the court are where the king is right now."""
         loc = self.agent("king").get("location")
+        if self.frontier:                        # on the frontier the court is whoever has turned up
+            L = F.land(self)
+            here = [k for k in L["court"] if k != "jester" and loc == L["court_place"]]
+            if "jester" in L["court"] and (self.clock // 60) % 4 == 1:
+                here.append("jester")
+            return sorted(set(here))
         here = [k for k, v in life.court().items() if v.get("place") == loc]
         if (self.clock // 60) % 4 == 1:          # the jester turns up now and then
             here.append("jester")
@@ -389,8 +439,16 @@ class World:
 
     def people_here(self, pid, n=3):
         """A few real subjects you'd find at this place at this hour."""
-        jobs = T.jobs_here(pid, self.hour())
         c = self.city.citizens
+        if self.frontier:                        # settlers are where their work is; tents at the camp at night
+            a = np.where(c.active())[0]
+            if not len(a):
+                return []
+            day = 7 <= self.hour() < 19
+            here = [int(i) for i in a[:3000] if (F.home_of(c, i) == pid if day else
+                                                  (pid == "camp" and int(c.walled[i]) == -2))]
+            return self.city.rng.sample(here, min(n, len(here))) if here else []
+        jobs = T.jobs_here(pid, self.hour())
         mask = c.active() & np.isin(c.job, [JOB_NAMES.index(j) for j in jobs]) if jobs else np.zeros(len(c), bool)
         if c.roles:                       # people with their own roles are wherever their role takes them
             own = np.array(list(c.roles), np.int64)
@@ -452,6 +510,11 @@ class World:
             intents.flag(self, f["user"], f["kind"], f["text"])
         for u, label in jobs.items():                 # BECOME <ANYTHING>: right away, not at the close
             self.take_role(u, "become", label)
+        if self.frontier:                             # people who said they'd work today really do
+            cmds = (self.city.pack or {}).get("commands", {})
+            keen = [u for u, w in actions.items() if str(cmds.get(w, "")).split(":")[0] in ("work", "volunteer",
+                                                                                            "event.help")]
+            F.land(self).setdefault("workers_today", []).extend(keen)
         self._hour_free.update(free)
         self._hour_story.update(story)
         bad = {f["user"] for f in flagged}
@@ -499,8 +562,10 @@ class World:
             hungry = warcamp.daily_upkeep(self.city)
             if hungry:
                 self.moment("warlord", hungry, 1, public=False)
-        if self.clock % 1440 == 12 * 60:
+        if self.clock % 1440 == 12 * 60 and (not self.frontier or "steward" in F.land(self)["court"]):
             self._steward_skims()
+        if self.frontier:
+            self._frontier_tick()
         if self.clock % 1440 == 18 * 60:
             life.age_docket(self)
             self._role_night()
@@ -583,13 +648,37 @@ class World:
             self.moment("king", text, 3 if result == "failed" else 2, public=True, place=w["place"])
             self.notify(f"{w['name']}: {result}")
 
+    def _frontier_tick(self):
+        """The frontier's clockwork: arrivals, word from the road, settlers' work, meals, the peddler."""
+        t = self.clock % 1440
+        L = F.land(self)
+        day = self.city.day + 1
+        if t == 6 * 60:
+            F.morning(self)
+            F.peddler(self)
+        if t == 9 * 60:
+            F.forecast(self)
+        if t == 3 * 60:
+            F.rough_night(self)
+        if t == 12 * 60 and day >= L["next_arrival"]:
+            F.arrive(self)
+        if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
+            F.labor(self, 0.25)
+        if t == 20 * 60:
+            F.meals(self)
+        if t == 18 * 60 + 30:                    # just before the post closes
+            F.day_summary(self)
+
     def _warlord_arrival(self):
-        """The antagonist doesn't exist for the first few days - then rumours, then smoke in the north."""
+        """The antagonist doesn't exist for the first few days - then rumours, then smoke in the north.
+        On the frontier he only comes once the place is worth raiding."""
         camp = warcamp.camp(self.city)
         if camp.get("arrived"):
             return
         day = self.city.day + 1                                   # the post this moment belongs to
         when = int(self.city.cfg.get("warlord_arrives_day", 4))
+        if self.frontier:
+            when = F.land(self).get("warlord_day") or 10 ** 9
         t = self.clock % 1440
         if day == when - 1 and t == 15 * 60:
             hold = self.city.rng.choice([w["name"] for w in self.city.wards]) if self.city.wards else "the hills"
@@ -617,8 +706,9 @@ class World:
         for who in ("king", "warlord"):
             now = sorted(tools.unlocked(self, who))
             new = [t for t in now if t not in lv["unlocked"][who]]
+            have = tools.unlocked(self, who)
             for t in new:
-                desc = tools.TOOLS[who][t][1]
+                desc = have[t][1]
                 name = self.agent(who)["name"]
                 self.moment(who, f"New power: {name} can now {desc}.", 2 if who == "king" else 1,
                             public=(who == "king"))

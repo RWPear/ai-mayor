@@ -163,21 +163,33 @@ def summary(world):
     c = world.city.citizens
     a = c.active()
     houses = int((a & (c.walled >= 0)).sum())
-    homeless = int((a & (c.walled < 0)).sum())
+    homeless = int((a & (c.walled == -1)).sum())
+    tents = int((a & (c.walled == -2)).sum())
     inside = int((a & (c.walled == 1)).sum())
     burned = int((a & (c.burned > 0)).sum())
     t = world.city.living["town"]
     walls = "no walls" if not t["walls"]["capacity"] else f"{inside} inside the walls, {houses - inside} outside"
     return (f"{houses} houses ({walls}" + (f", {burned} burned down" if burned else "") + ")"
-            + (f", {homeless} sleeping rough" if homeless else ""))
+            + (f", {homeless} sleeping rough" if homeless else "") + (f", {tents} in tents" if tents else ""))
+
+
+def court_place(world):
+    """Where the king hears cases: the throne room, or on the frontier his shack (until he builds a hall)."""
+    land = world.city.living["town"].get("land")
+    return land["court_place"] if land else "throne_room"
 
 
 def ruins(town):
     return [pid for pid, ok in town["rooms"].items() if not ok]
 
 
+def places(town):
+    """The places there are: the capital's (PLACES), or the frontier's own, which grow as things get built."""
+    return town.get("places") or PLACES
+
+
 def place_of(pid, town):
-    p = PLACES[pid]
+    p = places(town).get(pid) or PLACES.get(pid) or {"name": str(pid)}
     if p.get("room") and not town["rooms"].get(pid):
         return f"{p['name']} (a ruin - it hasn't been built yet)"
     return p["name"]
@@ -189,7 +201,7 @@ def describe(town, pid):
 
 
 def jobs_here(pid, hour):
-    for (a, b), jobs in PLACES[pid].get("people", {}).items():
+    for (a, b), jobs in PLACES.get(pid, {}).get("people", {}).items():
         if a <= hour < b:
             return [j for j in jobs if j in JOBS]
     return []
@@ -197,6 +209,9 @@ def jobs_here(pid, hour):
 
 def match_place(text, town=None):
     t = str(text or "").lower().replace("'", "").replace("_", " ")
+    if town is not None and town.get("land"):
+        from .frontier import match_in
+        return match_in(town["places"], text)
     for pid, p in PLACES.items():
         name = p["name"].lower().replace("the ", "").replace("'", "")
         if pid.replace("_", " ") in t or name in t:

@@ -169,6 +169,21 @@ def happenings(world):
     from . import town as T
     from .warcamp import camp
     c = camp(city)
+    if world.frontier:
+        from . import frontier as F
+        f = F.summary(world)
+        return "\n".join([
+            f"Day {city.day + 1}, {world.now_str()}, {city.living.get('weather', '')}.",
+            "This is a FRONTIER: Aldric (who wants to be king, not crowned "
+            + ("- now crowned" if f["crowned"] else "yet") + ") is building a settlement from nothing in a field "
+            "by a river, woods and a rocky hill. Events should fit that: wolves, floods, a sick goat, a fallen tree, "
+            "strangers on the road, a fight over a well - not castles and holds.",
+            f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds), {f['on_road']} on the road "
+            f"(arriving day {f['next_arrival']}). Stores: {f['stock']}. Built: {', '.join(f['built']) or 'nothing'}. "
+            f"Building: {', '.join(f['projects']) or 'nothing'}.",
+            "Who lives here: " + _who_lives_here(city),
+            "Happening right now: " + ("; ".join(a["title"] for a in city.events) or "nothing"),
+            "Recently:\n- " + "\n- ".join(lines or ["a quiet stretch"])])
     return "\n".join([
         f"Day {city.day + 1} of the season, {world.now_str()}, {city.living.get('weather', '')}.",
         f"Emberfall: {city.population()} subjects, {T.summary(world)}, loyalty {city.approval():.0%}, treasury "
@@ -204,6 +219,10 @@ def consider(world, llm):
     city = world.city
     if not llm or not world.can_think():
         return None
+    if world.frontier:
+        from . import frontier as F
+        if F.land(world)["stage"] == "alone":
+            return None            # nobody to help or hinder yet: the frontier's own rough nights do the job
     non_war = [a for a in city.events if not a["id"].startswith("warlord_")]
     if len(non_war) >= city.cfg.get("max_active_events", 2):
         return None

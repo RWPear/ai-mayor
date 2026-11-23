@@ -31,6 +31,9 @@ def _ago(world, m):
 
 def king_sections(world, me):
     """Everything the king could know right now, in sections - so each decision only sees what it needs."""
+    if world.frontier:
+        from . import frontier_tools
+        return frontier_tools.sections(world, me)
     from ..sim import available_projects
     city, c = world.city, world.city.citizens
     t = city.living["town"]
@@ -115,7 +118,15 @@ def king_sections(world, me):
 
 def king_view(world, me):
     S = king_sections(world, me)
-    return [line for k in ("here", "me", "people", "court", "building", "kingdom", "north") for line in S[k]]
+    return [line for k in ("here", "me", "land", "people", "court", "building", "kingdom", "north")
+            for line in S.get(k, [])]
+
+
+def focus_table(world):
+    if world.frontier:
+        from . import frontier_tools
+        return frontier_tools.FOCUS
+    return FOCUS
 
 
 # The king decides in two steps: first what he wants to focus on (a few clear choices), then - seeing only
@@ -138,6 +149,9 @@ FOCUS = {
 
 def foci(world, available):
     """The focus choices that make sense right now (each needs at least one usable tool)."""
+    if world.frontier:
+        from . import frontier_tools
+        return frontier_tools.foci(world, available)
     city = world.city
     out = {}
     for k, (desc, names, _) in FOCUS.items():
@@ -236,6 +250,9 @@ class RuleBrain:
                                                      "I am coming for your chair.",
                                                      "Your soldiers fight like your poets."])}
             return pick, {"hold": rng.choice(holds)}
+        if world.frontier:
+            from . import frontier_tools
+            return frontier_tools.rule_king(world, me, available)
         return self._king(world, me, available)
 
     def _king(self, world, me, available):
@@ -314,6 +331,9 @@ class LLMBrain:
     @staticmethod
     def _identity(p, who):
         me_now = life.who_am_i(p)
+        if who == "king" and p.get("_frontier"):
+            from . import frontier_tools
+            return frontier_tools.identity(p)
         if who == "king":
             return (f"You are {p['name']}, the new king of Emberfall. Your subjects are real people who follow the "
                     f"kingdom online. Nobody has told you who to be. Your one goal: {p.get('goal', '')}\n"
@@ -337,12 +357,16 @@ class LLMBrain:
         """1) what to focus on, seeing the big picture; 2) exactly what to do, seeing only what's relevant."""
         S = king_sections(world, p)
         options = foci(world, available)
-        overview = [*S["here"], *S["me"][:2], *S["kingdom"]]
+        table = focus_table(world)
+        if world.frontier:
+            from . import frontier
+            p["_frontier"], p["_crowned"] = True, frontier.land(world).get("crowned")
+        overview = [*S["here"], *S["me"][:2], *S.get("land", [])[:1], *S["kingdom"]]
         if S["court"]:
             overview.append(S["court"][0].split(":")[0] + ".")
         if S["north"]:
             overview += S["north"][:1]
-        if S["building"][:1] and world.city.living["town"]["works"]:
+        if S["building"][:1] and (world.city.living["town"]["works"] or world.frontier):
             overview.append(S["building"][0])
         if S["people"]:
             overview.append(S["people"][0])
@@ -365,7 +389,7 @@ class LLMBrain:
         world.spend_calls(1)
         names = options[focus][1]
         argnames = sorted({a for n in names for a in available[n][2]})
-        detail = [line for k in FOCUS[focus][2] for line in S[k]]
+        detail = [line for k in table[focus][2] for line in S.get(k, [])]
         tool_lines = "\n".join(f"- {n}({', '.join(available[n][2])}): {available[n][1]}" for n in names)
         arg_lines = "\n".join(f"  {a}: {tools.ARG[a]}" for a in argnames)
         two = self.llm.json(self._identity(p, "king") + f"You've decided to focus on: {options[focus][0]}. You "
@@ -384,6 +408,9 @@ class LLMBrain:
 
     def choose(self, world, who, available):
         p = world.agent(who)
+        if who == "king" and world.frontier:
+            from . import frontier
+            p["_frontier"], p["_crowned"] = True, frontier.land(world).get("crowned")
         if who == "king" and world.can_think(2):
             try:
                 return self._two_step(world, p, available)

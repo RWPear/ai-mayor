@@ -10,7 +10,7 @@ from .roles import FACTIONS, JOBS, JOB_NAMES, _h, a_job, identity, rank_for, tit
 
 COUNTERS = ["work", "protest", "shop", "volunteer", "donate", "support", "oppose", "commands", "train",
             "battles", "steal", "fight", "heal", "bless", "craft"]   # the last five are reputation (city/trades.py)
-ACTIVE, LEFT = 0, 1
+ACTIVE, LEFT, ROAD = 0, 1, 2      # ROAD: on the frontier, travelling to Emberfall (arrive weekly)
 
 
 class Citizens:

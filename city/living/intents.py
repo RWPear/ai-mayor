@@ -375,7 +375,15 @@ def resolve(world, r, hostile_today):
         if _fulfil(world, item, u):
             r["facts"] += " - and it's exactly what he'd been wanting"
             r["drama_floor"] = 2
-        world.moment("world", f"A gift arrived at the castle from @{u}: {item}.", 1, public=True, handles=[u])
+        if world.frontier:
+            from . import frontier
+            note = frontier.gift(world, item, u)
+            r["facts"] = (f"sent Aldric a gift: {item}. It was waiting at his door" + (f" {note}" if note else ""))
+            r["reply_rule"] = f"Your {item} reached Aldric's door." + (f" {note[1:-1].capitalize()}." if note else "")
+            world.moment("world", f"@{u} sent Aldric {item}." + (f" {note}" if note else ""), 2 if note else 1,
+                         public=True, handles=[u])
+        else:
+            world.moment("world", f"A gift arrived at the castle from @{u}: {item}.", 1, public=True, handles=[u])
         r["drama_floor"] = max(r["drama_floor"], 2 if r.get("skilled") else 1)
     elif act == "none":
         r["facts"] = ""
@@ -450,6 +458,11 @@ def _skill_check(world, r):
     r["reply_rule"] = reply
     r["action"] = "none"
     r["mishap"] = s
+    r["mishap_text"] = f"@{u} ({label}) tried {what} without knowing how - {mishap}"
+    if cons == "hurt":
+        r["mishap_text"] += ". Wounded"
+    elif cons == "caught":
+        r["mishap_text"] += f". Off to {jail}"
     r["drama_floor"] = 2 if cons in ("hurt", "caught") else 1
     return True
 
@@ -495,6 +508,10 @@ def process(world, free, llm=None, ai_people=0):
     has_event = bool(city.events)
     out = []
     users = [u for u in free if u in c.index and u not in acted and c.status[c.index[u]] == 0]
+    if world.frontier:                    # people still on the road can send things, write, or decide who they'll be
+        road = [u for u in free if u in c.index and u not in acted and c.status[c.index[u]] == 2]
+        out += _on_the_road(world, road, free)
+        acted.update(road)
     city.rng.shuffle(users)
     for u in [u for u in users if condition(city, u)]:
         cnd = condition(city, u)
@@ -590,6 +607,10 @@ def process(world, free, llm=None, ai_people=0):
             world.reply(tgt, "Meanwhile: " + (_you(r["outcome"], tgt) if told_by_model or not r.get("to_target")
                                               else r["to_target"]), "done_to_you")
     lv["acted_today"] = sorted(acted)
+    if world.frontier:                    # people who put their back into it today
+        from . import frontier
+        keen = [r["user"] for r in out if r.get("action") in ("work", "volunteer", "event.help")]
+        frontier.land(world).setdefault("workers_today", []).extend(keen)
     lv.setdefault("crowd_today", []).extend({k: r.get(k, "") for k in ("user", "action", "outcome", "drama")} for r in out)
     for r in out:
         if r["outcome"] and r["drama"] >= 2:
@@ -609,6 +630,47 @@ def _you(text, handle):
                  (r"\byou sleeps\b", "you sleep"), (r"\bbeat you and\b", "beat you, and")):
         t = re.sub(a, b, t)
     return t
+
+
+ROAD_REPLIES = ["You're still on the road - the ruts are deep and the nights are cold. That will have to wait until "
+                "you reach Emberfall on day {day}.",
+                "Not yet: you're still days away on the old road. You'll get there on day {day}. Until then you "
+                "can send Aldric something, or leave him a word of advice."]
+
+
+def _on_the_road(world, road, free):
+    """Comments from people who haven't arrived yet: gifts go ahead of them, advice becomes a letter, roles are
+    chosen for when they get there. Anything else waits."""
+    from . import frontier
+    city, c = world.city, world.city.citizens
+    day = frontier.land(world)["next_arrival"]
+    out = []
+    for u in road:
+        text = free[u]
+        p = trades.parse(text)
+        if p and p[2]:
+            world.take_role(u, p[0], p[1])
+            continue
+        act, _ = rule_read(text, False)
+        r = {"user": u, "text": text, "action": "none", "target": "", "drama": 0, "outcome": ""}
+        if act == "gift_king":
+            r.update(action="gift_king", item=_rule_item(text), effort=rule_effort(text), needs=[])
+            resolve(world, r, {})
+            r["outcome"] = _rule_tell(r)
+            r["reply"] = _rule_reply(r) + f" You'll be there yourself on day {day}."
+        elif act == "petition" or re.search(r"\b(should|advice|suggest|tip|try|idea)\b", text, re.I):
+            king = world.agent("king")
+            king.setdefault("letters", []).append({"day": city.day, "from": u, "text": text[:160]})
+            del king["letters"][:-12]
+            log = city.living.setdefault("petitions_log", [])
+            log.append({"who": u, "text": text[:200], "day": city.day + 1})
+            r["reply"] = f"You sent a letter ahead with a passing carter. Aldric will read it. See you on day {day}."
+            world.moment("world", f"A letter for Aldric from @{u}, still on the road: \"{text[:120]}\"", 1,
+                         public=True, handles=[u])
+        else:
+            r["reply"] = city.rng.choice(ROAD_REPLIES).format(day=day)
+        out.append(r)                     # the reply goes out with everyone else's
+    return out
 
 
 def _rule_item(text):
@@ -693,6 +755,8 @@ def stories(world, story, pack, llm=None, ai_people=0):
 def _rule_tell(r):
     if not r.get("facts"):
         return ""
+    if r.get("mishap_text"):
+        return r["mishap_text"] + "."
     if (r["action"] in SOCIAL + ["petition"] or "guards" in r["facts"] or "locked up" in r["facts"]
             or r.get("mishap") or r.get("skilled")):
         return f"@{r['user']} {r['facts']}."

@@ -4,3 +4,5 @@
 name: "King Aldric"
 title: "king"
 goal: "Still be king of Emberfall after the Reckoning on day 30, when the people vote to keep you or overthrow you."
+# On the frontier start (the default) he begins with nothing and nobody has crowned him (docs/FRONTIER.md)
+frontier_goal: "Build a kingdom out of nothing, and be crowned its king."

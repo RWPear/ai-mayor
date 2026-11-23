@@ -62,6 +62,11 @@ def status_card(city, i):
     story = c.story.get(int(i))
     if story:
         lines.append("Latest: " + story[-1])
+    if c.status[i] == 2:
+        day = ((city.living or {}).get("town", {}).get("land") or {}).get("next_arrival")
+        lines.insert(1, f"🚶 On the road to Emberfall - arriving day {day} with the other travellers")
+    elif city.living and int(c.walled[i]) == -2 and c.status[i] == 0:
+        lines.insert(1, "⛺ Living in a tent by the old road, waiting for a house")
     if c.status[i] == 1:
         lines.insert(1, "(left the kingdom - comment JOIN to come back)")
     return "\n".join(lines)
@@ -105,6 +110,10 @@ def headline(day_result):
     for n in r["sim"]["notes"]:
         if "protest" in n.lower() or "moved away" in n:
             return n
+    if r.get("frontier"):                       # on the frontier, the day's best moment leads
+        top = sorted((r.get("chronicle") or {}).get("top") or [], key=lambda m: -m.get("drama", 0))
+        if top:
+            return top[0]["text"]
     if r["decision_lines"]:
         return r["decision_lines"][0]
     if r["events_ended"]:
@@ -157,6 +166,16 @@ def shoutouts(r, n=3):
 def caption(r):
     words = " · ".join(r["next_pack"]["commands"]) if r.get("next_pack") else ""
     thanks = shoutouts(r)
+    if r.get("frontier"):
+        from .living.frontier import status_line
+        line = status_line(r["frontier"])
+        road = r["frontier"]["next_arrival"]
+        return (f"Day {r['day']}: {headline(r)}\n\n{line}\n\n"
+                + (("Your doing today: " + " · ".join(thanks) + "\n\n") if thanks else "")
+                + f"Follow to set off for Emberfall - everyone on the road arrives together on day {road}. "
+                  f"Settlers: tell your character what to do in your own words, or comment {words}. "
+                  f"Send Aldric something useful. Suggest what he should build.\n"
+                  f"Comment STATUS to see your character. An AI is building a kingdom from nothing. You live in it.")
     return (f"Day {r['day']}: {headline(r)}\n\n"
             + (("Your doing today: " + " · ".join(thanks) + "\n\n") if thanks else "")
             + (("👑 The king is looking for: " + ", ".join(r["wanted"]) + ". Bring it to him (comment: I bring the "
@@ -177,6 +196,14 @@ def markdown(city, r):
            "**Services:** " + ", ".join(f"{SERVICE_LABEL[k]} {v:.2f}" for k, v in s["services"].items()),
            "**Factions:** " + ", ".join(f"{FACTION_LABEL[k]} {v:.2f}" for k, v in s["factions"].items() if v is not None),
            ""]
+    if r.get("frontier"):
+        from .living.frontier import status_line
+        f = r["frontier"]
+        out += ["## The frontier", status_line(f),
+                f"Stage: **{f['stage']}**" + (" · crowned" if f["crowned"] else " · not crowned") +
+                (f" · built: {', '.join(f['built'])}" if f["built"] else " · nothing built yet") +
+                (f" · building: {', '.join(f['projects'])}" if f["projects"] else "") +
+                (f" · knows: {', '.join(f['know'])}" if f["know"] else ""), ""]
     ch = r.get("chronicle")
     if ch and (ch["top"] or ch["meanwhile"]):
         out.append("## The last 24 hours")

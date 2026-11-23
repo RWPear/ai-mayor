@@ -120,6 +120,9 @@ def maybe_start_event(city, quiet=False):
         return None
     if (getattr(city, "living", None) or {}).get("director"):
         return None          # the living world's director invents events instead of drawing from the list
+    land = ((getattr(city, "living", None) or {}).get("town") or {}).get("land")
+    if land and land.get("stage") in ("alone", "hamlet"):
+        return None          # a man and a few settlers in a field: the frontier has its own troubles
     if len(city.events) >= city.cfg["max_active_events"] or city.population() < 5:
         return None
     last = max([e["started"] for e in city.events + city.event_log[-3:]] or [-99])

@@ -2,6 +2,10 @@
 
 **You live here. Comment to change the kingdom.**
 
+**New start (default in the living world):** the AI begins with nothing - a leaky shack in a field - and
+builds a kingdom by hand while followers arrive every week. See [docs/FRONTIER.md](docs/FRONTIER.md).
+Try it: `./kingdom test --scenario scenarios/frontier.yaml --reports`
+
 An AI king rules Emberfall, a kingdom whose subjects are real followers. Following moves you in and
 gives you a trade. Comments on each post are that day's actions (WORK, TRADE, TRAIN, GRUMBLE..., or
 FIGHT / FORTIFY when the barbarians come, or a decree vote like WALLS vs GRANARY). The king has to keep
@@ -68,6 +72,7 @@ city/            the engine (theme-neutral; in the code a hold is a "ward", the 
   sources/       fake audience (test) and Instagram follower export reader (live)
   llm.py         the shared Ollama client
   living/        the living world: world.py (clock, loop, GPU budget), agents.py (the minds), tools.py,
+                 frontier.py + frontier_tools.py (the default start: alone in a shack, docs/FRONTIER.md),
                  town.py (places, improvements, castle rooms), life.py (needs, passions, works, court,
                  docket), warcamp.py (the warlord's economy), intents.py (own-words comments, fights,
                  thefts, gifts), chronicle.py
@@ -76,6 +81,7 @@ seasons/         season plans: season1.yaml (written), season2.yaml (outline)
 seeds/           season plans for the living world (only the bones - the minds do the rest)
 docs/            EVENTS.md (writing events), SEASONS.md (where this is going), LIVING.md (the living world),
                  ROLES.md (anyone can be anything), COMMENTS.md (reading comments, default replies),
+                 FRONTIER.md (building a kingdom from nothing),
                  COMMENTS.md (how comments are read: keywords, stories, trolls)
 packs/           command packs for posts
 scenarios/       test scenarios

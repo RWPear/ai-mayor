@@ -6,3 +6,10 @@
 # gpu_calls_per_hour: 120      # model calls per hour: the crowd gets first claim, the minds get the rest
 # warlord_arrives_day: 4       # Skarn shows up on this day (rumours the day before)
 # intents_cap: 400
+
+# the frontier start (docs/FRONTIER.md)
+# start: frontier              # or "kingdom" for the castle, the court and a full treasury
+# frontier_arrival_every: 7    # days between arrival days
+# frontier_warn_days: 3        # the traveller's warning comes this many days before
+# frontier_crown_at: 10        # settlers before they vote on crowning him
+# frontier_warlord_pop: 15     # settlers before Skarn comes

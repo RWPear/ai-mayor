@@ -1,0 +1,10 @@
+# The frontier when a post blows up: a few people in week one, then hundreds on the road in week two.
+# Watch the traveller's warning get scarier, the tent camp fill up, and the king go from building with his
+# own hands to organizing crews and planning bigger buildings.
+kingdom: Emberfall
+living: true
+days: 22
+start_followers: 4
+growth: {daily: 2, viral: [{day: 9, add: 120}, {day: 10, add: 200}]}
+engagement: 0.3
+free_text: 0.35
