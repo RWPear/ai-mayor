@@ -70,8 +70,14 @@ def anim_for(tool, args, location):
 def shape_of(rec):
     """What the renderer should build: a family of models, picked from what the thing is."""
     kind, scale, name = rec.get("kind"), rec.get("scale", "small"), str(rec.get("name", "")).lower()
-    if kind in ("tool", "comfort"):
-        return None                                        # carried, or part of the shack
+    if kind == "tool":
+        return None                                        # carried
+    if kind == "comfort":                                  # the shack's own fixes are drawn on the shack
+        if re.search(r"fire|hearth|pit|oven|cook", name):
+            return "firepit"
+        if re.search(r"roof|door|wall|window|shack|chimney|floor|bed|mat|blanket|pillow|rug|shelf|curtain", name):
+            return None
+        return "prop"
     if kind == "housing":
         return {"tiny": "hut", "small": "cottage", "medium": "longhouse", "large": "rowhouses", "huge": "apartments"}[scale]
     if kind == "food":
@@ -103,6 +109,10 @@ def shape_of(rec):
 
 def size_of(rec, shape):
     w, d, h = SIZE.get(rec.get("scale", "small"), SIZE["small"])
+    if shape == "firepit":
+        return [3.2, 3.2, 1.0]
+    if shape == "prop":
+        return [2.4, 1.6, 1.6]
     if shape == "plot":
         return [round(w * 1.3, 1), round(d * 1.3, 1), 0.4]
     if shape == "well":
@@ -139,7 +149,7 @@ def _near_path(x, z, path, width):
 def _taken(world):
     L = F.land(world)
     out = [_rect(LAYOUT["shack"]["pos"], [8, 8, 3], 0)]
-    for x in L["buildings"] + L["projects"]:
+    for x in L["buildings"] + L["projects"] + L.get("personal", []):
         if x.get("lot"):
             out.append(_rect(x["lot"]["pos"], x["lot"]["size"], x["lot"]["rot"]))
     return out
@@ -167,12 +177,17 @@ def place(world, rec):
     if where in ("road", "shack", "river", "hill", "woods", "camp"):
         where = "field" if shape not in ("tower",) else where
     cx, cz = LAYOUT[where]["pos"]
+    r0, step = 3, 3.3
+    if shape in ("firepit", "prop"):                            # the king's odds and ends: by the shack
+        (cx, cz), r0, step = LAYOUT["shack"]["pos"], 6, 1.2
+    if rec.get("near"):                                         # someone's own build: by their home
+        (cx, cz), r0, step = rec["near"], 5 + max(size[:2]) / 2, 1.6
     taken = _taken(world)
     rng = random.Random(zlib.crc32(str(rec.get("id", "")).encode()))
     rot = rng.choice([0, 90]) if shape not in ("rowhouses",) else 0
     for k in range(4000):                                       # a spiral out from the place's middle
-        ang = k * 0.5
-        rad = 3 + 1.1 * math.sqrt(k) * 3
+        ang = k * 0.5 + rng.random() * 0.01
+        rad = r0 + step * math.sqrt(k)
         x, z = cx + rad * math.cos(ang), cz + rad * math.sin(ang)
         r = _rect([x, z], size, rot)
         if any(_hits(r, t) for t in taken):
@@ -256,6 +271,20 @@ def piles(world):
 def stand_pos(world, pid):
     """Where a person stands at a place (the shack's door rather than its middle)."""
     return list(LAYOUT.get(pid, {}).get("stand") or place_pos(world, pid))
+
+
+def home_pos(world, handle):
+    """Where someone lives: their house, else the camp."""
+    L = F.land(world)
+    bid = L.get("homes", {}).get(handle)
+    b = next((b for b in L["buildings"] if b["id"] == bid and b.get("lot")), None)
+    if b:
+        return list(b["lot"]["pos"])
+    c = world.city.citizens
+    i = c.index.get(handle)
+    if i is not None and int(c.walled[i]) == -2:
+        return list(LAYOUT["camp"]["pos"])
+    return list(LAYOUT["field"]["pos"])
 
 
 def place_pos(world, pid):
@@ -364,8 +393,9 @@ def export(world, since=None, until=None):
             buildings.append({"id": "b0", "name": "the shack", "shape": "shack", "kind": "housing",
                               "pos": list(LAYOUT["shack"]["pos"]), "size": [5, 4, 3], "rot": 0, "state": "standing",
                               "quality": b.get("quality", "poor"), "material": "wood",
-                              "look": b.get("look", ""), "upgrades": [x["name"] for x in L["buildings"]
-                                                                       if x.get("kind") == "comfort" and x is not b]})
+                              "look": b.get("look", ""),
+                              "upgrades": [{"name": x["name"], "t": x.get("t")} for x in L["buildings"]
+                                           if x.get("kind") == "comfort" and x is not b and not x.get("lot")]})
             continue
         lot = b.get("lot")
         if not lot:
@@ -375,7 +405,8 @@ def export(world, since=None, until=None):
                           "radius": lot.get("radius"), "state": "standing", "quality": b.get("quality"),
                           "material": b.get("material") or "wood", "look": b.get("look", ""),
                           "built_day": b.get("day"), "built_t": b.get("t"), "capacity": b.get("capacity", 0),
-                          "residents": sorted(h for h, bid in homes.items() if bid == b["id"])[:200]})
+                          "residents": sorted(h for h, bid in homes.items() if bid == b["id"])[:200],
+                          "owner": b.get("owner")})
     for r in L.get("ruins", []):
         buildings.append({**r, "state": "ruin"})
     projects = [{"id": p["id"], "name": p["name"], "shape": p["lot"]["shape"], "kind": p["kind"], "scale": p["scale"],
@@ -385,6 +416,15 @@ def export(world, since=None, until=None):
                  "started_t": p.get("started_t"),
                  "progress_at": [[x["t"], x["progress"][p["id"]]] for x in samples if p["id"] in x["progress"]]}
                 for p in L["projects"] if p.get("lot")]
+    for p in L.get("personal", []):                                  # people's own builds
+        if p.get("lot") and not p.get("done"):
+            projects.append({"id": p["id"], "name": f"@{p['owner']}'s {F.bare(p['name'])}", "owner": p["owner"],
+                             "shape": p["lot"]["shape"], "kind": p["kind"], "scale": p["scale"],
+                             "pos": p["lot"]["pos"], "size": p["lot"]["size"], "rot": p["lot"]["rot"],
+                             "state": "scaffold", "progress": round(p["progress"], 3),
+                             "material": p.get("material") or "wood", "look": p.get("look", ""), "missing_know": [],
+                             "started_t": p.get("started_t"),
+                             "progress_at": [x for x in p.get("progress_log", []) if since <= x[0] <= until]})
     moments = [m for m in lv.get("moments", []) if since < m["clock"] <= until]
     events = [{"t": m["clock"], "time": m["time"], "who": m["who"], "place": m.get("place"),
                "pos": place_pos(world, m["place"]) if m.get("place") else None, "text": m["text"],

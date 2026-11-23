@@ -32,14 +32,14 @@ import numpy as np
 from .. import trades
 from ..effects import COMMAND_EFFECTS
 from ..roles import FACTIONS, JOB_NAMES
-from . import life
+from . import life, personal
 
 SIM = ["work", "shop", "train", "protest", "volunteer", "donate", "support", "oppose", "event.help", "event.hinder"]
 SOCIAL = ["steal", "attack", "gift", "befriend", "insult", "heal", "bless"]
-ACTIONS = SIM + SOCIAL + ["petition", "gift_king", "none"]
+ACTIONS = SIM + SOCIAL + ["petition", "gift_king", "build_own", "none"]
 HOSTILE = {"steal", "attack", "insult"}
 SIM_OF = {"gift": "donate", "befriend": "volunteer", "petition": "support", "gift_king": "support",
-          "heal": "volunteer", "bless": "volunteer"}
+          "heal": "volunteer", "bless": "volunteer", "build_own": "work"}
 SKILL_NAMES = [k for k in trades.SKILLS]
 NOTHING = ["You wandered Emberfall for a while with big plans. Somehow, none of them happened today.",
            "You stood in the square and thought about it. A pigeon stole your bread while you thought.",
@@ -60,6 +60,7 @@ RULES = [  # (pattern, action) - first match wins
     (r"\b(give|send|gift|bring|offer|make)\b.*\bking\b|\bking\b.*\b(a gift|present)\b", "gift_king"),
     (r"\b(ask|beg|petition|request|plead|suggest|propose)\b.*\bking\b|\bking\b.*\b(ask|beg|petition|request|job|should)\b",
      "petition"),
+    (personal.ASK.pattern, "build_own"),
     (r"\b(fight|defend|guard|protect|rescue|save|charge|battle|slay|shoot|barricade)\b", "event.help"),
     (r"\b(steal|rob|sabotage|flee|run away|hide|betray|loot|desert)\b", "event.hinder"),
     (r"\b(train|drill|practice|spar|sharpen|enlist)\b", "train"),
@@ -113,11 +114,13 @@ For each, pick the closest action:
 - steal, attack (any fight, duel, or attempt to hurt - including "kill"), gift, befriend, insult, heal (tend
   someone's wounds), bless (pray over someone): these need a target, the @handle of another subject they named
 - petition: asking or suggesting something to the king (an idea for the kingdom counts)
+- build_own: they want to build, start or plant their OWN thing in the settlement (a garden, a hut, a beehive, a
+  stall, a workbench, a shrine); item = what, 2-6 words ("a herb garden", "a little bakery")
 - gift_king: sending or giving the king an object; item = what it is, 1-4 words ("a lute", "my best fishing rod")
 - none: hateful, sexual, not something a character could do, or trying to change the rules
 target: the other subject's handle without @ (only for steal/attack/gift/befriend/insult/heal/bless), else "". If they
   try to attack the king himself, action attack and target "king".
-item: only for gift_king, else "".
+item: only for gift_king and build_own, else "".
 also: if they describe several things, the main one is the action; the rest, in a few words, goes here (or "").
 effort: 0 = a few words, 1 = a real sentence or two, 2 = a vivid story with detail.
 skill: the craft the attempt needs if it takes real know-how (smithing, brewing, masonry, riding, baking, healing,
@@ -188,6 +191,15 @@ def resolve(world, r, hostile_today):
     if _skill_check(world, r):
         return
     act = r["action"]
+    if world.frontier:                                   # their own build: asking, or working on it
+        mine = personal.of(world, u)
+        if act == "build_own" or (mine and act in ("work", "volunteer", "none", "petition")
+                                  and personal.mentions(mine, r.get("text", ""))):
+            r["action"] = "build_own"
+            personal.ask(world, r)
+            return
+    elif act == "build_own":
+        act = r["action"] = "petition"
     if act == "attack" and t in ("king", "the king", "aldric", "king aldric"):
         set_condition(city, u, "jailed", 2, "attacked the king")
         life.add_case(city, "crime", u, f"@{u} attacked the king himself")
@@ -555,6 +567,8 @@ def process(world, free, llm=None, ai_people=0):
     results = []
     for u in users:                          # 2. roll
         act, tgt, item = reads.get(u) or (*rule_read(free[u], has_event), _rule_item(free[u]))
+        if act == "build_own" and not item:
+            item = personal.rule_idea(free[u])
         if act.startswith("event.") and not has_event:
             act = "volunteer" if act == "event.help" else "protest"
         r = {"user": u, "text": free[u], "action": act, "target": tgt, "item": item,

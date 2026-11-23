@@ -528,9 +528,9 @@ def test_followers_can_bring_what_he_wants():
 def test_dragons_dont_exist_and_he_remembers():
     from city.living import tools
     city, w = _world(30)
-    m = tools.want(w, w.agent("king"), {"thing": "a dragon egg"})
+    m = tools.want(w, w.agent("king"), {"thing": "a phoenix feather"})
     assert "no such thing" in m["text"]
-    assert tools.want(w, w.agent("king"), {"thing": "dragon eggs"}) is None
+    assert tools.want(w, w.agent("king"), {"thing": "phoenix feathers"}) is None
 
 
 def test_eating_whats_there_uses_it_up():

@@ -310,6 +310,23 @@ def hold_court(world, me, args):
                 city.treasury += fine
                 effect = f" - fined {fine:.0f} gold"
         c.log(i, city.day + 1, f"was judged by the king: {verdict}")
+        if case["kind"] == "permit":                 # someone asked to build their own thing
+            from . import personal
+            yes = verdict in ("grant", "reward", "pardon")
+            what = case.get("idea") or "it"
+            if yes:
+                personal.grant(world, case, words)
+            else:
+                personal.deny(world, case)
+            world.reply(case["who"], (f"🌱 Aldric said yes: build {what} by your home. You'll put in a couple of "
+                                      "hours each evening - more on any day you tell us you're working on it."
+                                      if yes else f"Aldric said no to {what}. Not now, anyway.")
+                        + (f' He said: "{words}"' if words else ""), "court",
+                        credit=f"got leave to build {what}" if yes else None)
+            return world.moment("king", f"At court: @{case['who']} asked to build {what}. "
+                                        f"{'Aldric said yes' if yes else 'Aldric said no'}."
+                                + (f' "{words}"' if words else ""), 1, public=True, place=me.get("location"),
+                                handles=[case["who"]])
         world.reply(case["who"], f"⚖️ At court, the king heard your case ({case['text'][:120]}). Verdict: "
                                  f"{verdict.upper()}{effect}."
                     + (f' He said: "{words}"' if words else ""), "court",

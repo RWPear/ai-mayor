@@ -48,8 +48,8 @@ def gather(world, me, args):
     out = world.narrate_activity(me, f"gather {m} by hand" + (f": {how}" if how else ""))
     for need in life.NEEDS:
         life.satisfy(me, need, out.get(need, 0.0))
-    life.satisfy(me, "energy", -0.12 * hours)
-    life.satisfy(me, "hunger", -0.06 * hours)
+    life.satisfy(me, "energy", -0.05 * hours)
+    life.satisfy(me, "hunger", -0.04 * hours)
     me["next_act"] = world.clock + int(hours * 60)
     first = practice == 0
     text = out["outcome"].rstrip(".") + f". (+{got} {F.UNIT[m]})"
@@ -98,8 +98,8 @@ def build(world, me, args):
     if df > 0:
         F.day_log(world, "king", "build_hours", hours)
     me["next_act"] = world.clock + int(hours * 60)
-    life.satisfy(me, "energy", -0.13 * hours)
-    life.satisfy(me, "hunger", -0.06 * hours)
+    life.satisfy(me, "energy", -0.06 * hours)
+    life.satisfy(me, "hunger", -0.04 * hours)
     life.satisfy(me, "fun", 0.1)
     if p.get("done"):
         return None                                     # finish() already told the story
@@ -369,6 +369,9 @@ def sections(world, me):
     S["building"].append(f"The biggest thing you could realistically take on now: something {cap} "
                          f"({F.EXAMPLE[cap]}). Bigger needs more hands, and you get there by building bigger "
                          f"one step at a time.")
+    if L.get("builds", 0) < 2 and not n:
+        S["building"].append("Small jobs count: a fire pit, a patched roof, a drying rack - an hour or two each, and "
+                             "the field looks a little more lived-in by tonight. A cottage alone is about a day.")
     if L.get("idle_yesterday", 0) >= 5:
         S["kingdom"].append(f"Yesterday the settlers had {L['idle_yesterday']} hours with nothing to do - nothing "
                             "of yours left to build or gather for.")
@@ -430,7 +433,8 @@ def identity(p):
 # ---------------------------------------------------------------- instincts (no model)
 TEST_LADDER = [("small", 3, "a small cottage with a thatched roof"), ("medium", 10, "a longhouse for the newcomers"),
                ("large", 30, "a row of timber houses"), ("huge", 90, "a tall apartment building of stone and timber")]
-TEST_OTHERS = ["a new roof for the shack", "a vegetable garden", "a stone axe", "a storehouse for food",
+TEST_FIRST = ["a stone fire pit by the shack", "a new roof for the shack"]     # day one: quick wins
+TEST_OTHERS = [ "a vegetable garden", "a stone axe", "a storehouse for food",
                "a fish trap in the river", "a meeting hall", "a well"]
 
 
@@ -500,6 +504,12 @@ def _next_idea(world):
     """Tests only: something sensible to build next (the real king has his own ideas)."""
     city, L = world.city, F.land(world)
     names = {b["name"].lower() for b in L["buildings"]} | {p["name"].lower() for p in L["projects"]}
+    tried = {p.lower() for p in L.get("tried", [])}
+    if city.day == 0 and F.settled(city) == 0:
+        first = next((i for i in TEST_FIRST if i not in tried), None)
+        if first:
+            L.setdefault("tried", []).append(first)
+            return first
     expected = (L.get("forecast") or {}).get("est", F.on_road(city))
     gap = expected + F.tents(city) - F.free_beds(city)
     if gap > 0 or not any(b["kind"] == "housing" for b in L["buildings"]):

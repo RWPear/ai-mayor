@@ -25,7 +25,7 @@ from .. import effects
 from ..config import CONTENT
 from . import town as T
 
-NEEDS = {"hunger": 0.03, "energy": 0.02, "company": 0.015, "fun": 0.015}   # loss per tick awake
+NEEDS = {"hunger": 0.025, "energy": 0.012, "company": 0.015, "fun": 0.012}   # loss per tick awake
 WORDS = {"hunger": "hungry", "energy": "exhausted", "company": "lonely", "fun": "bored"}
 SELF_KEYS = {"traits": 6, "likes": 6, "dislikes": 6, "passions": 4, "wants": 4, "fears": 3}
 SUCCESS = {"small": 0.85, "medium": 0.7, "large": 0.55}
@@ -45,9 +45,12 @@ def new_self():
     return {**{k: [] for k in SELF_KEYS}, "becoming": "", "history": []}
 
 
-def drift(me, awake):
+def drift(me, awake, alone=False):
+    """Needs wear down. A man alone on purpose (the frontier start) misses people less - he chose the field."""
     n = me.setdefault("life", new_life())["needs"]
     for k, loss in NEEDS.items():
+        if k == "company" and alone:
+            loss *= 0.3
         if k == "energy" and not awake:
             n[k] = min(1.0, n.get(k, 0.8) + 0.07)
         elif awake or k == "hunger":
@@ -250,6 +253,16 @@ def age_docket(world):
     for k in gone:
         i = c.index.get(k["who"])
         if i is None:
+            continue
+        if k["kind"] == "permit":                    # nobody said no: they start anyway
+            from . import personal
+            p = personal.grant(world, k)
+            if p:
+                world.reply(k["who"], f"🌱 Nobody said no, so you pegged out {k.get('idea') or 'your plot'} by your "
+                                      "home and started. You'll put in a couple of hours each evening.", "court",
+                            credit=f"started building {k.get('idea') or 'their own plot'}")
+                world.moment("world", f"Nobody said no, so @{k['who']} started building {k.get('idea')} by their "
+                                      "home.", 1, public=True, handles=[k["who"]])
             continue
         if k["kind"] == "crime":
             city.living.get("conditions", {}).pop(k["who"], None)

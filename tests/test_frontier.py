@@ -80,8 +80,10 @@ def test_building_uses_materials_and_teaches():
     L = F.land(w)
     me["location"] = "field"
     FT.plan(w, me, {"idea": "a small cottage with a thatched roof"})
-    p = L["projects"][0]
-    assert FT.build(w, me, {}) is not None and p["progress"] == 0            # nothing to build with
+    p = next(x for x in L["projects"] if "cottage" in x["name"])
+    for m in p["needs"]:
+        L["stock"][m] = 0
+    assert FT.build(w, me, {"project": p["name"]}) is not None and p["progress"] == 0   # nothing to build with
     for m, n in p["needs"].items():
         L["stock"][m] = n + 1
     city.rng.random = lambda: 0.01                                          # it goes well
@@ -90,7 +92,7 @@ def test_building_uses_materials_and_teaches():
             break
         me["life"]["needs"]["energy"] = 1.0
         p["hours_day"] = k                                  # a new day each time (one man can only do so much a day)
-        FT.build(w, me, {})
+        FT.build(w, me, {"project": p["name"]})
     assert p.get("done") and F.capacity(city) >= 2 and "thatching" in L["know"]
     assert L["stock"]["wood"] < 5
 
@@ -265,3 +267,72 @@ def test_even_a_crowd_takes_days_on_a_big_building():
     L["stock"]["wood"] = 1000
     F.work(w, p, 5000, who="settlers")                      # 500 people for 10 hours: still only one crew's worth
     assert 0 < p["progress"] < 0.6 and not p.get("done")
+
+
+def test_the_first_days_show_something():
+    city, w = _world(followers=4)
+    _days(w, 3)
+    L = F.land(w)
+    built = [b for b in L["buildings"] if b["id"] != "b0"]
+    assert len(built) >= 2                                   # a fire pit or a roof on day one, then a cottage
+    assert any(b["kind"] == "housing" for b in built)        # a man alone gets a cottage up in a day or two
+    n = w.agent("king")["life"]["needs"]
+    assert n["company"] > 0.2                               # alone by choice: loneliness doesn't eat his days
+
+
+def _settlers(n=4):
+    city, w = _world(followers=n)
+    L = F.land(w)
+    L["buildings"].append({"id": "bx", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": n,
+                           "place": "field", "quality": "good", "day": 1,
+                           "lot": {"pos": [30, 0], "size": [6, 5, 3.6], "rot": 0, "shape": "cottage"}})
+    L["next_arrival"] = city.day + 1
+    F.arrive(w)
+    return city, w, L
+
+
+def test_a_settler_asks_to_start_a_garden_and_the_king_says_yes():
+    from city.living import intents, personal, scene, tools
+    city, w, L = _settlers()
+    out = intents.process(w, {"u1": "I want to start a vegetable garden behind my house"}, None, 0)
+    assert out[0]["action"] == "build_own"
+    case = personal.pending(city, "u1")
+    assert case and "garden" in case["idea"]
+    me = w.agent("king")
+    me["location"] = L["court_place"]
+    tools.hold_court(w, me, {"case": case["id"], "verdict": "grant", "words": "Grow us some turnips."})
+    p = personal.of(w, "u1")
+    assert p and p["lot"] and p["lot"]["shape"] == "plot"
+    home = scene.home_pos(w, "u1")
+    assert abs(p["lot"]["pos"][0] - home[0]) + abs(p["lot"]["pos"][1] - home[1]) < 30      # by their house
+    assert any(x["kind"] == "court" and "said yes" in x["text"] for x in city.living["outbox"] if x["to"] == "u1")
+    for _ in range(20):                                      # evenings, then a keen day
+        personal.daily(w)
+        if not personal.of(w, "u1"):
+            break
+    b = next(b for b in L["buildings"] if b.get("owner") == "u1")
+    assert b["name"].startswith("@u1's") and b["kind"] == "food"
+    ex = scene.export(w)
+    assert any(x.get("owner") == "u1" for x in ex["buildings"])
+
+
+def test_commenting_about_your_build_speeds_it_up_and_nobody_saying_no_means_yes():
+    from city.living import intents, life, personal
+    city, w, L = _settlers()
+    intents.process(w, {"u2": "I'd like to build a little beehive by my cottage"}, None, 0)
+    case = personal.pending(city, "u2")
+    case["day"] = city.day - 2                               # the king never got to it
+    life.age_docket(w)
+    p = personal.of(w, "u2")
+    assert p and not personal.pending(city, "u2")
+    city.living["acted_today"] = []
+    intents.process(w, {"u2": "I spend the day on my beehive, smoking out the wasps first"}, None, 0)
+    assert p["progress"] >= personal.KEEN / p["hours"] - 1e-6 or p.get("done")
+
+
+def test_too_big_to_build_alone_becomes_a_petition():
+    from city.living import intents, personal
+    city, w, L = _settlers()
+    intents.process(w, {"u3": "I want to build a great stone tower with a hall for the whole village"}, None, 0)
+    assert not personal.pending(city, "u3")
+    assert any(k["kind"] == "petition" and k["who"] == "u3" for k in city.living["docket"])

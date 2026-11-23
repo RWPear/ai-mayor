@@ -72,7 +72,7 @@ FEATURES = {
     "hill":  {"stones": "loose stones the size of loaves and anvils"},
     "road":  {"track": "a rutted dirt track, a rotten signpost with no words left on it"},
 }
-RATES = {"wood": 3.0, "stone": 1.6, "clay": 4.0, "thatch": 6.0, "rope": 1.2, "food": 1.5, "iron": 0.0}  # per hour
+RATES = {"wood": 5.0, "stone": 3.0, "clay": 5.0, "thatch": 8.0, "rope": 2.5, "food": 2.5, "iron": 0.0}  # per hour
 SKILLED = {"wood": {"woodcutter", "lumberjack", "carpenter"}, "stone": {"mason", "miner"},
            "clay": {"potter", "miller"}, "thatch": {"farmer", "shepherd", "farmhand"},
            "rope": {"sailor", "fisher"}, "food": {"farmer", "fisher", "hunter", "shepherd", "baker", "cook"}}
@@ -90,13 +90,14 @@ TEACH_JOB = {"woodcutter": ["timber framing", "carpentry"], "farmer": ["thatchin
 
 KINDS = ["housing", "food", "storage", "workshop", "tool", "defense", "comfort", "gathering", "path", "other"]
 SCALES = {   # bigger = more people per unit of work, but needs know-how
-    # crew = how many people can usefully work on one at once (8 hours a day each), so even a crowd takes days
-    "tiny":   {"units": 12,  "hours": 4,   "cap": 1,  "crew": 1,  "know": [],                        "ok": 0.95},
-    "small":  {"units": 30,  "hours": 15,  "cap": 3,  "crew": 3,  "know": ["thatching"],             "ok": 0.88},
-    "medium": {"units": 80,  "hours": 48,  "cap": 10, "crew": 8,  "know": ["thatching", "timber framing"], "ok": 0.78},
-    "large":  {"units": 200, "hours": 140, "cap": 30, "crew": 14, "know": ["timber framing", "stone foundations"],
+    # crew = how many people can usefully work on one at once (8 hours a day each), so even a crowd takes days.
+    # A man alone should finish a cottage in about a day: the first week has to show something.
+    "tiny":   {"units": 8,   "hours": 2,   "cap": 1,  "crew": 1,  "know": [],                        "ok": 0.95},
+    "small":  {"units": 20,  "hours": 7,   "cap": 3,  "crew": 3,  "know": ["thatching"],             "ok": 0.88},
+    "medium": {"units": 60,  "hours": 22,  "cap": 10, "crew": 4,  "know": ["thatching", "timber framing"], "ok": 0.78},
+    "large":  {"units": 160, "hours": 60,  "cap": 30, "crew": 6,  "know": ["timber framing", "stone foundations"],
                "ok": 0.68},
-    "huge":   {"units": 480, "hours": 380, "cap": 90, "crew": 24, "know": ["timber framing", "stone foundations", "mortar",
+    "huge":   {"units": 400, "hours": 160, "cap": 90, "crew": 10, "know": ["timber framing", "stone foundations", "mortar",
                                                                           "multi-storey building"], "ok": 0.58},
 }
 MIX = {"wood": {"wood": .65, "thatch": .25, "rope": .10}, "stone": {"stone": .6, "wood": .25, "clay": .15},
@@ -241,6 +242,8 @@ scale: tiny (an afternoon: a bed, a stone axe, a drying rack), small (a few days
 RULE_DESIGNS = [  # (pattern, kind, scale, material, boosts) - the model does better; these keep tests honest
     (r"apartment|tenement|insula|block of flats|tower block|multi.?stor", "housing", "huge", "mixed", ""),
     (r"row ?houses?|terrace|row of (\w+ )?(houses|cottages|homes)|tenements?", "housing", "large", "wood", ""),
+    (r"fire ?pit|campfire|cook ?fire|hearth|fireplace|clay oven|bread oven", "comfort", "tiny", "stone", ""),
+    (r"drying rack|rack|bench|stool|log seat|seat|wood ?pile|chopping block", "comfort", "tiny", "wood", ""),
     (r"longhouse|barracks|dormitor|bunkhouse|lodge", "housing", "medium", "wood", ""),
     (r"\b(cottage|hut|cabin|house|home|shelter|lean.?to|hovel|dwelling)s?\b", "housing", "small", "wood", ""),
     (r"garden|farm|field|plot|orchard|fish ?trap|weir|smokehouse|henhouse|chicken|pig ?pen|beehive", "food", "small",
@@ -458,10 +461,13 @@ def finish(world, p):
     p["done"] = True
     L["projects"] = [x for x in L["projects"] if x is not p]
     S = SCALES[p["scale"]]
-    chance = (S["ok"] - 0.2 * len(p["missing"]) + 0.03 * min(5, L.get("builds", 0))
+    chance = (S["ok"] - (0.1 if p["scale"] in ("tiny", "small") else 0.2) * len(p["missing"])
+              + 0.03 * min(5, L.get("builds", 0))
               + 0.04 * min(3, len(p.get("helpers", [])) // 5) + (0.05 if L["officers"].get("builder") else 0))
     roll = rng.random()
     result = "success" if roll < chance else ("shoddy" if roll < chance + 0.6 * (1 - chance) else "failed")
+    if result == "failed" and p["kind"] == "housing" and not any(b["kind"] == "housing" for b in L["buildings"]):
+        result = "shoddy"                        # his first roof over a bed leans, but it stands
     feats = city.living["town"]["features"].setdefault(p["place"], {})
     king = world.agent("king")
     lf = king.setdefault("life", life.new_life())

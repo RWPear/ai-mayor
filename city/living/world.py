@@ -582,7 +582,7 @@ class World:
         self.announce_works(life.advance_works(self, TICK))
         self._check_unlocks()
         king = self.agent("king")
-        life.drift(king, AWAKE["king"](hour))
+        life.drift(king, AWAKE["king"](hour), alone=self.frontier and F.settled(self.city) == 0)
         if not AWAKE["king"](hour):
             if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
                 life.reflect(self, king, getattr(self.brains["king"], "llm", None))
@@ -678,6 +678,9 @@ class World:
             F.labor(self, 0.25)
         if t == 20 * 60:
             F.meals(self)
+        if t == 21 * 60:                         # evenings: people's own builds
+            from . import personal
+            personal.daily(self)
         if t == 18 * 60 + 30:                    # just before the post closes
             F.day_summary(self)
 
