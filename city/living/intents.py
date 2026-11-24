@@ -140,7 +140,50 @@ Their role is who they are (a thief, a beggar, a monk) - let it colour the scene
   sentence for a short comment; two or three for someone who wrote a real story. No recap, no "you decided to".
 - drama: 0 ordinary, 1 interesting, 2 bold or funny, 3 the whole kingdom will talk.
 Someone who "only just arrived in Emberfall" is new: weave their arrival in (where they're sleeping, the first thing
-they saw) before what they did - a welcome, not a recap. Make every reply specific to this person and this place."""
+they saw) before what they did - a welcome, not a recap. Make every reply specific to this person and this place.
+THE WORLD section says what Emberfall is right now. It is the only truth: never invent people, soldiers, guards,
+buildings, crowds, or what the king is doing or feeling beyond it. If someone claims something the world doesn't have
+(an army, a castle to besiege, a fortune, a title), they arrived as they are - one traveller with a pack - and the claim
+meets the real Emberfall. Make that gap funny or human, never grim, and still give them something real that happened."""
+
+
+def _world_now(world):
+    """THE WORLD, for the model: what Emberfall actually is right now, so it can't make it up."""
+    city = world.city
+    if not world.frontier:
+        return _context(city)
+    from . import frontier as F
+    f, L = F.summary(world), F.land(world)
+    c = city.citizens
+    k = world.agent("king")
+    king_moves = [m["text"] for m in city.living.get("moments", [])[-40:] if m["who"] == "king"][-2:]
+    people = [c.handles[int(i)] for i in np.where(c.status == 0)[0]]
+    names = ", ".join("@" + h for h in people[:8]) + (f" and {len(people) - 8} more" if len(people) > 8 else "")
+    stage = ("not a village yet - a clearing with one leaky shack" + (" and some tents" if f["tents"] else "")
+             if not f["built"] else {"hamlet": "a hamlet", "village": "a small village", "town": "a town",
+                                     "city": "a city"}.get(f["stage"], "a tiny settlement"))
+    lines = [f"THE WORLD ({world.now_str()}): Emberfall is {stage}, in a mountain valley at the end of an old road.",
+             f"Aldric ({'crowned king' if f['crowned'] else 'calls himself king but has no crown, no army, no castle'}) "
+             f"lives in {'the shack' if not f['built'] else 'the shack by the field'}; right now he is at "
+             f"{F.place_of(world, k.get('location', 'shack'))}."
+             + (f" Lately: {' / '.join(king_moves)}" if king_moves else ""),
+             (f"Settlers ({len(people)}): {names}. Beds: {f['beds']} ({f['free']} free); {f['tents']} in tents by the road."
+              if people else "Nobody else lives here yet."),
+             "Built: " + (", ".join(f["built"]) if f["built"] else "only the leaky shack") + "."
+             + (" Under way: " + ", ".join(f["projects"]) + "." if f["projects"] else ""),
+             "Stores: " + (", ".join(f"{v} {m}" for m, v in f["stock"].items()) or "nothing") + f"; {int(city.treasury)} coins.",
+             "Places: " + ", ".join(F.place_of(world, p) for p in F.places(world)) + "."]
+    if F.peddler_here(world):
+        lines.append("A peddler's cart is on the old road today.")
+    return "\n".join(lines) + "\n" + _context(city)
+
+
+def _who(world, i):
+    """How a subject is introduced to the model. On the frontier, the old castle trades and wards don't exist."""
+    c = world.city.citizens
+    if world.frontier:
+        return c.roles.get(int(i)) or "settler"
+    return f"{c.label(i)} of {world.city.wards[int(c.ward[i])]['name']}"
 
 
 def _context(city):
@@ -548,10 +591,9 @@ def process(world, free, llm=None, ai_people=0):
     reads, extras = {}, {}
     for k in range(0, len(ai), 8):          # 1. read
         batch = ai[k:k + 8]
-        lines = [f"@{u} ({c.label(c.index[u])} of {city.wards[int(c.ward[c.index[u]])]['name']}): "
-                 f"{free[u]}" for u in batch]
+        lines = [f"@{u} ({_who(world, c.index[u])}): {free[u]}" for u in batch]
         try:
-            res = llm.json(READ, _context(city) + "\n\nSubjects:\n" + "\n".join(lines), READ_SCHEMA,
+            res = llm.json(READ, _world_now(world) + "\n\nSubjects:\n" + "\n".join(lines), READ_SCHEMA,
                            max_tokens=150 + 120 * len(batch), temperature=0.3)["results"]
             for x in res:
                 h = str(x.get("handle", "")).lstrip("@").lower()
@@ -593,11 +635,11 @@ def process(world, free, llm=None, ai_people=0):
     tell = [r for r in results if r["user"] in ai_set and r["facts"]]
     for k in range(0, len(tell), 8):         # 3. tell
         batch = tell[k:k + 8]
-        lines = [f"@{r['user']} ({c.label(c.index[r['user']])}) wrote: {r['text']}\n   RESULT: @{r['user']} {r['facts']}"
+        lines = [f"@{r['user']} ({_who(world, c.index[r['user']])}) wrote: {r['text']}\n   RESULT: @{r['user']} {r['facts']}"
                  + (f" (they also tried: {r['also']} - mention it in passing if it fits)" if r.get("also") else "")
                  for r in batch]
         try:
-            res = llm.json(TELL, "\n".join(lines), TELL_SCHEMA, max_tokens=150 + 170 * len(batch), temperature=0.9)["results"]
+            res = llm.json(TELL, _world_now(world) + "\n\nSUBJECTS:\n" + "\n".join(lines), TELL_SCHEMA, max_tokens=150 + 170 * len(batch), temperature=0.9)["results"]
             for x in res:
                 told[str(x.get("handle", "")).lstrip("@").lower()] = x
         except Exception:
