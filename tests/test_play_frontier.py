@@ -174,3 +174,43 @@ def test_no_guards_or_dungeons_on_the_frontier(tmp_path):
         intents.resolve(p.world, r, {})
         text = " ".join(str(r.get(k, "")) for k in ("facts", "reply_rule", "to_target")).lower()
         assert "guard" not in text and "dungeon" not in text and "castle" not in text
+
+
+def test_a_wild_claim_comes_true_at_a_cost(tmp_path):
+    from city.living import intents, wonders
+    p = _play(tmp_path)
+    p.comment("meeee", "x"); p._drain()
+    p.world.city.living["acted_today"] = []
+    out = intents.process(p.world, {"meeee": "I ride my dragon into town"}, None, 0)
+    w = wonders.find(p.world.city, "dragon")
+    assert w and w["owner"] == "meeee" and w["cost"]
+    assert "real" in out[0]["reply"].lower() and "THE WORLD" not in out[0]["reply"]
+    assert "dragon" in intents._world_now(p.world)                    # the narrator sees it from now on
+
+
+def test_the_goat_can_be_hunted_once_it_exists(tmp_path):
+    from city.living import intents, wonders
+    p = _play(tmp_path)
+    for h in ("billy", "meeee"):
+        p.comment(h, "x")
+    p._drain()
+    assert intents.rule_read("I want to kill the goat for my king", False) == ("attack", "the goat")
+    p.world.city.living["acted_today"] = []
+    out = intents.process(p.world, {"billy": "I want to kill the goat for my king"}, None, 0)
+    assert "goat" in out[0]["reply"] and "nobody here answers" not in out[0]["reply"]
+    wonders.add(p.world, "the goat that follows billy", "thread", owner="billy", what="a goat", by="thread")
+    p.world.city.rng.random = lambda: 0.1                          # it goes well
+    p.world.city.living["acted_today"] = []
+    out = intents.process(p.world, {"billy": "I kill the goat"}, None, 0)
+    assert "SUCCEEDED" in out[0]["outcome"] or "gone" in out[0]["reply"]
+    assert not wonders.find(p.world.city, "goat")
+
+
+def test_wonders_cost_something_every_day(tmp_path):
+    from city.living import frontier as F, wonders
+    p = _play(tmp_path)
+    w = wonders.add(p.world, "dragon hatchling", "creature", owner="x", what="a hatchling", cost="eats the stores",
+                    upkeep="hungry")
+    F.land(p.world)["stock"]["food"] = 10
+    wonders.daily(p.world)
+    assert F.land(p.world)["stock"]["food"] == 8 and w in wonders.state(p.world.city)["open"]

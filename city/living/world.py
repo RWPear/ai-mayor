@@ -605,6 +605,8 @@ class World:
             director.consider(self, self.director_llm)
         if self.clock % 1440 == 6 * 60:
             things.restock(self)
+            from . import wonders
+            wonders.daily(self)
         things.tick(self)
         if self.clock % 1440 == 6 * 60 or "weather" not in lv:
             lv["weather"] = self.city.rng.choice(["clear and cold", "grey drizzle", "a warm sunny day", "thick fog",
