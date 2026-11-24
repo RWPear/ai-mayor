@@ -28,7 +28,7 @@ import traceback
 from pathlib import Path
 
 from . import config, report
-from .recorder import VIEWER, recorders
+from .recorder import VIEWER, Versioned, recorders, viewer_version
 
 SPEEDS = {"slow": 60, "normal": 30, "fast": 7.5, "faster": 1.5}     # real seconds per half-hour tick
 #   slow: a day in 48 min · normal: 24 min · fast: 6 min · faster: about a minute
@@ -327,7 +327,8 @@ class Play:
 
 
 def serve(play, port=8765):
-    class H(http.server.SimpleHTTPRequestHandler):
+    class H(Versioned):
+        version = viewer_version()
         def translate_path(self, path):
             path = path.split("?", 1)[0].split("#", 1)[0]
             return str(VIEWER / (path.lstrip("/") or "index.html"))
@@ -348,6 +349,7 @@ def serve(play, port=8765):
             self.wfile.write(body)
 
         def do_GET(self):
+            self._unversion()
             p, _, q = self.path.partition("?")
             if p == "/live/state":
                 return self._json(None, play.cache["state"])
@@ -362,9 +364,10 @@ def serve(play, port=8765):
                 return self._json(recorders())
             if p in ("/days/scenes.json",):
                 return self._json([])
-            return super().do_GET()
+            return Versioned.do_GET(self)
 
         def do_POST(self):
+            self._unversion()
             n = int(self.headers.get("Content-Length") or 0)
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")

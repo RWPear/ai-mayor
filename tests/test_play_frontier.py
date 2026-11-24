@@ -88,3 +88,23 @@ def test_replies_fold_together_answer_only_recent_comments_and_stop_at_two(tmp_p
     w.city.living["clock"] += 25 * 60                                   # a day later: the comment is stale
     w.reply("wes", "Old news.", "court")
     assert len([x for x in w.city.living["outbox"] if x["to"] == "wes"]) == 2
+
+
+def test_the_bard_gets_the_world_and_writes_the_reply(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    p.comment("bil", "x"); p._drain()
+    seen = {}
+
+    class Fake:
+        def json(self, system, user, schema, **kw):
+            if "Subjects:" in user:
+                return {"results": [{"handle": "bil", "action": "work", "target": "", "item": "", "also": "",
+                                     "effort": 1, "skill": "", "abuse": False}]}
+            seen["system"], seen["user"] = system, user
+            return {"results": [{"handle": "@bil", "outcome": "@bil split a log clean in half.",
+                                 "reply": "The log split clean. Aldric clapped, once, and looked embarrassed.", "drama": 1}]}
+    p.world.city.living["acted_today"] = []
+    r = intents.process(p.world, {"bil": "I chop wood all morning"}, llm=Fake(), ai_people=5)
+    assert "bard" in seen["system"] and "THE WORLD" in seen["user"]
+    assert r[0]["reply"].startswith("The log split clean")

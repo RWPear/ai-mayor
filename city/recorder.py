@@ -12,6 +12,7 @@ On brainbox:  pip install playwright && python -m playwright install chromium   
 """
 import http.server
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -43,7 +44,45 @@ def scenes_index(days):
     return out
 
 
-class _Handler(http.server.SimpleHTTPRequestHandler):
+def viewer_version():
+    """Changes whenever the viewer's code does. The page is served under /v<version>/, so a browser can never mix
+    in old copies of scripts it cached on an earlier visit (Chrome reuses cached modules even on a reload)."""
+    newest = max((f.stat().st_mtime_ns for f in VIEWER.rglob("*") if f.suffix in (".js", ".html", ".css")), default=0)
+    return format(newest // 1_000_000 % (1 << 40), "x")
+
+
+class Versioned(http.server.SimpleHTTPRequestHandler):
+    """Serves index.html with <base href="/v<version>/">, and strips that prefix from every request."""
+    version = None
+
+    def _unversion(self):
+        m = re.match(r"^/v[0-9a-f]+(/.*)$", self.path)
+        if m:
+            self.path = m.group(1)
+
+    def _index(self):
+        ver = self.version or viewer_version()
+        html = (VIEWER / "index.html").read_text()
+        html = html.replace("<head>", f'<head>\n<base href="/v{ver}/">', 1)
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        self._unversion()
+        if self.path.split("?", 1)[0] in ("/", "/index.html"):
+            return self._index()
+        return super().do_GET()
+
+    def do_HEAD(self):
+        self._unversion()
+        return super().do_HEAD()
+
+
+class _Handler(Versioned):
     days = None
 
     def translate_path(self, path):
