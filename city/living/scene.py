@@ -305,6 +305,8 @@ def place_pos(world, pid):
     if pid in LAYOUT:
         return list(LAYOUT[pid]["pos"])
     p = F.places(world).get(pid) or {}
+    if p.get("pos"):                                          # new land risen from the clouds
+        return list(p["pos"])
     b = next((b for b in F.land(world)["buildings"] if b["id"] == p.get("built")), None)
     if b and b.get("lot"):
         return list(b["lot"]["pos"])
@@ -460,7 +462,7 @@ def export(world, since=None, until=None):
                        "on_road": F.on_road(city), "beds": F.capacity(city), "free_beds": F.free_beds(city),
                        "tents": n_tents, "know": list(L["know"]),
                        "stores": {m: int(v) for m, v in L["stock"].items() if v >= 1}, "gold": round(city.treasury)},
-        "terrain": {"ground": {"size": [420, 420]}, "river": {"path": RIVER, "width": 10},
+        "terrain": {"ground": {"size": [640, 640]}, "island": F.island(city), "river": {"path": RIVER, "width": 10},
                     "road": {"path": ROAD, "width": 4}, "hill": {"pos": LAYOUT["hill"]["pos"],
                                                                  "r": LAYOUT["hill"]["r"], "height": 20},
                     "woods": {"pos": LAYOUT["woods"]["pos"], "r": LAYOUT["woods"]["r"]}},

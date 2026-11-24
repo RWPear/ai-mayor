@@ -161,6 +161,18 @@ def apply(city, effects, ward=None, ctx=None, daily=False):
             if w.get("councilor") is not None:     # the hold's lord loses the title, and can't get it back soon
                 w.setdefault("barred", {})[str(w["councilor"])] = city.day + 30
             w["councilor"] = None
+        elif head == "stock":               # the island's stores: stock.food, stock.wood, stock.starmetal...
+            land = ((city.living or {}).get("town") or {}).get("land")
+            if land is not None:
+                land["stock"][target] = max(0, land["stock"].get(target, 0) + int(val))
+        elif head == "island" and city.living:   # new land rises from the clouds
+            from .living import frontier as F
+            F.grow_island(city, int(val))
+        elif head == "wonder" and city.living:   # "name | kind | what it is | its catch | upkeep"
+            from .living import wonders
+            name, kind, what, cost, up = (str(val).split("|") + ["", "", "", "", ""])[:5]
+            wonders.add(city, name.strip(), kind.strip() or "thread", what=what.strip(), cost=cost.strip(),
+                        upkeep=up.strip(), by="island")
         elif head == "unrest" and ward is not None:
             w = city.wards[ward]
             w["unrest"] = float(np.clip(w["unrest"] + float(val), 0, 1))

@@ -145,7 +145,8 @@ class LLMBrain:
             from . import frontier_tools
             return frontier_tools.identity(p)
         return (f"You are {p['name']}, a warlord who has just made camp ({p.get('camp', 'the war camp')}) in the "
-                "frozen hills north of Emberfall, a kingdom whose people are real followers online. Nobody has "
+                "clouds north of Emberfall - a black crag of floating rock - across the sky from Emberfall, a young settlement on a "
+                "floating island whose people are real followers online. Your raiders cross on hide gliders. Nobody has "
                 f"told you who to be. Your one goal: {p.get('goal', '')}\n"
                 + (f"Who you've become so far, in your own words: {me_now}.\n" if me_now else ""))
 

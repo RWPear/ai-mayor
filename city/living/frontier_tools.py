@@ -421,9 +421,11 @@ def identity(p):
                  "own hands. ")
     else:
         start = ("You are Aldric. You want to be a king, but right now you have nothing: a leaky one-room shack in a "
-                 "field, a dull axe, the clothes you're wearing. No subjects, no court, no gold to speak of, and "
-                 "nobody has crowned you. Everything has to be built by hand, starting with your own. People (real "
-                 "people who follow online) arrive once a week - if there's something to come to. ")
+                 "field on an old floating island above the clouds, a dull axe, the clothes you're wearing. No court, "
+                 "no gold to speak of, and nobody has crowned you. Everything has to be built by hand, starting with "
+                 "your own. The island is a little magical - strange things are real here, and always cost something "
+                 "- and it grows: new land rises from the clouds as Emberfall grows. People (real people who follow "
+                 "online) walk in up the old road whenever word reaches them. ")
     if p.get("character"):
         start += p["character"] + " "
     return (start + f"Your one goal: {goal}\nEverything else - what you like, how you build, what you think the place "

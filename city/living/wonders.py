@@ -84,8 +84,8 @@ def thing_of(text):
 
 
 def add(world, name, kind, owner=None, what="", cost="", upkeep="", by="conjured"):
-    """A new wonder on the island. Returns it."""
-    city = world.city
+    """A new wonder on the island. Returns it. (world, or just the city)"""
+    city = getattr(world, "city", world)
     st = state(city)
     st["n"] += 1
     w = {"id": f"w{st['n']}", "name": str(name)[:60], "kind": kind if kind in KINDS else "thread",
@@ -145,7 +145,9 @@ def _now(world, w):
 
 
 def daily(world):
-    """06:00: every wonder costs what it costs. Some wander off. Returns moments worth telling."""
+    """06:00: every wonder costs what it costs. Some wander off. Returns moments worth telling.
+    (upkeep: hungry eats the stores; mischief knocks things over; noisy costs everyone sleep; noticed / growing /
+    backfire make news now and then; anything else is just a story)"""
     city = world.city
     from . import frontier as F
     stock = F.land(world)["stock"]

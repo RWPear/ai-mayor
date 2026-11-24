@@ -1,4 +1,4 @@
-"""The warlord's side of the map: a war camp in the frozen north.
+"""The warlord's side of the map: a war camp on a black crag of rock floating in the clouds north of Emberfall.
 
 The camp is a small economy of its own. Warriors eat food. Food comes from
 hunting and from raiding Emberfall. Morale rises with victories and falls with
@@ -73,11 +73,11 @@ def settle(city, world=None):
     c["active_raid"] = None
     sent = done.get("warriors_sent", 0)
     if done["result"] in ("helped", "mayor"):
-        lost = int(sent * (0.6 if done["id"] == "barbarian_horde" else 0.35))
+        lost = int(sent * (0.6 if done["id"] == "warlord_horde" else 0.35))
         c["warriors"] = max(5, c["warriors"] - lost)
-        c["morale"] = max(0.0, c["morale"] - (0.35 if done["id"] == "barbarian_horde" else 0.15))
+        c["morale"] = max(0.0, c["morale"] - (0.35 if done["id"] == "warlord_horde" else 0.15))
         c["raids_lost"] += 1
-        if done["id"] == "barbarian_horde":
+        if done["id"] == "warlord_horde":
             c["defeated"] = c["warriors"] < 25
         return (f"The raid failed. {lost} warriors never came home to {c['name']}. "
                 f"The warlord broke a table.")

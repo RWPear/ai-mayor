@@ -564,6 +564,66 @@ def places(world):
     return world.city.living["town"]["places"]
 
 
+# ---------------------------------------------------------------- the island
+# Emberfall is on a floating island above the clouds. It starts as one round island (the shack, the field, the
+# woods, the river, the rocky hill, the old road to the edge) and grows: as the place grows - and when the island
+# feels like it - new land rises out of the clouds at the rim, with a new place on it.
+ISLAND = {"pos": [5, -10], "r": 175}
+LANDS = [("the east meadow", "meadow", ["food", "thatch"], "wildflowers, fat bees and grass up to your waist"),
+         ("the glass cliffs", "cliffs", ["stone"], "pale stone that rings like a bell when you strike it"),
+         ("the silver grove", "grove", ["wood", "food"], "silver-barked trees and fruit nobody can name"),
+         ("the warm springs", "springs", ["clay", "food"], "steaming pools that smell of eggs and lightning"),
+         ("the old ruins", "ruins", ["stone"], "tumbled stones carved in a language nobody can read"),
+         ("the crystal fields", "crystals", ["stone"], "crystals the size of fists growing out of the grass"),
+         ("the misty point", "point", ["clay", "thatch"], "a long spit of land where the clouds pour over like water"),
+         ("the sky garden", "skygarden", ["food", "rope"], "a hanging garden of vines on a ledge over nothing")]
+LOBE_ANGLES = [20, 110, 200, 60, 160, 250, 330, 290]      # degrees, east = 0, north = 90 (the road leaves south)
+
+
+def island(city):
+    L = land(city)
+    return L.setdefault("island", {"pos": list(ISLAND["pos"]), "r": ISLAND["r"], "lobes": []})
+
+
+def grow_island(city, n=1):
+    """New land rises out of the clouds at the island's rim - with a new place on it. Returns the new lands."""
+    import math
+    isl = island(city)
+    t = city.living["town"]
+    out = []
+    for _ in range(n):
+        k = len(isl["lobes"])
+        if k >= len(LANDS):
+            break
+        name, pid, res, offers = LANDS[k]
+        a = math.radians(LOBE_ANGLES[k])
+        r = 62 + 10 * (k % 3)
+        d = isl["r"] + r * 0.42
+        pos = [round(isl["pos"][0] + d * math.cos(a)), round(isl["pos"][1] + d * math.sin(a))]
+        lobe = {"id": pid, "name": name, "pos": pos, "r": r, "day": city.day + 1}
+        isl["lobes"].append(lobe)
+        t["places"][pid] = {"name": name, "walk": 30 + 5 * k, "resources": list(res), "offers": offers, "pos": pos,
+                            "risen": city.day + 1}
+        t["features"][pid] = {"land": f"new land, risen from the clouds on day {city.day + 1}: {offers}"}
+        out.append(lobe)
+        city.living.setdefault("risen_today", []).append(name)      # (the world tells everyone on its next tick)
+    return out
+
+
+RISE_LINES = ["The ground shook before dawn. When the mist cleared, there was new land at the island's edge: {name} - "
+              "{offers}.",
+              "Something huge moved under the clouds all night. By morning {name} had risen out of them: {offers}.",
+              "New land rose from the clouds at the edge of Emberfall: {name}. Nobody has set foot on it yet."]
+
+
+def announce_risen(world):
+    for name in world.city.living.pop("risen_today", []) or []:
+        p = next((p for p in places(world).values() if p["name"] == name), {})
+        text = world.city.rng.choice(RISE_LINES).format(name=name, offers=p.get("offers", "unknown ground"))
+        world.moment("world", text, 3, public=True)
+        world.notify(f"New land: {name}")
+
+
 def place_of(world, pid):
     p = places(world).get(pid)
     return p["name"] if p else pid
@@ -932,6 +992,7 @@ def _stage(world, before=None):
                 "city": "Emberfall is a city."}[now]
         world.moment("world", text, 3, public=True)
         world.notify(text)
+        grow_island(world.city, 1)                    # the island answers: new land rises from the clouds
         for s in order[order.index(before) + 1:order.index(now) + 1]:
             npc = COURT_ARRIVES.get(s)
             if npc and npc not in L["court"]:

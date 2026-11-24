@@ -700,6 +700,8 @@ class World:
             F.peddler(self)
         if t == 3 * 60:
             F.rough_night(self)
+        if self.city.living.get("risen_today"):
+            F.announce_risen(self)
         if t % 120 == 0 and (self.city.citizens.status == F.ROAD).any():   # (an old save's road: let them in)
             F.arrive(self)
         if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
@@ -723,12 +725,12 @@ class World:
         t = self.clock % 1440
         if day == when - 1 and t == 15 * 60:
             hold = self.city.rng.choice([w["name"] for w in self.city.wards]) if self.city.wards else "the hills"
-            self.moment("world", f"A shepherd from {hold} swears he saw riders on the northern hills. Nobody believes "
-                                 f"him.", 1, public=True)
+            self.moment("world", f"Someone in {hold} swears they saw a black island drifting in the clouds to the north, "
+                                 f"with fires on it. Nobody believes them.", 1, public=True)
         if day >= when and t == 3 * 60:
             camp["arrived"] = self.city.day
-            self.moment("world", "Before dawn, smoke rose over the northern hills. Someone has made camp up there - "
-                                 "a lot of someones.", 2, public=True)
+            self.moment("world", "Before dawn a black crag of rock drifted out of the clouds to the north and stopped. "
+                                 "There are fires on it - a lot of fires.", 2, public=True)
             self.agent("warlord")["next_act"] = self.clock
             self.notify(f"{self.agent('warlord')['name']} has arrived in the north")
 

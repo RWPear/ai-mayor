@@ -23,15 +23,14 @@ from .. import storyteller
 
 CONSEQUENCES = {
     "nothing": {},
-    "food_loss": {"service.food": -0.04}, "food_gain": {"service.food": 0.04},
+    "food_loss": {"stock.food": -3}, "food_gain": {"stock.food": 3},
+    "wood_loss": {"stock.wood": -3}, "wood_gain": {"stock.wood": 3},
+    "stone_loss": {"stock.stone": -3}, "stone_gain": {"stock.stone": 3},
     "defense_loss": {"service.defense": -0.04}, "defense_gain": {"service.defense": 0.04},
-    "roads_loss": {"service.roads": -0.04}, "roads_gain": {"service.roads": 0.04},
-    "festivals_loss": {"service.festivals": -0.04}, "festivals_gain": {"service.festivals": 0.04},
     "mood_loss": {"mood": -0.03}, "mood_gain": {"mood": 0.03},
     "loyalty_loss": {"loyalty": -0.03}, "loyalty_gain": {"loyalty": 0.03},
-    "gold_loss": {"treasury_pc": -2}, "gold_gain": {"treasury_pc": 2},
-    "people_poorer": {"wealth_pc": -15}, "people_richer": {"wealth_pc": 15},
-    "economy_loss": {"economy": -0.03}, "economy_gain": {"economy": 0.03},
+    "gold_loss": {"treasury": -3}, "gold_gain": {"treasury": 3},
+    "new_land": {"island": 1},              # land rises from the clouds (size is ignored: one piece at a time)
     "unrest": {"unrest.hold": 0.08},
 }
 SIZE = {1: 1.0, 2: 2.0, 3: 3.5}
@@ -62,10 +61,13 @@ SCHEMA = {"type": "object", "properties": {
     "required": ["happen", "title", "kind", "where", "days", "help_words", "hinder_words", "difficulty", "at_start",
                  "if_helped", "if_not", "choices", "king_options"]}
 
-SYSTEM = """You are the unseen storyteller of the kingdom of Emberfall, a living world followed by real people online.
+SYSTEM = """You are the unseen storyteller of Emberfall, a young settlement on an old floating island above the clouds,
+followed by real people online. The island is a little magical: wonders are real here (sky-whales, doors that
+appear in hills, land rising from the clouds, falling stars, griffins, wizards) and they always cost something.
 Look at what has actually been happening and decide whether something should happen next, and what. Best of all:
-CONSEQUENCES - things that grow out of what the king, the warlord and the people actually did (a project that
-failed, a decree, a feud, houses outside the walls, a hungry winter coming). Sometimes something from outside.
+CONSEQUENCES - things that grow out of what Aldric, Skarn and the people actually did (a project that failed, a
+wonder someone conjured, a feud, people sleeping in tents, a hungry week). Sometimes something strange from the
+island or the sky. Aim for things people will want to screenshot.
 Rules:
 - tier {tier} of 3. tier 1 = everyday trouble, small stakes. tier 2 = serious. tier 3 = disasters. Match the tier.
 - Nobody real dies (subjects are real people). Animals, buildings, harvests, gold and reputations can be lost.
@@ -76,9 +78,9 @@ Rules:
 - consequences come from the fixed list; size 1-{tier}.
 - king_options: 0-2 things the king could do about it (cost none/small/large; helps=true if it pushes toward
   solving it).
-- title: a specific headline that says what happened, to whom, where - like "Rats chewed through the granary in
-  Millbrook overnight" or "The king's new archery targets collapsed on a soldier during practice". Never a vague
-  title like "A Test of Strength" or "The King's First Steps".
+- title: a specific headline that says what happened, to whom, where - like "@meeee's dragon hatchling ate the
+  woodpile overnight" or "A door appeared in the side of the rocky hill". Never a vague title like "A Test of
+  Strength" or "The King's First Steps".
 - Don't repeat recent events: {recent}
 - If nothing should happen right now (things are busy enough, or it would feel random), set happen=false."""
 
@@ -98,7 +100,8 @@ def _effect(o, cap):
         return {}
     eff = CONSEQUENCES.get(o.get("consequence"), {})
     k = SIZE[max(1, min(cap, int(o.get("size") or 1)))]
-    return {key: v * k for key, v in eff.items()}
+    return {key: (v if key == "island" else round(v * k) if key.startswith(("stock.", "treasury")) else v * k)
+            for key, v in eff.items()}
 
 
 def build(city, d, tier_):
@@ -165,35 +168,28 @@ def happenings(world):
     lines = [m["text"] for m in world.moments_since(world.clock - 30 * 60)
              if m["public"] and m["drama"] >= 1][-14:]
     king = world.agent("king")
-    outs = king.get("life", {}).get("outcomes", [])[-3:]
-    from . import town as T
     from .warcamp import camp
-    c = camp(city)
     from . import frontier as F
+    from . import wonders
+    c = camp(city)
     f = F.summary(world)
+    isl = F.island(city)
     return "\n".join([
         f"Day {city.day + 1}, {world.now_str()}, {city.living.get('weather', '')}.",
-        "This is a FRONTIER: Aldric (who wants to be king, not crowned "
-        + ("- now crowned" if f["crowned"] else "yet") + ") is building a settlement from nothing in a field "
-        "by a river, woods and a rocky hill. Events should fit that: wolves, floods, a sick goat, a fallen tree, "
-        "strangers on the road, a fight over a well - not castles and holds.",
-        f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds)"
-        + f". Stores: {f['stock']}. Built: {', '.join(f['built']) or 'nothing'}. "
-        f"Building: {', '.join(f['projects']) or 'nothing'}.",
+        "Aldric (who wants to be king - " + ("now crowned" if f["crowned"] else "not crowned yet") + ") is building "
+        "Emberfall from nothing on an old floating island above the clouds: a field, woods, a river that falls off the "
+        "edge, a rocky hill, the old road to the rim" + (", and new land that rose from the clouds: "
+                                                         + ", ".join(lb["name"] for lb in isl["lobes"])
+                                                         if isl["lobes"] else "") + ". Events should fit that: "
+        "strange weather on the cloud sea, creatures, wonders, falling stars, a sick goat, a fight over a well - not "
+        "castles and kingdoms.",
+        f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds). Stores: {f['stock']}. "
+        f"Built: {', '.join(f['built']) or 'nothing'}. Building: {', '.join(f['projects']) or 'nothing'}.",
+        wonders.line(city) or "No wonders on the island yet.",
         "Who lives here: " + _who_lives_here(city),
+        ("Skarn the Red's war camp on the crag to the north: " + (f"{c['warriors']} warriors" if c.get("arrived")
+                                                                  else "nobody there yet")),
         "Happening right now: " + ("; ".join(a["title"] for a in city.events) or "nothing"),
-        "Recently:\n- " + "\n- ".join(lines or ["a quiet stretch"])])
-    return "\n".join([
-        f"Day {city.day + 1} of the season, {world.now_str()}, {city.living.get('weather', '')}.",
-        f"Emberfall: {city.population()} subjects, {T.summary(world)}, loyalty {city.approval():.0%}, treasury "
-        f"{city.treasury:,.0f} gold, food {city.quality['food']:.2f}, defense {city.quality['defense']:.2f}.",
-        "Holds: " + ", ".join(w["name"] for w in city.wards),
-        "The king's projects: " + ("; ".join(f"{o['name']} ({o['result']})" for o in outs) or "none yet")
-,
-        "Who the king is becoming: " + (king.get("self", {}).get("becoming") or "nobody knows yet"),
-        ("The war camp in the north: " + (f"{c['warriors']} warriors" if c.get("arrived") else "nobody there yet")),
-        "Happening right now: " + ("; ".join(a["title"] for a in city.events) or "nothing"),
-        "Who lives here: " + _who_lives_here(city),
         "Recently:\n- " + "\n- ".join(lines or ["a quiet stretch"])])
 
 
