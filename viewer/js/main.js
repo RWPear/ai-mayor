@@ -481,7 +481,7 @@ function buildHud() {
   const st = S.settlement;
   $("title").textContent = `${S.city}, day ${LIVE ? S.day + 1 : S.day}`;
   const chips = [[st.crowned ? "crowned" : "not crowned"], [st.stage], [`${st.settled} settlers`], [`${st.beds} beds, ${st.free_beds} free`],
-    st.tents ? [`${st.tents} in tents`, "warn"] : null, st.on_road ? [`${st.on_road} on the road`] : null, [`arrivals day ${st.next_arrival}`]].filter(Boolean);
+    st.tents ? [`${st.tents} in tents`, "warn"] : null, st.on_road ? [`${st.on_road} on the road`] : null, st.next_arrival ? [`arrivals day ${st.next_arrival}`] : null].filter(Boolean);
   $("stats").innerHTML = chips.map(([t, c]) => `<span class="chip ${c || ""}">${esc(t)}</span>`).join("");
   $("events").innerHTML = S.events.map((e, i) => `<button class="ev ${e.public ? "public" : ""} d${e.drama}" data-i="${i}" type="button"><span class="t">${esc(e.time.split(", ")[1])}</span>${esc(e.text)}</button>`).join("");
   document.querySelectorAll(".ev").forEach((el) => el.addEventListener("click", () => { const e = S.events[+el.dataset.i]; now = e.t - S.start - 2; if (e.pos) { rig.set("orbit"); rig.lookAt(e.pos, 16); syncMode(); } }));

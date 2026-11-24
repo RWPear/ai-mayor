@@ -200,8 +200,7 @@ class Play:
             town.settle(self.world, len(c.handles) - len(idx))
         for h in new:
             self.log.append({"n": len(self.log), "time": self.world.now_str(), "who": "world", "public": True,
-                             "drama": 1, "text": f"@{h} followed the kingdom."
-                             + (" They set off up the old road." if self.world.frontier else "")})
+                             "drama": 1, "text": f"@{h} followed the kingdom."})
 
     # ------------------------------------------------------------------ buttons
     def control(self, body):
@@ -287,6 +286,7 @@ class Play:
         state = {"day": city.day + 1, "model": self.model, "clock": w.clock, "time": w.now_str(), "post_closes": w.now_str(w.next_post_clock()),
                  "paused": self.paused, "tick_s": self.tick_s, "tick_min": self.W.TICK, "version": self.version,
                  "speeds": SPEEDS, "error": self.error, "frontier": w.frontier,
+                 "road": w.frontier and not F.instant(city),
                  "words": list((pack.get("commands") or {}).keys())[:8],
                  "status": F.status_line(F.summary(w)) if w.frontier else "",
                  "pending": sum(1 for r in self.replies if r["status"] == "pending")}

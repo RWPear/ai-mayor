@@ -25,13 +25,14 @@ it.
 
 ## Commenting
 
-Type any handle and a comment. A new handle follows on the spot (on the frontier they set off up the old
-road like everyone else). Comments play out on the next tick, and own-words moves ("I chop wood all
+Type any handle and a comment. A new handle follows on the spot and walks into Emberfall: a free bed if
+there is one, a tent by the road if not. Their first comment gets a reply that welcomes them and plays out
+what they said. Comments play out on the next tick, and own-words moves ("I chop wood all
 morning", "I want to start a garden behind my house") within the game hour. The **Ideas** list has some to
 try.
 
-On the frontier, newcomers arrive together on arrival day, a week away. **Bring the road in** brings
-everyone on the road in now, so you don't wait a week of game time to test settlers.
+With `frontier_arrivals: weekly` (the old way), newcomers wait on the road for arrival day, and **Bring
+the road in** brings them in now. With the default, that button is hidden.
 
 ## Replies wait for you
 

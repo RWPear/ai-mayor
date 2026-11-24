@@ -138,7 +138,9 @@ Their role is who they are (a thief, a beggar, a monk) - let it colour the scene
   chronicle.
 - reply: what they'll read as a reply to their comment: second person ("you..."), continuing their story. One
   sentence for a short comment; two or three for someone who wrote a real story. No recap, no "you decided to".
-- drama: 0 ordinary, 1 interesting, 2 bold or funny, 3 the whole kingdom will talk."""
+- drama: 0 ordinary, 1 interesting, 2 bold or funny, 3 the whole kingdom will talk.
+Someone who "only just arrived in Emberfall" is new: weave their arrival in (where they're sleeping, the first thing
+they saw) before what they did - a welcome, not a recap. Make every reply specific to this person and this place."""
 
 
 def _context(city):
@@ -582,6 +584,12 @@ def process(world, free, llm=None, ai_people=0):
         results.append(r)
     told = {}
     ai_set = set(ai)
+    arrived = city.living.get("just_arrived") or {}
+    for r in results:                       # someone who just walked in: that's part of their story today
+        a = arrived.pop(r["user"], None)
+        if a:
+            r["arrived"] = a["text"]
+            r["facts"] = (r["facts"] + "; " if r.get("facts") else "") + f"(they only just arrived in Emberfall: they {a['text']})"
     tell = [r for r in results if r["user"] in ai_set and r["facts"]]
     for k in range(0, len(tell), 8):         # 3. tell
         batch = tell[k:k + 8]
@@ -604,6 +612,8 @@ def process(world, free, llm=None, ai_people=0):
         else:
             r["outcome"] = _rule_tell(r)
             r["reply"] = _rule_reply(r)
+            if r.get("arrived"):
+                r["reply"] = f"Welcome to Emberfall: you {r['arrived']}. " + (r["reply"] if r["reply"] and "only just arrived" not in r["reply"] else "")
             r["drama"] = r["drama_floor"]
         short, full = note.get(r["user"], ("", ""))
         if not r.get("reply"):              # default: they always hear something back

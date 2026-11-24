@@ -172,8 +172,9 @@ def caption(r):
         road = r["frontier"]["next_arrival"]
         return (f"Day {r['day']}: {headline(r)}\n\n{line}\n\n"
                 + (("Your doing today: " + " · ".join(thanks) + "\n\n") if thanks else "")
-                + f"Follow to set off for Emberfall - everyone on the road arrives together on day {road}. "
-                  f"Settlers: tell your character what to do in your own words, or comment {words}. "
+                + (f"Follow to set off for Emberfall - everyone on the road arrives together on day {road}. " if road else
+                   "Follow and you walk into Emberfall today - bring a tent. ")
+                + f"Settlers: tell your character what to do in your own words, or comment {words}. "
                   f"Send Aldric something useful. Suggest what he should build.\n"
                   f"Comment STATUS to see your character. An AI is building a kingdom from nothing. You live in it.")
     return (f"Day {r['day']}: {headline(r)}\n\n"

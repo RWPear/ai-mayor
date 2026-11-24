@@ -178,8 +178,9 @@ def happenings(world):
             + ("- now crowned" if f["crowned"] else "yet") + ") is building a settlement from nothing in a field "
             "by a river, woods and a rocky hill. Events should fit that: wolves, floods, a sick goat, a fallen tree, "
             "strangers on the road, a fight over a well - not castles and holds.",
-            f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds), {f['on_road']} on the road "
-            f"(arriving day {f['next_arrival']}). Stores: {f['stock']}. Built: {', '.join(f['built']) or 'nothing'}. "
+            f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds)"
+            + (f", {f['on_road']} on the road (arriving day {f['next_arrival']})" if f.get("next_arrival") else "")
+            + f". Stores: {f['stock']}. Built: {', '.join(f['built']) or 'nothing'}. "
             f"Building: {', '.join(f['projects']) or 'nothing'}.",
             "Who lives here: " + _who_lives_here(city),
             "Happening right now: " + ("; ".join(a["title"] for a in city.events) or "nothing"),

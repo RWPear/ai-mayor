@@ -604,8 +604,14 @@ def home_of(c, i):
 
 
 # ---------------------------------------------------------------- the road and arrival day
+def instant(city):
+    """Do followers move in the moment they follow (the default), or arrive in a weekly wave?"""
+    return city.cfg.get("frontier_arrivals", "instant") != "weekly"
+
+
 def join_road(world, idx):
-    """New followers set off for Emberfall; they arrive together on arrival day."""
+    """New followers come to Emberfall: straight away (they walk up the old road and pitch a tent, or take a free
+    bed), or - with frontier_arrivals: weekly - together on arrival day."""
     c = world.city.citizens
     idx = np.asarray(idx, np.int64)
     if not len(idx):
@@ -613,6 +619,8 @@ def join_road(world, idx):
     idx = idx[c.status[idx] == 0]
     c.status[idx] = ROAD
     c.walled[idx] = -2
+    if instant(world.city) and len(idx):
+        arrive(world, idx)
     return len(idx)
 
 
@@ -654,14 +662,26 @@ def _about(n):
     return f"{int(round(n / 100.0) * 100):,}"
 
 
-def arrive(world):
-    """Arrival day: everyone on the road walks up the old road at once."""
+ARRIVE_LINES = ["walked up the old road with everything they own on their back",
+                "came over the hill at {time}, muddy to the knees", "turned up on the old road with a bundle and a grin",
+                "followed the smoke of Aldric's fire to the field", "arrived footsore and hungry",
+                "came up the road behind a goat that wasn't theirs", "walked in from the south road, looking around a lot"]
+
+
+def arrive(world, idx=None):
+    """People reach Emberfall: the ones given (they just followed), or on arrival day everyone on the road.
+    They take any free beds; the rest pitch tents by the old road. They don't get a reply of their own: the fact
+    that they just arrived goes into the reply to whatever they said (see intents.process)."""
     city, c, L = world.city, world.city.citizens, land(world)
-    idx = np.where(c.status == ROAD)[0]
-    L["next_arrival"] = city.day + 1 + int(city.cfg.get("frontier_arrival_every", 7))
-    L["forecast"] = None
+    wave = idx is None
+    if wave:
+        idx = np.where(c.status == ROAD)[0]
+        L["next_arrival"] = city.day + 1 + int(city.cfg.get("frontier_arrival_every", 7))
+        L["forecast"] = None
+    idx = np.asarray(idx, np.int64)
     if not len(idx):
-        world.moment("world", "Arrival day - but nobody came up the old road.", 1, public=True, place="road")
+        if wave:
+            world.moment("world", "Arrival day - but nobody came up the old road.", 1, public=True, place="road")
         return 0
     before = stage_of(settled(city))
     c.status[idx] = 0
@@ -676,25 +696,31 @@ def arrive(world):
         t["places"]["camp"] = {"name": "the camp", "walk": 6, "resources": [],
                                "offers": "rows of tents and cook fires by the old road"}
         t["features"]["camp"] = {"tents": "patched tents in muddy rows"}
+    new = city.living.setdefault("just_arrived", {})
     for i in idx:
         u = c.handles[int(i)]
-        if c.walled[i] >= 0:
-            b = homes.get(int(i), "a house")
-            world.reply(u, f"🛖 You made it to Emberfall! There was a bed waiting for you in {b}.", "arrived")
-        else:
-            world.reply(u, "⛺ You made it to Emberfall - but there was no house for you. You pitched a tent by the "
-                           "old road with the others. Nights are cold. Aldric is building as fast as he can.", "arrived")
+        how = city.rng.choice(ARRIVE_LINES).format(time=world.now_str().split(", ")[-1])
+        where = (f"and got a bed in {homes.get(int(i), 'a house')}" if c.walled[i] >= 0 else
+                 "and pitched a tent by the old road (there are no free beds yet)")
+        new[u] = {"day": city.day + 1, "text": f"{how}, {where}"}
         c.log(int(i), city.day + 1, "arrived in Emberfall" + ("" if c.walled[i] >= 0 else " (and pitched a tent)"))
+    for u in list(new):                             # (forget arrivals from more than a day ago)
+        if new[u]["day"] < city.day:
+            del new[u]
     names = [c.handles[int(i)] for i in idx[:4]]
     who = ", ".join("@" + h for h in names) + (f" and {len(idx) - 4} more" if len(idx) > 4 else "")
-    text = (f"{len(idx)} {'traveller' if len(idx) == 1 else 'travellers'} walked up the old road: {who}. "
-            + (f"{len(got)} got a roof over their heads" if len(got) else "There wasn't a single bed for them")
-            + (f"; {len(camped)} pitched tents by the road." if len(camped) and len(got) else
-               (" - they pitched tents by the road." if len(camped) else ".")))
-    world.moment("world", text, 3, public=True, place="road", handles=names)
-    world.notify(text)
+    if wave or len(idx) > 1:
+        text = (f"{len(idx)} {'newcomer' if len(idx) == 1 else 'newcomers'} walked up the old road: {who}. "
+                + (f"{len(got)} got a roof over their heads" if len(got) else "There wasn't a single bed for them")
+                + (f"; {len(camped)} pitched tents by the road." if len(camped) and len(got) else
+                   (" - they pitched tents by the road." if len(camped) else ".")))
+    else:
+        text = f"@{names[0]} {new[names[0]]['text']}."
+    world.moment("world", text, 3 if wave or len(idx) >= 5 else 1, public=True, place="road", handles=names)
+    if wave or len(idx) >= 5:
+        world.notify(text)
     _stage(world, before)
-    if city.rng.random() < 0.8:
+    if wave and city.rng.random() < 0.8:
         peddler(world, force=True)
     return len(idx)
 
@@ -1086,7 +1112,7 @@ def summary(world):
     return {"stage": L["stage"], "crowned": L["crowned"], "settled": settled(city), "on_road": on_road(city),
             "beds": capacity(city), "free": free_beds(city), "tents": tents(city),
             "stock": {m: int(v) for m, v in L["stock"].items() if v >= 1},
-            "next_arrival": L["next_arrival"], "forecast": (L.get("forecast") or {}).get("est"),
+            "next_arrival": None if instant(city) else L["next_arrival"], "forecast": (L.get("forecast") or {}).get("est"),
             "built": [b["name"] for b in L["buildings"] if b["id"] != "b0"],
             "projects": [f"{p['name']} {p['progress']:.0%}" for p in L["projects"]],
             "know": list(L["know"])}
@@ -1098,7 +1124,8 @@ def status_line(f):
         return ""
     stock = ", ".join(f"{v} {k}" for k, v in f["stock"].items())
     who = ("Aldric, alone" if not f["settled"] else f"{f['settled']} settler{'s' if f['settled'] > 1 else ''}")
-    road = (f" · {f['on_road']} on the road (arriving day {f['next_arrival']})" if f["on_road"] else
+    road = ("" if f.get("next_arrival") is None else
+            f" · {f['on_road']} on the road (arriving day {f['next_arrival']})" if f["on_road"] else
             f" · next arrivals: day {f['next_arrival']}")
     return (f"🏚️ {who} · {f['beds']} beds ({f['free']} free)" + (f" · {f['tents']} in tents" if f["tents"] else "")
             + road + (f" · stores: {stock}" if stock else ""))

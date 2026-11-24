@@ -5,12 +5,14 @@ from city.living import frontier as F
 from city.living import frontier_tools as FT
 
 
-def _world(followers=5, seed=3, llm=None, voice=None):
+def _world(followers=5, seed=3, llm=None, voice=None, arrivals="weekly"):
     from city import config
     from city.living.world import World
     from city.mayor import RuleMayor
     from city.model import City
-    city = City(config.load(), seed=seed)
+    cfg = config.load()
+    cfg["frontier_arrivals"] = arrivals          # most of these tests are about the old weekly road
+    city = City(cfg, seed=seed)
     w = World(city, king_brain=llm, voice_llm=voice)
     w.post(RuleMayor(), [f"u{i}" for i in range(followers)], [])
     for i in range(followers):
@@ -106,7 +108,7 @@ def test_arrival_day_beds_then_tents_then_moving_in():
     F.arrive(w)
     c = city.citizens
     assert F.settled(city) == 6 and F.housed(city) == 2 and F.tents(city) == 4 and "camp" in F.places(w)
-    texts = [x["text"] for x in city.living["outbox"] if x["kind"] == "arrived"]
+    texts = [a["text"] for a in city.living["just_arrived"].values()]     # (woven into their next reply)
     assert sum("tent" in t for t in texts) == 4
     L["buildings"].append({"id": "by", "name": "a longhouse", "kind": "housing", "scale": "medium", "capacity": 8,
                            "place": "field", "quality": "good", "day": 2})
@@ -336,3 +338,25 @@ def test_too_big_to_build_alone_becomes_a_petition():
     intents.process(w, {"u3": "I want to build a great stone tower with a hall for the whole village"}, None, 0)
     assert not personal.pending(city, "u3")
     assert any(k["kind"] == "petition" and k["who"] == "u3" for k in city.living["docket"])
+
+
+def test_followers_walk_in_at_once_by_default():
+    city, w = _world(arrivals="instant")
+    assert F.settled(city) == 5 and F.on_road(city) == 0
+    arrived = city.living.get("just_arrived") or {}
+    assert set(arrived) <= {f"u{i}" for i in range(5)}
+    assert F.summary(w)["next_arrival"] is None
+    assert "arriv" not in F.status_line(F.summary(w)).lower()
+
+
+def test_a_first_comment_gets_a_welcome_not_a_wait():
+    city, w = _world(followers=0, arrivals="instant")
+    from city.mayor import RuleMayor
+    w.post(RuleMayor(), ["newbie"], [])
+    r = w.post(RuleMayor(), [], [{"username": "newbie", "id": "n1", "text": "I chop wood for the king",
+                                  "post": city.day}])
+    out = [x for x in r["outbox"] if x.get("to") == "newbie"]
+    assert out, "the newcomer got no reply"
+    txt = " ".join(x["text"] for x in out).lower()
+    assert "road" not in txt or "emberfall" in txt
+    assert F.settled(city) >= 1

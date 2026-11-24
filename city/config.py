@@ -56,6 +56,7 @@ DEFAULTS = {
     # ---- the living world's start (city/living/frontier.py)
     "start": "frontier",          # frontier = the king alone in a shack; kingdom = a castle, a court and a treasury
     "frontier_gold": 15,          # coins in his pocket at the start
+    "frontier_arrivals": "instant",   # "instant": followers move in when they follow; "weekly": a wave every 7 days
     "frontier_arrival_every": 7,  # days between arrival days (the first is day 7: week one he's alone)
     "frontier_warn_days": 3,      # a traveller brings word this many days before arrival day
     "frontier_passive_hours": 1.5,   # hours a settler works on an ordinary day

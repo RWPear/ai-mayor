@@ -3,7 +3,7 @@
 **You live here. Comment to change the kingdom.**
 
 **New start (default in the living world):** the AI begins with nothing - a leaky shack in a field - and
-builds a kingdom by hand while followers arrive every week. See [docs/FRONTIER.md](docs/FRONTIER.md).
+builds a kingdom by hand; followers walk in the day they follow, into a tent if there's no bed. See [docs/FRONTIER.md](docs/FRONTIER.md).
 Try it: `./kingdom test --scenario scenarios/frontier.yaml --reports`, then `./kingdom serve` to walk around
 it in 3D, and `./kingdom record` for timelapses of the town growing (docs/WORLD.md).
 **Play it live:** `./kingdom play --fresh` runs the kingdom on a real clock in your browser; comment as any

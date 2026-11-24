@@ -11,7 +11,9 @@ def _world(followers=6):
     from city.living.world import World
     from city.mayor import RuleMayor
     from city.model import City
-    city = City(config.load(), seed=4)
+    cfg = config.load()
+    cfg["frontier_arrivals"] = "weekly"
+    city = City(cfg, seed=4)
     w = World(city)
     r = w.post(RuleMayor(), [f"u{i}" for i in range(followers)], [])
     return city, w, r

@@ -59,22 +59,18 @@ to, and the tent camp appears the first time people have nowhere to sleep.
   gone). Whatever stands becomes a real building with his name for it, a description, a place and tags.
   That's what the 3D view will draw.
 
-## People come weekly
+## People walk in the day they follow
 
-- New followers are **on the road**. Everyone on the road arrives together on **arrival day**: day 7, then
-  every 7 days. The first week he's alone.
-- **Three days before**, a traveller brings word: "about 5 people are on the road". It's a rough guess.
-  If a post blows up after that, a second, scarier warning comes: "More travellers on the road than anyone
-  has ever seen - maybe 300."
-- On arrival day, whoever arrives gets a bed if there's one free. Everyone else pitches a **tent** in the
-  camp by the road: cold nights and low mood, but nobody dies. When a new house is finished, the people
-  who've been in tents longest move in, and each of them gets a reply.
-- People on the road can still comment:
-  - they can send things ahead ("I send an axe ahead": tools make him faster, food and materials go in the
-    stores)
-  - they can write him a letter of advice, which he reads
-  - they can decide who they'll be ("I become a mason")
-  - anything else waits until they arrive.
+- A new follower **arrives in Emberfall at once**. They take a free bed if there is one; otherwise they
+  pitch a **tent** in the camp by the road: cold nights and low mood, but nobody dies. When a new house is
+  finished, the people who've been in tents longest move in, and each of them gets a reply.
+- Arriving doesn't get a reply of its own. Their first comment gets a normal reply that also welcomes them
+  ("you came over the hill muddy to the knees and pitched a tent by the road...") and plays out what they
+  said. Someone who follows without commenting just shows up in the camp.
+- So the very first post's comments already do things: chop wood, help with the roof, start a garden.
+- The old weekly road is still there with `frontier_arrivals: weekly`: followers wait on the road, a
+  traveller warns him three days before, and everyone arrives together on arrival day (day 7, then every 7
+  days). On the road they can only send things ahead, write him a letter, or choose who they'll be.
 
 ## From hands to head
 
@@ -136,7 +132,7 @@ People can build their own small things, with his leave:
 
 The caption carries a status line, then the usual call to action:
 
-> 🏚️ 6 settlers · 3 beds (0 free) · 3 in tents · next arrivals: day 14 · stores: 21 wood, 5 thatch, 14 food
+> 🏚️ 6 settlers · 3 beds (0 free) · 3 in tents · stores: 21 wood, 5 thatch, 14 food
 
 The call to action asks people to follow to set off for Emberfall, tell their character what to do, send
 Aldric something, or suggest what he should build. A quiet day alone still has a story: a summary just
@@ -149,7 +145,8 @@ cottage is 60% done.").
 |---|---|---|
 | `start` | frontier | or `kingdom` for the castle start |
 | `frontier_gold` | 15 | coins at the start |
-| `frontier_arrival_every` | 7 | days between arrival days |
+| `frontier_arrivals` | instant | `weekly` for the old road: everyone arrives together on arrival day |
+| `frontier_arrival_every` | 7 | days between arrival days (weekly only) |
 | `frontier_warn_days` | 3 | how early the traveller warns him |
 | `frontier_passive_hours` / `frontier_work_hours` | 1.5 / 5 | a settler's hours on an ordinary day / when they comment |
 | `frontier_crown_at` | 10 | settlers before the crowning vote |

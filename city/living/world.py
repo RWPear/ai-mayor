@@ -732,12 +732,16 @@ class World:
         if t == 6 * 60:
             F.morning(self)
             F.peddler(self)
-        if t == 9 * 60:
+        if t == 9 * 60 and not F.instant(self.city):
             F.forecast(self)
         if t == 3 * 60:
             F.rough_night(self)
-        if t == 12 * 60 and day >= L["next_arrival"]:
+        if t == 12 * 60 and day >= L["next_arrival"] and not F.instant(self.city):
             F.arrive(self)
+        if F.instant(self.city) and t % 120 == 0:     # (an old save from the weekly road: let them in)
+            stuck = np.where(self.city.citizens.status == F.ROAD)[0]
+            if len(stuck):
+                F.arrive(self, stuck)
         if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
             F.labor(self, 0.25)
         if t == 20 * 60:
