@@ -41,8 +41,6 @@ lost, and trying to do something big gets set up for tomorrow. Up to 3 talk repl
 **The world remembers.** Each person's last few moves, what they said, and what they were told go to the
 narrator, so threads carry on (the goat that follows you, Aldric's unanswered question).
 
-With `frontier_arrivals: weekly` (the old way), newcomers wait on the road for arrival day, and **Bring
-the road in** brings them in now. With the default, that button is hidden.
 
 ## Replies wait for you
 

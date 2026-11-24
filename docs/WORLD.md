@@ -18,7 +18,7 @@ or phone.
 | Camera | How it works |
 |---|---|
 | **Follow Aldric** (1) | the camera stays with him; drag to look around him, scroll to zoom |
-| **Director** (2) | sit back: it cuts between Aldric up close, wide shots of the valley, settlers at work, and whatever's happening (anything with drama gets the camera) |
+| **Director** (2) | sit back: it cuts between Aldric up close, wide shots of the island, settlers at work, and whatever's happening (anything with drama gets the camera) |
 | **Walk around** (3) | first person at eye height: WASD or arrows, drag (or click to grab the mouse) to look, Shift to run. You walk on the real terrain, through the grass, up to the buildings |
 | **From above** (4) | straight down like Prison Architect: drag or WASD to pan, scroll to zoom |
 | **Free camera** (5) | orbit anywhere |
@@ -40,7 +40,7 @@ hat for farmers, a helmet for guards, a hood for thieves and monks, a pointy hat
 for anyone without a trade). They hop when they walk and squash when they land, swing tools, stoop to dig,
 sit by the fire and blink. Aldric is a slightly bigger royal-blue pip with a moustache and a battered hat
 (a crown once he's crowned). The crowd is the same pips drawn instanced, so hundreds cost a few draw calls.
-`?people=kit` brings back the KayKit humans (*Character Pack: Adventures*, still in the repo). A house is picked by what it's called (a smithy,
+A house is picked by what it's called (a smithy,
 a tavern, a mill, a chapel...) and then by its shape, scaled to its lot; people's own builds use red roofs,
 the king's blue. The shack, fire pits, walls, roads and bridges are still hand-built. `?assets=off` shows
 the hand-built kit for everything.
@@ -51,57 +51,15 @@ walls, turquoise water, a soft cyan sky, warm sun and soft blue shadows. Bushes,
 trees dot the meadow. `?style=textured` brings back the older painted look (planks, stones, thatch
 textures, dense grass).
 
-- **The valley:** Emberfall sits on a broad valley floor. A mountain range climbs to snow behind it in the
-  north, with pine forests on its lower slopes; a broken ridge walls the west, and the river comes down
-  through a gorge in it; low hills roll away east; the valley opens south, where the old road leaves through
-  a gap and the river widens into a lake. Near the field, the rocky hill is a crag: cliffs all round, a flat
-  top, and one long grassy ramp down toward the field. It's where a castle belongs.
-- **The land:**
-  - real terrain: the field and the shack sit flat, the rocky hill rises with outcrops, and the river cuts a
-    bed with sandy banks
-  - the country rolls out to blue hills on the horizon
-  - tufts of grass sway in the wind; they grow everywhere except paths, the river, building lots and the
-    hilltop
-- **Paths wear in where people walk:** settlers between home and work, Aldric between the places he keeps
-  going. The more feet, the wider and browner.
-- **The woods thin out** as wood is cut (the trees nearest the shack go first, leaving stumps). The loose
-  stone on the hill disappears as it's hauled.
-- **Buildings:** every shape from the simulation, built from stone plinths, timber-framed plaster, plank,
-  brick and slate, thick thatch, doors, shuttered windows and chimneys.
-  - shoddy ones lean
-  - projects stand as scaffolding (poles, ledgers, a ladder, stacked planks) and rise with their progress
-    through the day
-  - finished buildings appear at the moment they were finished
-  - collapses leave scorched ruins
-  - Aldric's fixes show on the shack as he makes them: a proper thatched roof, a door that shuts, a chimney;
-    his fire pit, drying rack or bench stand beside it
-  - people's own builds stand by their homes, with their name in the tooltip
-  - the crowned king's hall flies his banner
-- **The camp:** canvas tents in rows by the road, with campfires.
-- **The stores:** heaps by the shack (or the storehouse): log stacks, stone, clay, thatch bundles, sacks and
-  crates. They grow and shrink hour by hour.
-- **People, low-poly:**
-  - a six-sided tunic in their role's colours, a big faceted head, block legs that step when they walk, and
-    little floating hands (a nod to Prison Architect)
-  - hats and tools say who they are and what they're doing: Aldric's battered hat becomes a crown when he's
-    crowned; there's a smith's apron, a guard's helmet, a thief's hood, a farmer's straw hat, a wizard's
-    point
-  - they chop, mine, dig, hammer, fish, forage, eat, sit, talk, sleep and dance
-  - settlers walk to work at about 7 and home at about 7 in the evening (each a little early or late).
-    At work they go to real spots: a standing tree in the woods, a rock on the hill, a place on the river
-    bank, a side of the scaffolding, a row in a garden. They work there an hour or so, facing it, then walk
-    to the next, and stop for a bite at midday. Only so many fit on one building (the same crew limit the
-    simulation uses), and each garden row has one person. They only bob when they walk.
-  - people with their own build work on it in the evening, by their home
-  - people in tents sit around the camp fires after dark
-  - the jester strolls about the court, stopping to perform
-  - whoever is in a story that day walks to where it happened
-- **Time and weather:** sun and shadows across the day, warm light at dawn and dusk, stars at night,
-  clouds, rain, fog and wind. Windows glow at night, chimneys smoke in the morning and evening, and
-  campfires and forges light their surroundings.
-
-Quality: `?quality=high` (the default on a computer) adds ambient occlusion and bloom, sharper shadows,
-denser grass and a bigger crowd. `?quality=low` (the default on phones) keeps it smooth.
+- **The island:** Emberfall floats above a sea of low-poly clouds. The ground is the island's own shape: the old
+  round island plus every piece of land that has risen from the clouds since (each with its own tint and trees -
+  a whole silver forest on the silver grove). Under the grass hangs the island's rocky red-brown underside,
+  narrowing to a point, with loose rocks drifting below. The river runs off the edge at both ends in
+  waterfalls; the old road ends at a wooden landing jutting out over nothing. Clouds drift past at every height.
+  When new land rises during live play, the view rebuilds the island around everything else.
+- **The land:** the field and the shack sit flat, the rocky hill is a crag (cliffs all round, a flat top and one
+  long grassy ramp down toward the field - where a castle belongs), the river cuts a bed with sandy banks, and
+  the land rounds off at the rim.
 
 ## Recorders: watching the town grow
 
@@ -109,9 +67,10 @@ The recorders are fixed cameras listed in `content/recorders.yaml`:
 
 | Recorder | What it watches |
 |---|---|
-| `overview` | the whole valley |
+| `the_island` | the whole floating island from out in the clouds - the best one for watching it grow |
+| `overview` | the settlement: the field, the woods, the hill, the road |
 | `the_field` | where the buildings go up |
-| `the_camp` | the tents, full after arrival day and emptying as houses finish |
+| `the_camp` | the tents, filling as people arrive and emptying as houses finish |
 | `the_woods` | the trees coming down |
 | `top` | the plan of the place, Prison Architect style |
 | `king` | over Aldric's shoulder |

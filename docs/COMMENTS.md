@@ -13,7 +13,8 @@ No "Action:" prefix. People comment however they like; `city/comments.py` works 
 | `status`, `STATUS?`, `what's my status` | their subject card. "my status as the best fisher..." in a story is not |
 | `become a blacksmith`, `BECOME RAT CATCHER`, `i am a thief!` | a new life - any role at all (see [ROLES.md](ROLES.md)). In a longer comment ("I become a monk and pray for @sam") the role changes and the rest plays out as their move |
 | `lol`, `😂`, `nice`, keyboard mash, `AAAAAAA` | ignored |
-| several comments | one action per person per post - the latest wins |
+| several comments | the first real attempt each day is their move; after that it's talk (answered in the world, nothing gained or lost, up to 3 replies a day). A question or a joke is talk and doesn't use up the move |
+| `I ride my dragon in`, `I cast a spell` | conjuring: it comes true, at a cost (see Wonders in [FRONTIER.md](FRONTIER.md)) |
 | a 2,000-word essay | read up to 700 characters |
 
 ## Stories, not recaps

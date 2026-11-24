@@ -1,8 +1,9 @@
 # Roles: anyone can be anything
 
-Every follower starts with one of 19 everyday trades (picked from their handle). From there they can be
-**anything**: a thief, a beggar, a rat catcher, a fortune teller, a monk, a smuggler, a wizard who can't
-actually do magic. The code is `city/trades.py`.
+Every follower starts as a plain settler: nobody on the island has a trade yet. They learn a craft by doing it
+(three tries, good or bad) - or they can be **anything** they say: a thief, a beggar, a rat catcher, a fortune
+teller, a monk, a smuggler. The code is `city/trades.py`. (A role is who they are; conjuring a dragon is something
+else - see Wonders in [FRONTIER.md](FRONTIER.md).)
 
 ## Taking up a role
 

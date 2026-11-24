@@ -1,12 +1,12 @@
-# The frontier: a kingdom from nothing
+# Emberfall: a kingdom from nothing, on a floating island
 
-The living world now starts on the frontier (`start: frontier`, the default). Aldric isn't a king. He's a
-man with a leaky one-room shack in a field, a dull axe and 15 coins. Everything gets built by hand,
-starting with his own. The old castle start is still there (`start: kingdom` in `content/balance.yaml` or a
-scenario's `balance:`).
+Aldric isn't a king. He's a man with a leaky one-room shack in a field on an old floating island above the
+clouds, a dull axe and 15 coins. Everything gets built by hand, starting with his own. (The code still calls
+this "the frontier"; it's the only game.)
 
-Code: `city/living/frontier.py` (the land, materials, pricing, building, the road, labour, food, stages)
-and `city/living/frontier_tools.py` (what he can do, what he sees, his rule-based instincts).
+Code: `city/living/frontier.py` (the land, the island, materials, pricing, building, people arriving, labour,
+food, stages), `city/living/frontier_tools.py` (what he can do, what he sees, his rule-based instincts) and
+`city/living/wonders.py` (the strange things).
 
 ## The land
 
@@ -15,12 +15,35 @@ and `city/living/frontier_tools.py` (what he can do, what he sees, his rule-base
 | the shack | a straw mat, a cold fire pit, a roof that leaks |
 | the field | grass for thatch, wild onions, room to build |
 | the woods | wood, vines and bark for rope, mushrooms |
-| the river | clay, reeds, fish |
+| the river | clay, reeds, fish - it runs off the island's edge at both ends in waterfalls |
 | the rocky hill | stone |
-| the old road | where travellers (and the peddler) come from |
+| the old road | runs to the rim, where a wooden landing juts out over the clouds; newcomers and the peddler come this way |
 
 The places grow: a big gathering place he builds (a meeting hall, a tavern) becomes somewhere you can walk
 to, and the tent camp appears the first time people have nowhere to sleep.
+
+## The island grows
+
+New land rises out of the clouds at the rim - each piece with a new place on it and its own resources: the
+east meadow (food, thatch), the glass cliffs (stone), the silver grove (wood), the warm springs (clay, food), the
+old ruins, the crystal fields, the misty point, the sky garden. Land rises every time Emberfall grows a stage
+(hamlet, village, town, city), when the island event "the ground is shaking at the edge" is helped along by the
+comments (EXPLORE, ROPE), and when the director decides something should. Everyone hears about it ("Something
+huge moved under the clouds all night. By morning the warm springs had risen out of them"), and the 3D view
+rebuilds the island around it.
+
+## Wonders: real, and never free
+
+The island says "yes, and..." to wild claims. Someone comments "I ride my dragon in": there IS a dragon - maybe a
+hatchling the size of a cat that eats the stores, maybe something enormous that won't be ridden. "I cast a
+lightning spell": it works far too well and keeps happening on its own. Each wonder belongs to whoever conjured it,
+is in what the narrator sees from then on, and costs something every morning (hungry ones eat the food, mischief
+knocks the woodpile over, noisy ones wake the camp). People can hunt them, feed them, steal them ("I kill the
+goat" works on the goat - if there is one). One conjuring per person every few days.
+
+The narrator can start threads too: if a reply introduces something that should come back ("a goat that follows
+you everywhere"), it becomes a small wonder, and the next comment can do something about it. Island events can
+leave wonders behind (a whale-song shell, a griffin on the crag, a wizard asleep in the shack).
 
 ## He invents, the world charges him
 
@@ -68,9 +91,6 @@ to, and the tent camp appears the first time people have nowhere to sleep.
   ("you came over the hill muddy to the knees and pitched a tent by the road...") and plays out what they
   said. Someone who follows without commenting just shows up in the camp.
 - So the very first post's comments already do things: chop wood, help with the roof, start a garden.
-- The old weekly road is still there with `frontier_arrivals: weekly`: followers wait on the road, a
-  traveller warns him three days before, and everyone arrives together on arrival day (day 7, then every 7
-  days). On the road they can only send things ahead, write him a letter, or choose who they'll be.
 
 ## From hands to head
 
@@ -134,16 +154,17 @@ People can build their own small things, with his leave:
 - **Nobody calls him king until he's crowned.** At 10 settlers they vote: CROWN or NOTYET. If it's not
   yet, they vote again a week later. The Reckoning on day 30 only happens if he has a crown to lose.
 - **Skarn the Red** comes once there's something worth raiding: 15 settlers and day 9 or later. There are
-  rumours, then smoke in the north a few days later.
+  rumours of a black island drifting in the clouds to the north, then one morning it's there, with fires on
+  it. His raiders cross on hide gliders.
 - The corners of the settlement are Riverside, Hillfoot and Woodedge, and that's where raids land.
 
 ## What the post shows
 
 The caption carries a status line, then the usual call to action:
 
-> 🏚️ 6 settlers · 3 beds (0 free) · 3 in tents · stores: 21 wood, 5 thatch, 14 food
+> 🏝️ 6 settlers · 3 beds (0 free) · 3 in tents · stores: 21 wood, 5 thatch, 14 food
 
-The call to action asks people to follow to set off for Emberfall, tell their character what to do, send
+The call to action asks people to follow (and walk into Emberfall today), tell their character what to do, send
 Aldric something, or suggest what he should build. A quiet day alone still has a story: a summary just
 before the post ("Aldric's day: he gathered 18 wood and 6 thatch and put 4 hours into building. The small
 cottage is 60% done.").
@@ -152,11 +173,7 @@ cottage is 60% done.").
 
 | Setting | Default | |
 |---|---|---|
-| `start` | frontier | or `kingdom` for the castle start |
 | `frontier_gold` | 15 | coins at the start |
-| `frontier_arrivals` | instant | `weekly` for the old road: everyone arrives together on arrival day |
-| `frontier_arrival_every` | 7 | days between arrival days (weekly only) |
-| `frontier_warn_days` | 3 | how early the traveller warns him |
 | `frontier_passive_hours` / `frontier_work_hours` | 1.5 / 5 | a settler's hours on an ordinary day / when they comment |
 | `frontier_crown_at` | 10 | settlers before the crowning vote |
 | `frontier_warlord_pop` | 15 | settlers before Skarn comes |
@@ -165,6 +182,6 @@ cottage is 60% done.").
 
 ```
 ./kingdom test --scenario scenarios/frontier.yaml --reports            # a slow-growing account, 30 days
-./kingdom test --scenario scenarios/frontier_viral.yaml --reports      # hundreds on the road in week 2
+./kingdom test --scenario scenarios/frontier_viral.yaml --reports      # hundreds walk in during week 2
 OLLAMA_URL=http://192.168.1.23:11434 ./kingdom test --scenario scenarios/frontier.yaml --king llm --days 8 --reports
 ```

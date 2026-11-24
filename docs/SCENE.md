@@ -27,7 +27,7 @@ its cameras and the recorders that turn a run into timelapses.
 |---|---|
 | `schema`, `city`, `day`, `start`, `end`, `minutes_per_day`, `post_hour` | which post this is |
 | `settlement` | `stage` (alone/hamlet/village/town/city), `crowned`, `settled`, `on_road`, `beds`, `free_beds`, `tents`, `next_arrival`, `know` (techniques), `stores` {material: n}, `gold` |
-| `terrain` | `ground.size`, `river {path, width}`, `road {path, width}`, `hill {pos, r, height}`, `woods {pos, r}`. Paths are lists of `[x, z]` |
+| `terrain` | `ground.size`, `island {pos, r, lobes: [{id, name, pos, r, day}]}` (the old island and the land risen since), `river {path, width}` (the viewer carries it on to the rim at both ends), `road {path, width}` (to the rim), `hill {pos, r, height}`, `woods {pos, r}`. Paths are lists of `[x, z]` |
 | `places` | `{id, name, pos, r, resources}`: the base six, plus big gathering places he builds and `camp` once there are tents |
 | `trees` | standing trees at the end of the post `[x, z, scale]`. `trees_all` is every tree in the order they get cut (nearest the shack first); `trees_felled` is how many are down. Draw `trees_all[felled:]` standing and `trees_all[:felled]` as stumps |
 | `stones` | loose stones on the hill. `stones_all` / `stones_hauled` work the same way |
