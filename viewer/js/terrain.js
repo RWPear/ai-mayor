@@ -1,63 +1,73 @@
 // The land: height, ground colour (with paths worn by people), the river, grass in the wind, sky, sun, weather.
 import * as THREE from "three";
-import { C, TEX, FLAT } from "./materials.js";
+import { C, TEX, FLAT, M } from "./materials.js";
 import { fbm, smoothstep, distToPath, distToSeg, rng, clamp, hash } from "./noise.js";
 
 export const V = (x, z, y = 0) => new THREE.Vector3(x, y, -z);   // world (x east, z north) -> three (x, y, -z)
 
-// ------------------------------------------------------------------ the land around the valley
-// Emberfall sits in a broad valley floor. Behind it to the north a mountain range climbs to snow; a broken ridge
-// walls the west, and the river comes down through a gorge in it; low hills roll away east; the valley opens
-// south, where the old road leaves through a gap and the river widens into a lake. The settlement's own ground
-// (the field, the woods, the crag) is shaped in Land.height; this is everything around it.
-const RIVER_UP = [[-140, -84], [-200, -104], [-270, -96], [-360, -60], [-470, -20], [-620, 40]];   // up the gorge
-const RIVER_DOWN = [[70, -160], [96, -196], [118, -218]];                                                    // into the lake
-const ROAD_OUT = [[22, -170], [26, -260], [40, -420], [70, -700]];                              // out to the south
-export const LAKE = { pos: [128, -226], rx: 64, rz: 44 };
-const ridged = (x, z, oct = 4) => 1 - Math.abs(fbm(x, z, oct)) * 2.2;
+// ------------------------------------------------------------------ the island
+// Emberfall is on an old floating island above the clouds: one round island to start (the shack, the field, the
+// woods, the river, the rocky hill, the old road to the rim), and more land rising out of the clouds at the rim as
+// the place grows ("lobes" in the scene's terrain.island). Below the grass is a rocky underside hanging over the
+// cloud sea; the river runs off the edge in waterfalls; the old road ends at a wooden landing over nothing.
+const smax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
 
-export function landform(x, z) {
-  const dc = Math.hypot(x - 20, z - 5);
-  const open = smoothstep(90, 190, dc);                                   // the valley floor stays gentle
-  let h = (fbm(x * 0.006 + 3, z * 0.006, 3) + 0.18) * 26 * open;          // rolling country
-  h += Math.max(0, fbm(x * 0.0022 + 11, z * 0.0022, 3) + 0.05) * 70 * smoothstep(260, 700, dc);
-  // the mountains: north, curling a little east and west
-  const N = z + 0.12 * x - 0.0004 * x * x;
-  const m = smoothstep(230, 720, N);
-  if (m > 0) {
-    const rg = Math.max(0, ridged(x * 0.0021 + 7, z * 0.0021, 5));
-    h += m * (60 + 420 * rg * rg + 160 * m) + m * fbm(x * 0.01, z * 0.01, 3) * 40;
+export class Island {
+  constructor(spec) {
+    this.base = spec && spec.pos ? { pos: spec.pos, r: spec.r } : { pos: [5, -10], r: 175 };
+    this.lobes = (spec && spec.lobes) || [];
   }
-  // the broken ridge in the west, behind the woods
-  const W = -x - 0.25 * z;
-  const w = smoothstep(150, 250, W) * (1 - m * 0.5);
-  if (w > 0) h += w * (34 + 60 * Math.max(0, ridged(x * 0.006 + 2, z * 0.006, 4))) * (0.6 + 0.4 * smoothstep(150, 400, W));
-  // the river's gorge and the road's gap keep low; the lake sits in a basin
-  const gorge = smoothstep(8, 70, distToPath(x, z, RIVER_UP));
-  const gap = smoothstep(14, 90, distToPath(x, z, ROAD_OUT));
-  h *= gorge * (0.35 + 0.65 * gap);
-  if (gorge < 0.45) h = Math.min(h, -3 + gorge * 8);
-  const dl = Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz);
-  if (dl < 1.6) h = h * smoothstep(0.9, 1.6, dl) + (dl < 1 ? -2.6 * (1 - dl) - 0.9 : 0);
-  const dd = distToPath(x, z, RIVER_DOWN);
-  if (dd < 16) h = Math.min(h, -1.6 + dd * 0.1);
-  return h;
+  _circ(x, z, p, r, seed, inward = 0.005) {          // signed distance to a wobbly circle (positive inside)
+    const dx = x - p[0], dz = z - p[1], d = Math.hypot(dx, dz), a = Math.atan2(dz, dx);
+    const wob = inward + (fbm(Math.cos(a) * 1.7 + seed * 3.1, Math.sin(a) * 1.7 + seed, 3) + 0.5) * 0.06
+      + fbm(Math.cos(a) * 6 + seed, Math.sin(a) * 6 + seed * 2, 2) * 0.018;
+    return r * (1 + wob) - d;
+  }
+  base_sd(x, z) { return this._circ(x, z, this.base.pos, this.base.r, 1); }
+  sd(x, z) {                                          // the whole island: base and lobes, smoothly joined
+    let d = this.base_sd(x, z);
+    this.lobes.forEach((L, k) => { d = smax(d, this._circ(x, z, L.pos, L.r, 7 + k * 5, -0.02), 30); });
+    return d;
+  }
+  lobeAt(x, z) {                                      // which risen land this is on (or null: the old island)
+    if (this.base_sd(x, z) > 0) return null;
+    let best = null, bd = -1e9;
+    this.lobes.forEach((L, k) => { const d = this._circ(x, z, L.pos, L.r, 7 + k * 5, -0.02); if (d > bd) { bd = d; best = L; } });
+    return best;
+  }
+  grad(x, z) {
+    const e = 0.8, gx = this.sd(x + e, z) - this.sd(x - e, z), gz = this.sd(x, z + e) - this.sd(x, z - e), L = Math.hypot(gx, gz) || 1;
+    return [gx / L, gz / L];
+  }
+  rim(n = 288) {                                      // the edge, as seen from the old island's middle
+    const [cx, cz] = this.base.pos, out = [];
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      let t = 0;
+      for (let r = 0; r < 520; r += 3) if (this.sd(cx + ca * r, cz + sa * r) >= 0) t = r;
+      let lo = t, hi = t + 3;
+      for (let k = 0; k < 8; k++) { const m = (lo + hi) / 2; if (this.sd(cx + ca * m, cz + sa * m) >= 0) lo = m; else hi = m; }
+      out.push([cx + ca * lo, cz + sa * lo, a]);
+    }
+    return out;
+  }
+  toRim(p, q) {                                       // carry a path's end (p, coming from q) on out to the edge
+    const dx = p[0] - q[0], dz = p[1] - q[1], L = Math.hypot(dx, dz) || 1;
+    let t = 0;
+    while (t < 300 && this.sd(p[0] + dx / L * (t + 1), p[1] + dz / L * (t + 1)) > 0.5) t += 1;
+    return [p[0] + dx / L * t, p[1] + dz / L * t];
+  }
 }
-export const farHeight = landform;
 
-// colour by what the ground is: meadow low down, darker grass and scrub up the hills, bare rock where it's steep
-// or high, snow on the peaks
+// colour of the land itself: meadow, with a tint on each piece of risen land
+const LOBE_TINT = { meadow: 0x9ccf5a, cliffs: 0xd8d2c2, grove: 0x6fa86a, springs: 0xc9b06a, ruins: 0xa8a890,
+  crystals: 0xb7b3e6, point: 0xcfe0b0, skygarden: 0x7fc76a };
 export function landColor(x, z, y, steep, c = new THREE.Color()) {
   c.setHex(C.grass).lerp(new THREE.Color(C.grassDry), clamp(fbm(x * 0.02 + 9, z * 0.02, 3) + 0.35, 0, 1) * 0.6)
     .lerp(new THREE.Color(C.grassDark), clamp(fbm(x * 0.004, z * 0.004, 2) + 0.15, 0, 1) * 0.55);
-  c.lerp(new THREE.Color(C.grassDark), smoothstep(25, 90, y) * 0.6);
-  const rockAmt = Math.max(smoothstep(0.22, 0.5, steep), smoothstep(120, 200, y + fbm(x * 0.01, z * 0.01) * 40));
-  c.lerp(new THREE.Color(C.rock).offsetHSL(0, 0, -0.06), rockAmt);
-  const snow = smoothstep(190, 240, y + fbm(x * 0.008, z * 0.008, 3) * 60) * (1 - smoothstep(0.55, 0.85, steep));
-  c.lerp(new THREE.Color(0xf4f6fb), snow);
+  c.lerp(new THREE.Color(C.rock).offsetHSL(0, 0, -0.06), smoothstep(0.22, 0.5, steep));
   return c;
 }
-export const farColor = (x, z, c) => landColor(x, z, landform(x, z), 0, c);
 
 export class Land {
   constructor(scene, S, quality) {
@@ -74,8 +84,12 @@ export class Land {
   }
 
   setTerrain(S) {
-    this.river = S.terrain.river; this.road = S.terrain.road; this.hill = S.terrain.hill; this.woods = S.terrain.woods;
+    this.island = new Island(S.terrain.island);
+    this.hill = S.terrain.hill; this.woods = S.terrain.woods;
     this.field = (S.places.find((p) => p.id === "field") || { pos: [38, 6] }).pos;
+    const rp = S.terrain.river.path, ro = S.terrain.road.path;       // the river runs off both edges; the road to the rim
+    this.river = { ...S.terrain.river, path: [this.island.toRim(rp[0], rp[1]), ...rp, this.island.toRim(rp[rp.length - 1], rp[rp.length - 2])] };
+    this.road = { ...S.terrain.road, path: [this.island.toRim(ro[0], ro[1]), ...ro] };
   }
 
   // the one height function everything stands on
@@ -101,29 +115,86 @@ export class Land {
     if (dr < w + 9) h = Math.min(h, 0.2 + (dr - w) * 0.12);           // gentle banks
     const dw = Math.hypot(x - this.woods.pos[0], z - this.woods.pos[1]) / (this.woods.r * 1.3);
     if (dw < 1) h += 0.8 * (1 - dw);                                 // the woods rise a little
-    const r = Math.hypot(x, z);
-    const L = landform(x, z);
-    return L + h * (1 - smoothstep(175, 202, r));                    // and the country all around
+    const I = this.island, sdb = I.base_sd(x, z), sd = I.sd(x, z);
+    const risen = smoothstep(4, -26, sdb);                           // new land: rolling, a little higher
+    if (risen > 0) {
+      const L = I.lobeAt(x, z), id = L ? L.id : "";
+      const bump = id === "cliffs" ? 9 : id === "crystals" ? 4 : id === "springs" ? 1.2 : 3.2;
+      h += risen * ((fbm(x * 0.03 + 4, z * 0.03, 3) + 0.4) * bump + (id === "cliffs" ? 6 * smoothstep(10, 40, sd) : 0));
+    }
+    h -= 2.6 * (1 - smoothstep(0, 16, sd));                         // the land rounds off at the rim
+    return h;
   }
 
   buildGround() {
     // the flat look: big low-poly facets (each triangle one colour, a little lift and tilt to catch the light)
-    const size = this.S.terrain.ground.size[0], seg = FLAT ? (this.q === "low" ? 120 : 210) : (this.q === "low" ? 160 : 300);
+    const size = Math.max(640, this.S.terrain.ground.size[0]), seg = this.q === "low" ? 170 : 290;
     let g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = -pos.getZ(i); const r = Math.hypot(x, z);
-      const jig = FLAT ? (hash(Math.round(x * 10) * 7919 + Math.round(z * 10)) % 1000 / 1000 - 0.5) * 0.22 : 0;
-      pos.setY(i, r > 205 ? farHeight(x, z) - 0.35 : this.height(x, z) + jig + (r > 196 ? 0.06 : 0));
+    g = g.toNonIndexed();
+    const I = this.island, src = g.attributes.position, keep = [];
+    for (let t = 0; t < src.count; t += 3) {                         // only triangles on the island
+      const cx = (src.getX(t) + src.getX(t + 1) + src.getX(t + 2)) / 3, cz = -(src.getZ(t) + src.getZ(t + 1) + src.getZ(t + 2)) / 3;
+      if (I.sd(cx, cz) > -2.5) for (let k = 0; k < 3; k++) {
+        let x = src.getX(t + k), z = -src.getZ(t + k);
+        const d = I.sd(x, z);
+        if (d < 0) { const [gx, gz] = I.grad(x, z); x -= gx * d; z -= gz * d; }   // onto the rim, not a staircase
+        const jig = FLAT && d > 2 ? (hash(Math.round(x * 10) * 7919 + Math.round(z * 10)) % 1000 / 1000 - 0.5) * 0.22 : 0;
+        keep.push(x, this.height(x, z) + jig, -z);
+      }
     }
-    if (FLAT) g = g.toNonIndexed();
+    g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(keep, 3));
     g.computeVertexNormals();
     g.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
     this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: FLAT }));
     this.ground.receiveShadow = true;
     this.group.add(this.ground);
+    this.buildUnderside();
     this.paint([]);
+  }
+
+  // the rock the island hangs on: red-brown earth and stone, narrowing to jagged points over the clouds
+  buildUnderside() {
+    const I = this.island, rim = I.rim(this.q === "low" ? 160 : 288), [cx, cz] = I.base.pos;
+    const D = [0, 2.5, 9, 22, 42, 70, 108, 150, 195], S = [1, 1.0, 0.96, 0.88, 0.76, 0.58, 0.38, 0.2, 0.05];
+    const rings = D.map((dep, k) => rim.map(([x, z, a], i) => {
+      const j = k === 0 ? 0 : (fbm(Math.cos(a) * 4 + k * 1.7, Math.sin(a) * 4 + k, 2) * 0.5 + (hash(i * 31 + k * 7) % 100) / 100 - 0.5) * (6 + k * 3);
+      const r = Math.hypot(x - cx, z - cz), s = Math.max(0.02, S[k] + j / Math.max(60, r));
+      const y = k === 0 ? this.height(x, z) - 0.15 : this.height(x, z) * 0.2 - dep - (hash(i * 13 + k) % 100) / 100 * (3 + k * 4);
+      return [cx + (x - cx) * s, y, cz + (z - cz) * s];
+    }));
+    const P = [], col = [], c = new THREE.Color();
+    const shade = (k, i) => {
+      if (k === 0) return c.setHex(0x5b8a3a);                            // the grass lip
+      if (k === 1) return c.setHex(0x6b4a2e);                            // topsoil
+      return c.setHex([0x9a5442, 0x8a4a3a, 0x7d4436, 0xa0624a][(hash(i * 5 + k) % 4)]).offsetHSL(0, 0, -k * 0.022);
+    };
+    const tri = (a, b, d, k, i) => { P.push(...a, ...b, ...d); shade(k, i); for (let q = 0; q < 3; q++) col.push(c.r, c.g, c.b); };
+    for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < rim.length; i++) {
+      const a = rings[k][i], b = rings[k][(i + 1) % rim.length], d = rings[k + 1][i], e = rings[k + 1][(i + 1) % rim.length];
+      tri(a, d, b, k, i); tri(b, d, e, k, i + 1);
+    }
+    const tip = [cx, -235, cz];
+    const last = rings[rings.length - 1];
+    for (let i = 0; i < rim.length; i++) tri(last[i], tip, last[(i + 1) % rim.length], 8, i);
+    for (let q = 0; q < P.length; q += 3) P[q + 2] = -P[q + 2];         // world z -> three -z
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    this.underside = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+    this.underside.castShadow = true; this.underside.receiveShadow = true;
+    this.group.add(this.underside);
+    // a few loose rocks hanging under the island, like it's shedding
+    const R = rng(9), rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), M(0x8a4a3a, null, { flatShading: true, roughness: 1 }), 14);
+    const o = new THREE.Object3D();
+    for (let i = 0; i < 14; i++) {
+      const p = rim[Math.floor(R() * rim.length)], s = 3 + R() * 9;
+      o.position.copy(V(cx + (p[0] - cx) * (1.05 + R() * 0.2), cz + (p[1] - cz) * (1.05 + R() * 0.2), -30 - R() * 120));
+      o.rotation.set(R() * 3, R() * 3, R() * 3); o.scale.set(s, s * (1.2 + R()), s); o.updateMatrix(); rocks.setMatrixAt(i, o.matrix);
+    }
+    rocks.castShadow = true; this.group.add(rocks);
   }
 
   // ground colour: grass with patches, sand at the river, rock on the hill, mud at the camp, and the paths
@@ -143,10 +214,10 @@ export class Land {
       c.copy(grass).lerp(dry, clamp(n + 0.35, 0, 1) * 0.7).lerp(dark, clamp(fbm(x * 0.004, z * 0.004, 2) + 0.15, 0, 1) * 0.55);
       const dw = Math.hypot(x - this.woods.pos[0], z - this.woods.pos[1]);
       c.lerp(dark, (1 - smoothstep(this.woods.r * 0.6, this.woods.r * 1.25, dw)) * 0.75);
-      const dr = Math.min(distToPath(x, z, this.river.path), distToPath(x, z, RIVER_UP), distToPath(x, z, RIVER_DOWN));
+      const dr = distToPath(x, z, this.river.path);
       c.lerp(sand, 1 - smoothstep(this.river.width / 2, this.river.width / 2 + 4, dr));
-      const dl = Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz);
-      c.lerp(sand, 1 - smoothstep(1.0, 1.12, dl));
+      const lobe = this.island.lobeAt(x, z);                         // risen land has its own colour
+      if (lobe && LOBE_TINT[lobe.id]) c.lerp(new THREE.Color(LOBE_TINT[lobe.id]), smoothstep(2, -22, this.island.base_sd(x, z)) * 0.55);
       const hillUp = clamp((y - 3.5) / 7, 0, 1) * (1 - smoothstep(this.hill.r * 1.1, this.hill.r * 1.5, Math.hypot(x - this.hill.pos[0], z - this.hill.pos[1])));
       c.lerp(rock, hillUp * 0.12);
       if (FLAT) {                                                    // cliffs and steep slopes are bare rock
@@ -154,7 +225,6 @@ export class Land {
         const bx = pos.getX(i0 + 2) - pos.getX(i0), by = pos.getY(i0 + 2) - pos.getY(i0), bz = pos.getZ(i0 + 2) - pos.getZ(i0);
         const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, steep = 1 - Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
         c.lerp(rock, smoothstep(0.2, 0.45, steep));
-        if (y > 8) c.lerp(landColor(x, z, y, steep), smoothstep(8, 30, y) * smoothstep(110, 160, Math.hypot(x - 20, z - 5)));
       }
       const droad = distToPath(x, z, this.road.path);
       c.lerp(dirt, (1 - smoothstep(this.road.width * 0.35, this.road.width * 0.75, droad)) * 0.95);
@@ -165,8 +235,7 @@ export class Land {
         const d = distToSeg(x, z, t.from, t.to);
         if (d < w + 1) c.lerp(dirt, (1 - smoothstep(w * 0.4, w + 1, d)) * (0.35 + 0.55 * t.wear / maxWear));
       }
-      const rr = Math.hypot(x, z);
-      if (rr > 165) c.lerp(landColor(x, z, y, 0), smoothstep(165, 200, rr));          // meet the country beyond seamlessly
+      c.lerp(new THREE.Color(0x6b8f3a), (1 - smoothstep(0, 3, this.island.sd(x, z))) * 0.5);   // the lip at the rim
       for (const L of lots) {                                                        // bare earth under buildings
         if (Math.abs(x - L.pos[0]) < L.hw + 1.5 && Math.abs(z - L.pos[1]) < L.hd + 1.5) c.lerp(dirt, 0.55);
       }
@@ -181,7 +250,7 @@ export class Land {
   }
 
   buildWater() {
-    const P = [...RIVER_UP.slice(1).reverse(), ...this.river.path, ...RIVER_DOWN.slice(1)], w = this.river.width / 2 + 1.5;
+    const P = this.river.path, w = this.river.width / 2 + 1.5;
     const pts = [];
     for (let i = 0; i < P.length - 1; i++) for (let k = 0; k < 12; k++) {
       const t = k / 12; pts.push([P[i][0] + (P[i + 1][0] - P[i][0]) * t, P[i][1] + (P[i + 1][1] - P[i][1]) * t]);
@@ -210,9 +279,49 @@ export class Land {
         normalScale: new THREE.Vector2(0.35, 0.35) }));
     this.water.receiveShadow = true;
     this.group.add(this.water);
-    const lake = new THREE.Mesh(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), this.water.material);
-    lake.scale.set(LAKE.rx * 1.05, 1, LAKE.rz * 1.05); lake.position.copy(V(LAKE.pos[0], LAKE.pos[1], -0.55));
-    lake.receiveShadow = true; this.group.add(lake); this.lake = lake;
+    // the river runs off the edge of the world at both ends
+    this.falls = [];
+    const fallMat = new THREE.MeshStandardMaterial({ color: 0xbfe8f2, emissive: 0x4fa6bd, emissiveIntensity: 0.35,
+      transparent: true, opacity: 0.85, roughness: 0.3, side: THREE.DoubleSide, flatShading: true });
+    for (const [end, prev] of [[P[0], P[1]], [P[P.length - 1], P[P.length - 2]]]) {
+      const dx = end[0] - prev[0], dz = end[1] - prev[1], L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+      const fv = [], rows = 14;
+      for (let r = 0; r <= rows; r++) {
+        const t = r / rows, out = 2 + 10 * Math.sqrt(t), y = -0.6 - 140 * t * t, spread = w * (1 + t * 0.8);
+        for (const sgn of [-1, 1]) fv.push(end[0] + ux * out - uz * spread * sgn, y, -(end[1] + uz * out + ux * spread * sgn));
+      }
+      const fi = [];
+      for (let r = 0; r < rows; r++) { const k = r * 2; fi.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      const fg = new THREE.BufferGeometry();
+      fg.setAttribute("position", new THREE.Float32BufferAttribute(fv, 3)); fg.setIndex(fi); fg.computeVertexNormals();
+      const fall = new THREE.Mesh(fg, fallMat); this.group.add(fall); this.falls.push(fall);
+      const mist = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, flatShading: true }));
+      mist.scale.set(14, 7, 14); mist.position.copy(V(end[0] + ux * 13, end[1] + uz * 13, -128)); this.group.add(mist);
+    }
+    this.buildLanding();
+  }
+
+  // where the old road meets the rim: a wooden landing jutting out over the clouds (newcomers arrive here)
+  buildLanding() {
+    const [a, b] = this.road.path, dx = a[0] - b[0], dz = a[1] - b[1], L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+    const y0 = this.height(a[0] - ux * 2, a[1] - uz * 2) + 0.15, g = new THREE.Group();
+    const wood = M(0x8a5a35, null, { flatShading: true, roughness: 1 }), dark = M(0x5e3c22, null, { flatShading: true, roughness: 1 });
+    const len = 26, n = Math.round(len / 0.9);
+    for (let i = 0; i < n; i++) {
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.18, 0.8), i % 3 ? wood : dark);
+      plank.position.set(0, 0, -(i * 0.9 - 2)); plank.rotation.z = ((hash(i) % 100) / 100 - 0.5) * 0.04; plank.castShadow = plank.receiveShadow = true; g.add(plank);
+    }
+    for (const sgn of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, len), dark); rail.position.set(sgn * 2.0, 1.05, -(len / 2 - 2)); g.add(rail);
+      for (let i = 0; i < 7; i++) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, i < 2 ? 1.2 : 6, 0.22), dark);
+        post.position.set(sgn * 2.0, i < 2 ? 0.5 : -1.9, -(i * len / 6 - 2)); post.castShadow = true; g.add(post);
+      }
+    }
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), M(0xffd58a, null, { emissive: 0xffb347, emissiveIntensity: 1.2 }));
+    lamp.position.set(2.0, 1.55, -(len - 2)); g.add(lamp);
+    g.position.copy(V(a[0], a[1], y0)); g.rotation.y = Math.atan2(ux, uz);
+    this.group.add(g); this.landing = g;
   }
 
   // grass: a dense patch that travels with the camera. Each blade's place, height and colour come from a texture
@@ -300,6 +409,7 @@ export class Land {
       const y = this.height(x, z);
       let g = 1;
       if (distToPath(x, z, this.river.path) < this.river.width / 2 + 2) g = 0;
+      if (this.island.sd(x, z) < 2) g = 0;
       if (distToPath(x, z, this.road.path) < this.road.width * 0.7) g = 0;
       if (Math.hypot(x, z) < 7) g *= 0.2;
       if (camp && Math.hypot(x - camp[0], z - camp[1]) < 22) g *= 0.35;
@@ -345,30 +455,7 @@ export class Land {
         }` }));
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
-    // the land doesn't stop at the edge of the map: rolling country and blue hills to the horizon
-    // its grid lines up with the map's edge (every 30 m, or 70 on low), so the two meet without a seam: inside the
-    // map it hides under the ground, on the edge it sits just below the ground's rim, outside it is the land
-    const half = this.S.terrain.ground.size[0] / 2, cell = this.q === "low" ? 70 : 30, n = 2 * Math.ceil(2500 / cell);
-    let far = new THREE.PlaneGeometry(n * cell, n * cell, n, n); far.rotateX(-Math.PI / 2);
-    let fp = far.attributes.position;
-    for (let i = 0; i < fp.count; i++) {
-      const x = fp.getX(i), z = -fp.getZ(i), q = Math.max(Math.abs(x), Math.abs(z));
-      fp.setY(i, farHeight(x, z) - (q < half - 1 ? 6 : q < half + 1 ? 0.5 : 0));
-    }
-    far = far.toNonIndexed(); fp = far.attributes.position;              // one colour per facet: big low-poly slopes
-    const fc = new Float32Array(fp.count * 3), col = new THREE.Color();
-    for (let i = 0; i < fp.count; i += 3) {
-      const x = (fp.getX(i) + fp.getX(i + 1) + fp.getX(i + 2)) / 3, z = -(fp.getZ(i) + fp.getZ(i + 1) + fp.getZ(i + 2)) / 3, y = (fp.getY(i) + fp.getY(i + 1) + fp.getY(i + 2)) / 3;
-      const ax = fp.getX(i + 1) - fp.getX(i), ay = fp.getY(i + 1) - fp.getY(i), az = fp.getZ(i + 1) - fp.getZ(i);
-      const bx = fp.getX(i + 2) - fp.getX(i), by = fp.getY(i + 2) - fp.getY(i), bz = fp.getZ(i + 2) - fp.getZ(i);
-      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx, steep = 1 - Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
-      landColor(x, z, y, steep, col).offsetHSL(0, 0, ((hash(i) % 100) / 100 - 0.5) * 0.04);
-      for (let k = 0; k < 3; k++) { fc[(i + k) * 3] = col.r; fc[(i + k) * 3 + 1] = col.g; fc[(i + k) * 3 + 2] = col.b; }
-    }
-    far.setAttribute("color", new THREE.BufferAttribute(fc, 3)); far.computeVertexNormals();
-    this.far = new THREE.Mesh(far, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: FLAT }));
-    this.far.receiveShadow = true;
-    this.group.add(this.far);
+    this.buildClouds();
     const R = rng(5), sp = [];
     for (let i = 0; i < 1400; i++) {
       const th = R() * Math.PI * 2, ph = Math.acos(R() * 0.95);
@@ -387,6 +474,25 @@ export class Land {
     this.moon = new THREE.DirectionalLight(0x8fa8ff, 0.0);
     this.scene.add(this.hemi, this.sun, this.sun.target, this.moon);
     this.scene.fog = new THREE.FogExp2(0xcfd9e2, 0.0012);
+  }
+
+  // the sea of clouds the island floats on, and puffs drifting past at every height
+  buildClouds() {
+    const R = rng(11), puffs = [], [cx, cz] = this.island.base.pos;
+    const cluster = (x, y, z, s, n) => { for (let k = 0; k < n; k++) puffs.push([x + (R() - 0.5) * s * 2.2, y + (R() - 0.3) * s * 0.5, z + (R() - 0.5) * s * 1.4, s * (0.55 + R() * 0.6)]); };
+    for (let i = 0; i < 170; i++) { const a = R() * 6.283, r = 60 + Math.pow(R(), 0.7) * 1700; cluster(cx + Math.cos(a) * r, -175 - R() * 60, cz + Math.sin(a) * r, 20 + R() * 26, 6); }  // the sea below
+    for (let i = 0; i < 46; i++) { const a = R() * 6.283, r = 720 + R() * 1200; cluster(cx + Math.cos(a) * r, -60 + R() * 110, cz + Math.sin(a) * r, 10 + R() * 16, 5); }   // drifting past, far off
+    for (let i = 0; i < 14; i++) { const a = R() * 6.283, r = 300 + R() * 900; cluster(cx + Math.cos(a) * r, 170 + R() * 120, cz + Math.sin(a) * r, 12 + R() * 14, 4); }   // high up
+    const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff,
+      emissive: 0xc9d8ea, emissiveIntensity: 0.45, roughness: 1, flatShading: true }), puffs.length);
+    const o = new THREE.Object3D(), col = new THREE.Color();
+    puffs.forEach(([x, y, z, s], i) => {
+      o.position.copy(V(x, z, y)); o.rotation.set(R() * 3, R() * 3, R() * 3); o.scale.set(s * 1.3, s * 0.8, s); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
+      im.setColorAt(i, col.setHSL(0.6, 0.25, 0.95 + R() * 0.05 - (y < -150 ? 0.03 : 0)));
+    });
+    im.frustumCulled = false;
+    this.clouds = new THREE.Group(); this.clouds.add(im);
+    this.scene.add(this.clouds);
   }
 
   buildRain() {
@@ -413,8 +519,8 @@ export class Land {
     const U = this.skyU, warmS = clamp(1 - Math.abs(elev) * 2.6, 0, 1);
     U.sunDir.value.copy(sunDir); U.night.value = 1 - day; U.cover.value = fog ? 0.95 : wet ? 0.85 : grey ? 0.7 : /windy/.test(weather) ? 0.45 : 0.25;
     if (FLAT) {                                                        // a soft cyan sky, pale at the horizon
-      U.top.value.setHSL(0.57, grey ? 0.2 : 0.62, 0.05 + day * (grey ? 0.5 : 0.55));
-      U.horizon.value.setHSL(0.52, grey ? 0.12 : 0.45, 0.08 + day * (grey ? 0.62 : 0.74)).lerp(new THREE.Color(0xf6b27a), warmS * 0.6 * (elev > -0.25 ? 1 : 0));
+      U.top.value.setHSL(0.56, grey ? 0.25 : 0.72, 0.05 + day * (grey ? 0.5 : 0.56));       // the open sky all round
+      U.horizon.value.setHSL(0.54, grey ? 0.2 : 0.7, 0.08 + day * (grey ? 0.6 : 0.68)).lerp(new THREE.Color(0xf6b27a), warmS * 0.6 * (elev > -0.25 ? 1 : 0));
     } else {
       U.top.value.setHSL(0.6, grey ? 0.15 : 0.55, 0.04 + day * (grey ? 0.42 : 0.46));
       U.horizon.value.setHSL(0.58, grey ? 0.1 : 0.35, 0.07 + day * (grey ? 0.58 : 0.68)).lerp(new THREE.Color(0xf0a868), warmS * 0.55 * (elev > -0.25 ? 1 : 0));
@@ -431,10 +537,11 @@ export class Land {
     this.stars.material.opacity = (1 - day) * (grey ? 0.15 : 0.9);
     const fc = U.horizon.value.clone();
     this.scene.fog.color.copy(fc);
-    this.scene.fog.density = fog ? 0.02 : wet ? 0.0045 : grey ? 0.0018 : FLAT ? 0.0008 : 0.0011;
+    this.scene.fog.density = fog ? 0.006 : wet ? 0.0016 : grey ? 0.0009 : 0.00035;   // (from out in the clouds you still see the island)
     if (this.recording) this.scene.fog.density = Math.min(this.scene.fog.density, 0.0035);   // a timelapse must see the town
     this.sky.visible = true;
     this.scene.background = null;
+    if (this.clouds) this.clouds.rotation.y += dtReal * 0.0015;     // the clouds drift
     if (TEX.water) { TEX.water.offset.y = this.uniforms.uTime.value * 0.04; TEX.water.offset.x = Math.sin(this.uniforms.uTime.value * 0.2) * 0.02; }
     this.rain.visible = wet;
     if (wet) {

@@ -89,6 +89,14 @@ async function showDay(i, keepTime = false) {
     setupPost();
     const kp = S.actors.king.start.pos;
     rig.lookAt(kp, 18);
+  } else if (((S.terrain.island || {}).lobes || []).length !== land.island.lobes.length) {
+    // new land rose from the clouds: the island is rebuilt around everything else
+    for (const g of [land.group, land.clouds, land.sky, land.stars, nature.group]) if (g) scene.remove(g);
+    for (const l of [land.hemi, land.sun, land.sun.target, land.moon]) scene.remove(l);
+    land = new Land(scene, S, QUALITY);
+    land.recording = RECORD;
+    nature = new Nature(scene, land, S);
+    rig.land = land;
   } else {
     land.S = S;
   }
@@ -587,6 +595,7 @@ function setMode(m) {
 // A new scene arrives every tick. Only rebuild the town when something you'd see changed shape (a building
 // finished, a project started, a tent went up, new people); otherwise swap the data in place so nothing pops.
 const shapeOf = (d) => JSON.stringify([d.day, d.start, d.settlement.crowned, d.tents.length, d.actors.settlers.length,
+  ((d.terrain.island || {}).lobes || []).length,
   Object.values(d.actors.crowd.day || {}).reduce((a, b) => a + b, 0) >> 3,
   d.buildings.map((b) => [b.id, b.state, b.built_t, (b.upgrades || []).length]), d.projects.map((p) => p.id), !!d.peddler]);
 let liveShape = "";
@@ -614,6 +623,7 @@ function liveState(st) {
 
 // ------------------------------------------------------------------ the recorder's handle (headless capture)
 window.kingdom = {
+  view: (r) => rig.set("recorder", { recorder: typeof r === "object" ? r : index.recorders.find((x) => x.name === r) }),
   days: () => index.days.map((d) => d.day),
   recorders: () => index.recorders.map((r) => r.name),
   async show({ day, minute = 12 * 60, recorder = "overview", frames = 6 }) {

@@ -10,7 +10,13 @@
 #   follow: king   - instead of a fixed spot, keep Aldric in frame (offset = where the camera sits from him)
 
 recorders:
-  - name: overview            # the whole valley: the field, the woods, the hill, the road
+  - name: the_island          # the whole floating island from out in the clouds - watch it grow
+    pos: [-330, 150, -430]
+    look: [20, -25, 10]
+    fov: 42
+    times: ["09:00", "13:00", "17:30"]
+
+  - name: overview            # the settlement: the field, the woods, the hill, the road
     pos: [-70, 95, -150]
     look: [30, 0, 10]
     fov: 38

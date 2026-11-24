@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { C, M } from "./materials.js";
 import { rng, hash, distToPath, fbm } from "./noise.js";
-import { V, landform, LAKE } from "./terrain.js";
+import { V } from "./terrain.js";
 import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
 
 export class Nature {
@@ -53,29 +53,30 @@ export class Nature {
     this.buildFarForest();
   }
 
-  // forests on the hills and the lower mountain slopes around the valley, so the country isn't bare
+  // trees on the land that rose from the clouds: a whole forest on the silver grove, a scatter elsewhere
   buildFarForest() {
-    const R = rng(77), spots = [];
-    for (let k = 0; k < 40000 && spots.length < 2600; k++) {
-      const a = R() * Math.PI * 2, r = 200 + Math.pow(R(), 0.7) * 1300;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (fbm(x * 0.006 + 40, z * 0.006, 3) < -0.02) continue;                     // in woods, with open slopes between
-      const y = landform(x, z);
-      if (y < 2 || y > 230) continue;
-      const sl = Math.abs(landform(x + 6, z) - y) + Math.abs(landform(x, z + 6) - y);
-      if (sl > 6) continue;                                                       // not on cliffs
-      if (Math.hypot((x - LAKE.pos[0]) / LAKE.rx, (z - LAKE.pos[1]) / LAKE.rz) < 1.3) continue;
-      spots.push([x, z, y, 0.8 + R() * 0.9]);
+    const I = this.land.island, R = rng(77), spots = [];
+    const per = { grove: 260, meadow: 30, skygarden: 60, springs: 25, ruins: 40, point: 15, cliffs: 10, crystals: 8 };
+    for (const L of I.lobes) {
+      const want = per[L.id] ?? 30;
+      for (let k = 0, n = 0; k < want * 30 && n < want; k++) {
+        const a = R() * 6.283, r = L.r * Math.sqrt(R()) * 0.95, x = L.pos[0] + Math.cos(a) * r, z = L.pos[1] + Math.sin(a) * r;
+        if (I.sd(x, z) < 6 || I.base_sd(x, z) > -4) continue;
+        if (L.id !== "grove" && fbm(x * 0.03 + 40, z * 0.03, 2) < 0.05) continue;
+        spots.push([x, z, this.land.height(x, z), 0.7 + R() * 0.7, L.id]); n++;
+      }
     }
+    const n = Math.max(1, spots.length);
     const cone = (r, h, y) => new THREE.ConeGeometry(r, h, 5).translate(0, y, 0);
     const geo = BufferGeometryUtils.mergeGeometries([new THREE.CylinderGeometry(0.5, 0.7, 3, 4).translate(0, 1.5, 0), cone(3.4, 6, 5), cone(2.6, 5, 8.2), cone(1.7, 4, 11)]);
-    const mesh = new THREE.InstancedMesh(geo, M(0xffffff, null, { flatShading: true }), spots.length);
+    const mesh = new THREE.InstancedMesh(geo, M(0xffffff, null, { flatShading: true }), n);
     const o = new THREE.Object3D(), col = new THREE.Color();
-    spots.forEach(([x, z, y, sc], i) => {
-      o.position.copy(V(x, z, y - 0.5)); o.rotation.set(0, i, 0); o.scale.set(sc * 1.4, sc * 1.6, sc * 1.4); o.updateMatrix(); mesh.setMatrixAt(i, o.matrix);
-      mesh.setColorAt(i, col.setHex(hash(i * 7) % 9 === 0 ? C.leaf2 : C.pine).offsetHSL(0, 0, ((hash(i) % 100) / 100 - 0.5) * 0.08 - y / 2000));
+    spots.forEach(([x, z, y, sc, id], i) => {
+      o.position.copy(V(x, z, y - 0.3)); o.rotation.set(0, i, 0); o.scale.set(sc * 0.9, sc * 1.1, sc * 0.9); o.updateMatrix(); mesh.setMatrixAt(i, o.matrix);
+      mesh.setColorAt(i, col.setHex(id === "grove" ? (i % 3 ? 0xa9cdb4 : 0x8fbf98) : id === "skygarden" ? C.leaf1 : C.pine).offsetHSL(0, 0, ((hash(i) % 100) / 100 - 0.5) * 0.08));
     });
-    mesh.castShadow = false; mesh.receiveShadow = true;
+    mesh.count = spots.length;
+    mesh.castShadow = true; mesh.receiveShadow = true;
     this.group.add(mesh); this.farForest = mesh;
   }
 
@@ -86,9 +87,9 @@ export class Nature {
     const spots = { bush: [], flower: [], pebble: [], lone: [] };
     const okAt = (x, z, gap) => distToPath(x, z, land.river.path) > land.river.width / 2 + gap && distToPath(x, z, land.road.path) > land.road.width + gap
       && Math.hypot(x, z) > 10 && Math.hypot(x - land.woods.pos[0], z - land.woods.pos[1]) > land.woods.r * 1.05;
-    for (let k = 0; k < 6000 && spots.bush.length + spots.flower.length < 420; k++) {
-      const x = (R() - 0.5) * 380, z = (R() - 0.5) * 380;
-      if (Math.hypot(x, z) > 185 || !okAt(x, z, 2)) continue;
+    for (let k = 0; k < 20000 && spots.bush.length + spots.flower.length < 560; k++) {
+      const x = (R() - 0.5) * 620, z = (R() - 0.5) * 620;
+      if (land.island.sd(x, z) < 5 || !okAt(x, z, 2)) continue;
       if (fbm(x * 0.03 + 5, z * 0.03, 2) + 0.15 < R() * 0.9) continue;          // in clumps, with open meadow between
       const roll = R();
       if (roll < 0.42) spots.bush.push([x, z, 0.6 + R() * 0.7]);
