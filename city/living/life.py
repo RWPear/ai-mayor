@@ -21,15 +21,11 @@ import re
 import numpy as np
 import yaml
 
-from .. import effects
 from ..config import CONTENT
-from . import town as T
 
 NEEDS = {"hunger": 0.025, "energy": 0.012, "company": 0.015, "fun": 0.012}   # loss per tick awake
 WORDS = {"hunger": "hungry", "energy": "exhausted", "company": "lonely", "fun": "bored"}
 SELF_KEYS = {"traits": 6, "likes": 6, "dislikes": 6, "passions": 4, "wants": 4, "fears": 3}
-SUCCESS = {"small": 0.85, "medium": 0.7, "large": 0.55}
-SETBACK = {"small": 0.06, "medium": 0.1, "large": 0.15}   # chance per day of a setback
 
 
 def court():
@@ -45,12 +41,15 @@ def new_self():
     return {**{k: [] for k in SELF_KEYS}, "becoming": "", "history": []}
 
 
-def drift(me, awake, alone=False):
-    """Needs wear down. A man alone on purpose (the frontier start) misses people less - he chose the field."""
+def drift(me, awake, alone=False, around=0):
+    """Needs wear down. A man alone on purpose misses people less - he chose the island. And people living around
+    him are company of a sort (a wave, a joke across the field), even when he isn't talking to anyone."""
     n = me.setdefault("life", new_life())["needs"]
     for k, loss in NEEDS.items():
         if k == "company" and alone:
             loss *= 0.3
+        if k == "company" and around and awake:
+            loss *= max(0.0, 1 - min(1.0, around / 4))
         if k == "energy" and not awake:
             n[k] = min(1.0, n.get(k, 0.8) + 0.07)
         elif awake or k == "hunger":
@@ -128,10 +127,10 @@ def reflect(world, me, llm=None):
         try:
             out = llm.json(
                 (f"You are Aldric, building {world.city.name} from nothing - you want to be its king. "
-                 if world.frontier and not world.city.living["town"]["land"].get("crowned") else
+                 if not world.city.living["town"]["land"].get("crowned") else
                  f"You are {me['name']}, king of {world.city.name}. ")
                 + "Nobody told you who to be; you're figuring it out. "
-                f"Your goal: {me.get('frontier_goal') if world.frontier else me.get('goal', '')} It's late and you're going to sleep. Look back on today and update "
+                f"Your goal: {me.get('frontier_goal') or me.get('goal', '')} It's late and you're going to sleep. Look back on today and update "
                 "who you are: traits (what you're like), likes, dislikes, passions (only things you really keep "
                 "coming back to), wants (your own goals beyond the crown), fears. Keep what still fits, change what "
                 "doesn't, add only what today actually showed. Short phrases. 'becoming': one honest sentence about "
@@ -160,76 +159,6 @@ def _reflect_rules(me):
     fails = [o for o in me.get("life", {}).get("outcomes", []) if o["result"] == "failed"]
     if fails and "building things that collapse" not in s["fears"]:
         s["fears"] = (s["fears"] + ["building things that collapse"])[-SELF_KEYS["fears"]:]
-
-
-# ---------------------------------------------------------------- works (his own projects)
-def start_work(world, spec, place):
-    """spec: {id, name, size, flavor, room?, feature?}. Pays up front. Returns (work, cost) or (None, cost)."""
-    city = world.city
-    t = city.living["town"]
-    size = spec.get("size") if spec.get("size") in T.SIZES else "small"
-    cost = T.cost(size, city.population())
-    if city.treasury < cost:
-        return None, cost
-    city.treasury -= cost
-    work = {"id": spec["id"], "name": spec["name"], "place": place, "progress": 0.0, "days": T.SIZES[size]["days"],
-            "size": size, "feature": spec.get("feature") or spec["id"], "flavor": spec.get("flavor", "nothing"),
-            "room": spec.get("room", False), "started": city.day, "cost": cost, "hands": 0}
-    t["works"].append(work)
-    return work, cost
-
-
-def _scaled(eff, k):
-    return {key: (v * k if isinstance(v, (int, float)) else v) for key, v in eff.items()}
-
-
-def advance_works(world, minutes, boost=None, by=0.0):
-    """Workers move every work forward. Setbacks happen. Finished works are rolled: success, shoddy or failed.
-    Returns [(work, result)]."""
-    from .tools import FLAVORS
-    city = world.city
-    t = city.living["town"]
-    king = world.agent("king")
-    lf = king.setdefault("life", new_life())
-    done = []
-    for w in list(t["works"]):
-        w["progress"] += minutes / (w["days"] * 1440)
-        if boost == w["id"]:
-            w["progress"] += by
-            w["hands"] = w.get("hands", 0) + 1
-        if minutes and world.clock % 1440 == 12 * 60 and city.rng.random() < SETBACK[w.get("size", "medium")]:
-            w["progress"] = max(0.0, w["progress"] - 0.2)
-            why = city.rng.choice(["a storm flooded the site", "half the stone turned out to be cracked",
-                                   "the workers walked off over unpaid wages", "someone stole the tools overnight",
-                                   "the foreman fell off a ladder"])
-            world.moment("world", f"Setback on {w['name']}: {why}.", 1, public=True, place=w["place"])
-        if w["progress"] < 1:
-            continue
-        t["works"].remove(w)
-        know = sum(1 for k in lf.get("knowledge", []) if set(re.findall(r"[a-z]{4,}", k.lower()))
-                   & set(re.findall(r"[a-z]{4,}", w["name"].lower())))     # he read up on it
-        p = (SUCCESS[w.get("size", "medium")] + 0.05 * min(3, w.get("hands", 0)) + 0.03 * min(5, lf.get("builds", 0))
-             + 0.05 * min(3, know))
-        roll = city.rng.random()
-        result = "success" if roll < p else ("shoddy" if roll < p + 0.6 * (1 - p) else "failed")
-        feats = t["features"].setdefault(w["place"], {})
-        if result == "failed":
-            feats[w["feature"]] = f"an abandoned, half-finished attempt at {w['name']}"
-        else:
-            if w["room"]:
-                t["rooms"][w["place"]] = True
-                feats["room"] = T.ROOMS[w["place"]]["name"] + (", rebuilt" if result == "success" else
-                                                               ", rebuilt badly - drafty and crooked")
-            else:
-                feats[w["feature"]] = w["name"] + ("" if result == "success" else " (shoddy - already cracking)")
-            effects.apply(city, _scaled(FLAVORS.get(w["flavor"], {}), 1.0 if result == "success" else 0.5))
-            if w["flavor"] == "walls" or re.search(r"\bwalls?\b|palisade|rampart", w["name"].lower()):
-                T.build_walls(world, result)
-            lf["builds"] = lf.get("builds", 0) + 1
-            t["done"].append(w["id"])
-        lf["outcomes"] = (lf.get("outcomes", []) + [{"name": w["name"], "result": result, "day": city.day + 1}])[-20:]
-        done.append((w, result))
-    return done
 
 
 # ---------------------------------------------------------------- docket

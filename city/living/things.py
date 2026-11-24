@@ -22,40 +22,31 @@ import re
 
 import numpy as np
 
-from ..roles import JOB_NAMES
 
-# what each kind of place tends to have: (thing, kind, chance per morning). kind: food / goods / material / curio
+# what each place on the island tends to have: (thing, kind, chance per morning). kind: food / goods / material / curio
 POOLS = {
-    "kitchens": [("bread", "food", 0.95), ("stew", "food", 0.9), ("onions", "food", 0.7), ("porridge", "food", 0.6),
-                 ("cheese", "food", 0.5), ("carrots", "food", 0.15), ("honey", "food", 0.15), ("roast chicken", "food", 0.25),
-                 ("apples", "food", 0.2), ("a jar of pickled eels", "food", 0.04)],
-    "market_square": [("fish", "food", 0.7), ("turnips", "food", 0.7), ("cabbages", "food", 0.6), ("rope", "goods", 0.5),
-                      ("candles", "goods", 0.5), ("carrots", "food", 0.25), ("spices", "goods", 0.15),
-                      ("lute strings", "goods", 0.1), ("a hand mirror", "goods", 0.1), ("a map of the north", "curio", 0.03),
-                      ("a caged songbird", "curio", 0.04)],
-    "tavern": [("ale", "food", 0.95), ("meat pie", "food", 0.8), ("dice", "goods", 0.6), ("cider", "food", 0.3),
-               ("a stranger's lost pipe", "curio", 0.05)],
-    "smithy": [("nails", "material", 0.9), ("horseshoes", "goods", 0.8), ("a plain dagger", "goods", 0.25),
-               ("iron bars", "material", 0.5), ("a fine sword", "goods", 0.03)],
-    "chapel": [("candles", "goods", 0.9), ("an old book", "curio", 0.4), ("a dusty hymnal", "curio", 0.3)],
-    "river": [("reeds", "material", 0.9), ("smooth stones", "material", 0.7), ("a fish", "food", 0.5),
-              ("driftwood", "material", 0.4), ("a message in a bottle", "curio", 0.02)],
-    "fields": [("wheat", "food", 0.8), ("wildflowers", "goods", 0.6), ("carrots", "food", 0.3), ("a lost lamb", "curio", 0.05),
-               ("a four-leaf clover", "curio", 0.02)],
-    "royal_gardens": [("weeds", "material", 0.9), ("a snail", "curio", 0.4), ("a hedgehog", "curio", 0.05)],
-    "castle_yard": [("practice swords", "goods", 0.9), ("straw", "material", 0.8), ("arrows", "goods", 0.5)],
-    "kings_street": [("mud", "material", 0.95), ("a dropped coin", "goods", 0.15), ("a runaway goat", "curio", 0.04)],
-    "city_walls": [("loose stones", "material", 0.6)],
+    "shack": [("a heel of bread", "food", 0.5), ("a cold potato", "food", 0.4), ("a candle stub", "goods", 0.5)],
+    "field": [("wild onions", "food", 0.6), ("thistles", "material", 0.8), ("a skylark's nest", "curio", 0.06),
+              ("a ring of toadstools that wasn't there yesterday", "curio", 0.04)],
+    "woods": [("mushrooms", "food", 0.7), ("blackberries", "food", 0.4), ("deadfall", "material", 0.9),
+              ("a hollow log", "material", 0.3), ("an owl feather", "curio", 0.1),
+              ("a moss-grown stone with a carved face", "curio", 0.03), ("glowing fungus", "curio", 0.05)],
+    "river": [("a fish", "food", 0.6), ("reeds", "material", 0.9), ("smooth stones", "material", 0.7),
+              ("driftwood", "material", 0.4), ("a message in a bottle", "curio", 0.02),
+              ("a fish with scales like coins", "curio", 0.03)],
+    "hill": [("loose stone", "material", 0.9), ("flint", "material", 0.5), ("a lump of starmetal", "curio", 0.03),
+             ("a cave mouth that breathes warm air", "curio", 0.02)],
+    "road": [("a dropped coin", "goods", 0.15), ("a runaway goat", "curio", 0.04), ("a lost boot", "goods", 0.1)],
 }
-# what kind of follower could make a thing (commissions)
+# what kind of person could make a thing (commissions go to someone with that role or craft)
 MAKERS = [(r"sword|dagger|shield|armou?r|helmet|axe|spear|horseshoe|crown|chain|blade|tool", "blacksmith"),
           (r"lute|song|music|ballad|drum|flute", "bard"),
           (r"cloak|coat|robe|dress|boots|hat|gloves|banner|tunic|cape", "tailor"),
           (r"cake|pie|bread|pastry|tart|biscuit", "baker"),
-          (r"chair|table|bed|chest|cart|bow|boat|carving", "woodcutter"),
+          (r"chair|table|bed|chest|cart|bow|boat|carving", "carpenter"),
           (r"statue|bust|fountain|wall|bench", "mason"),
-          (r"potion|medicine|remedy|perfume|dye", "alchemist")]
-IMPOSSIBLE = r"dragon|unicorn|phoenix|magic|wand|spell|elixir of life|gun|phone|car\b|computer|electric"
+          (r"potion|medicine|remedy|perfume|dye|elixir|charm", "alchemist")]
+IMPOSSIBLE = r"\bgun|phone|\bcar\b|computer|electric|internet|television"   # (magic is real here; modern things aren't)
 
 WANT_SCHEMA = {"type": "object", "properties": {
     "kind": {"type": "string", "enum": ["food", "goods", "material", "curio"]},
@@ -126,12 +117,12 @@ def restock(world):
         st["stock"].setdefault(pid, []).append(item)
 
 
-SURPRISES = [("river", "a crate of oranges washed up from somewhere downstream", "food"),
-             ("market_square", "a peddler selling strange blue eggs", "curio"),
-             ("kings_street", "a cart of fine stone left behind by a merchant who never came back", "material"),
-             ("chapel", "a sealed letter addressed to 'the king, whoever he is'", "curio"),
-             ("fields", "a patch of giant pumpkins nobody planted", "food"),
-             ("tavern", "a traveling cook offering to make one dish for the king", "goods")]
+SURPRISES = [("river", "a crate of oranges, bobbing in the river as if it fell from the sky", "food"),
+             ("road", "a peddler's cart that nobody saw arrive, selling strange blue eggs", "curio"),
+             ("hill", "a seam of stone that hums when you put your ear to it", "material"),
+             ("shack", "a sealed letter addressed to 'the king, whoever he is'", "curio"),
+             ("field", "a patch of giant pumpkins nobody planted", "food"),
+             ("woods", "a tree that dropped silver acorns overnight", "curio")]
 
 
 def _surprise(world):
@@ -155,9 +146,12 @@ def _surprise(world):
                 pid, text, kind = out["place"], str(out["thing"])[:80], out.get("kind", "curio")
         except Exception:
             pass
-    from .town import PLACES
-    world.moment("world", f"Something new at {PLACES[pid]['name']}: {text}.", 1, public=True, place=pid)
+    world.moment("world", f"Something new at {_where(world, pid)}: {text}.", 1, public=True, place=pid)
     return pid, {"name": text, "kind": kind, "new": True, "surprise": True}
+
+
+def _where(world, pid):
+    return (world.city.living["town"]["places"].get(pid) or {"name": pid})["name"]
 
 
 def stock_line(city, pid):
@@ -205,9 +199,8 @@ def want(world, me, thing, why=""):
     for pid, items in st["stock"].items():                   # 1. it's somewhere in town right now
         for it in items:
             if _match(it["name"], name):
-                from .town import PLACES
                 w = {"name": name, "label": label, "path": "here", "where": pid,
-                     "how": f"there's {it['name']} at {PLACES[pid]['name']}"}
+                     "how": f"there's {it['name']} at {_where(world, pid)}"}
                 return w, "here"
     path, days, how = _decide(world, name)
     if path == "impossible":
@@ -241,7 +234,8 @@ def _decide(world, name):
         world.spend_calls(1)
         try:
             out = world.voice_llm.json(
-                "You are the world of a small, ordinary medieval kingdom (no magic, no modern things). The king wants "
+                "You are the world of Emberfall, a young settlement on an old floating island (magic is real but rare "
+                "and always costs something; nothing modern exists). The king wants "
                 "something. Decide honestly how he could get it: path = delivery (traders bring it; days 1-6), made "
                 "(a local craftsperson could make it; days 1-5), people (only someone in the kingdom might have one), or "
                 "impossible. how = a few words on how.", f"The king wants: {name}", WANT_SCHEMA, max_tokens=200,
@@ -261,8 +255,8 @@ def _commission(world, name, days):
     """A real follower with the right trade makes it (and hears about it)."""
     city, c = world.city, world.city.citizens
     job = next((j for pat, j in MAKERS if re.search(pat, name)), "blacksmith")
-    pool = np.where(c.active() & (c.job == JOB_NAMES.index(job)))[0]
-    maker = c.handles[int(city.rng.choice(pool.tolist()))] if len(pool) else None
+    pool = [i for i, r in c.roles.items() if job in str(r) and c.status[i] == 0]     # someone who chose that role
+    maker = c.handles[int(city.rng.choice(pool))] if pool else None
     cost = min(round(30 + 20 * days), int(city.treasury))
     city.treasury -= cost
     if maker:

@@ -113,7 +113,6 @@ class World:
                 lv["unlocked"][who] = sorted(tools.unlocked(self, who))
 
     # ------------------------------------------------------------------ helpers the tools use
-    frontier = True     # (older code checks this; there's only the one game now)
 
     @property
     def clock(self):
@@ -611,10 +610,9 @@ class World:
             lv["weather"] = self.city.rng.choice(["clear and cold", "grey drizzle", "a warm sunny day", "thick fog",
                                                   "a windy day", "heavy rain", "a crisp bright morning", "muggy heat"])
             lv["weather_log"] = (lv.get("weather_log", []) + [{"t": self.clock, "weather": lv["weather"]}])[-14:]
-        self.announce_works(life.advance_works(self, TICK))
         self._check_unlocks()
         king = self.agent("king")
-        life.drift(king, AWAKE["king"](hour), alone=F.settled(self.city) == 0)
+        life.drift(king, AWAKE["king"](hour), alone=F.settled(self.city) == 0, around=F.settled(self.city))
         if not AWAKE["king"](hour):
             if self.clock % 1440 == 23 * 60:                     # going to sleep: who am I becoming?
                 life.reflect(self, king, getattr(self.brains["king"], "llm", None))
@@ -686,15 +684,6 @@ class World:
             from . import scene
             scene.record(self, who, tool, args, m)
         return m
-
-    def announce_works(self, finished):
-        for w, result in finished:
-            name = w["name"][0].upper() + w["name"][1:]
-            text = {"success": f"{name} is finished, and it turned out well.",
-                    "shoddy": f"{name} is finished... sort of. It's shoddy and already cracking.",
-                    "failed": f"{name} FAILED. The work fell apart and {w['cost']:,.0f} gold is gone."}[result]
-            self.moment("king", text, 3 if result == "failed" else 2, public=True, place=w["place"])
-            self.notify(f"{w['name']}: {result}")
 
     def _frontier_tick(self):
         """The frontier's clockwork: arrivals, word from the road, settlers' work, meals, the peddler."""

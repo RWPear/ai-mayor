@@ -141,7 +141,7 @@ def test_talk_gets_the_world_and_their_story(tmp_path):
 
 def test_a_question_is_talk_not_a_brew_or_a_fight(tmp_path):
     from city.living import intents
-    assert intents.rule_read("who do I have to kill around here to get a fresh brew?", False)[0] in ("talk", "attack")
+    assert intents.rule_read("who do I have to kill around here to get a fresh brew?", False)[0] == "talk"
     p = _play(tmp_path)
     p.comment("q", "x"); p._drain()
     r = {"user": "q", "text": "what's that smell?", "action": "talk", "target": "", "item": "", "needs": []}

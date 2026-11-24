@@ -113,7 +113,7 @@ def test_homeless_have_nothing_to_burn():
     c = city.citizens
     _play(w, "u7", "i become homeless")
     i = c.index["u7"]
-    assert c.homeless(i) and "sleeping rough" in town.summary(w)
+    assert c.homeless(i)
     hit = town.burn_houses(w, int(c.ward[i]), 300)
     assert "u7" not in hit
     city.living["acted_today"], c.role_day = [], {}

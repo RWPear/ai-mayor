@@ -192,12 +192,8 @@ class Play:
         if not new:
             return
         idx = c.add_many(new, city.day, city.ward_for, revive=True)
-        if self.world.frontier:
-            from .living import frontier as F
-            F.join_road(self.world, np.asarray(idx, np.int64))
-        else:
-            from .living import town
-            town.settle(self.world, len(c.handles) - len(idx))
+        from .living import frontier as F
+        F.join_road(self.world, np.asarray(idx, np.int64))
         for h in new:
             self.log.append({"n": len(self.log), "time": self.world.now_str(), "who": "world", "public": True,
                              "drama": 1, "text": f"@{h} followed the kingdom."})
@@ -227,7 +223,7 @@ class Play:
                 self._close_post()
                 self._collect()
                 self._publish()
-            elif a == "arrive" and self.world.frontier:  # the travellers, now (testing: no week's wait)
+            elif a == "arrive":  # the travellers, now (testing: no week's wait)
                 from .living import frontier as F
                 n = F.arrive(self.world)
                 self.log.append({"n": len(self.log), "time": self.world.now_str(), "who": "world", "public": True,
@@ -272,7 +268,7 @@ class Play:
         from .living import scene
         w, city = self.world, self.city
         try:                                # (the 3D scene exists for the frontier start)
-            self.cache["scene"] = json.dumps(scene.export(w) if w.frontier else None, default=str).encode()
+            self.cache["scene"] = json.dumps(scene.export(w), default=str).encode()
         except Exception as e:
             self.error = f"scene: {e}"
             traceback.print_exc()
@@ -285,9 +281,9 @@ class Play:
             self._model_checked = time.time()
         state = {"day": city.day + 1, "model": self.model, "clock": w.clock, "time": w.now_str(), "post_closes": w.now_str(w.next_post_clock()),
                  "paused": self.paused, "tick_s": self.tick_s, "tick_min": self.W.TICK, "version": self.version,
-                 "speeds": SPEEDS, "error": self.error, "frontier": w.frontier,
+                 "speeds": SPEEDS, "error": self.error, "frontier": True,
                  "words": list((pack.get("commands") or {}).keys())[:8],
-                 "status": F.status_line(F.summary(w)) if w.frontier else "",
+                 "status": F.status_line(F.summary(w)),
                  "pending": sum(1 for r in self.replies if r["status"] == "pending")}
         self.cache["state"] = json.dumps(state, default=str).encode()
 
@@ -303,11 +299,10 @@ class Play:
         if True:                                    # (no lock: a slightly stale read beats waiting on the model)
             k = self.world.agent("king")
             from .living import life
-            fr = self.world.frontier
             from .living import frontier as F
-            crowned = fr and F.land(self.world).get("crowned")
-            card = {"name": ("King Aldric" if crowned else "Aldric") if fr else k.get("name"),
-                    "goal": k.get("frontier_goal") if fr else k.get("goal"), "goals": k.get("goals", []),
+            crowned = F.land(self.world).get("crowned")
+            card = {"name": "King Aldric" if crowned else "Aldric",
+                    "goal": k.get("frontier_goal"), "goals": k.get("goals", []),
                     "character": k.get("character"), "who": life.who_am_i(k), "thought": k.get("last_thought", ""),
                     "brain": ("model" if self.model.get("ok") else "model, but it isn't answering")
                     if getattr(self.world.brains["king"], "name", "") == "llm" else "rules",

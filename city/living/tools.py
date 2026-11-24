@@ -106,13 +106,12 @@ def talk(world, me, args):
                               f'"{said or "Hello there."}" You answered: "{reply}"', "king_talked",
                 credit="talked with the king")
     taught = ""
-    if world.frontier:
-        from . import frontier
-        k = frontier.learn_from(world, int(i))
-        if k:
-            taught = f" @{c.handles[i]} showed him a thing or two about {k}."
-            world.reply(c.handles[i], f"🔨 You showed Aldric how {k} works. He's going to use it.", "taught",
-                        credit=f"taught Aldric {k}")
+    from . import frontier
+    k = frontier.learn_from(world, int(i))
+    if k:
+        taught = f" @{c.handles[i]} showed him a thing or two about {k}."
+        world.reply(c.handles[i], f"🔨 You showed Aldric how {k} works. He's going to use it.", "taught",
+                    credit=f"taught Aldric {k}")
     return world.moment("king", f'The king stopped to talk with @{c.handles[i]}: "{said or "Hello there."}" - '
                                 f'"{reply}"' + taught, 2, public=True, place=me.get("location"), handles=[c.handles[i]])
 
@@ -127,7 +126,7 @@ def do(world, me, args):
     lf = me.setdefault("life", life.new_life())
     label = f"{out.get('activity', '')} {what}".lower()
     eating = re.search(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|feast|snack|food)", label)
-    if eating and world.frontier:                                 # on the frontier a meal comes out of the stores
+    if eating:                                 # on the frontier a meal comes out of the stores
         from . import frontier
         st = frontier.land(world)["stock"]
         if st.get("food", 0) >= 1:
@@ -147,11 +146,10 @@ def do(world, me, args):
     lf["skills"][act] = lf["skills"].get(act, 0) + 1
     if out.get("learned"):
         lf["knowledge"] = (lf.get("knowledge", []) + [out["learned"]])[-20:]
-    if world.frontier:
-        from . import frontier
-        k = frontier.learn_by_doing(world, f"{what} {out.get('learned', '')}")
-        if k:
-            out["outcome"] = out["outcome"].rstrip(".") + f". Somewhere in there, he worked out {k}."
+    from . import frontier
+    k = frontier.learn_by_doing(world, f"{what} {out.get('learned', '')}")
+    if k:
+        out["outcome"] = out["outcome"].rstrip(".") + f". Somewhere in there, he worked out {k}."
     if out.get("found"):
         lf["inventory"] = (lf.get("inventory", []) + [{"item": out["found"], "from": None, "day": world.city.day + 1}])[-20:]
     if out.get("made"):
@@ -438,7 +436,7 @@ def taunt(world, me, args):
     if not text:
         return None
     world.agent("king").setdefault("letters", []).append({"day": world.city.day, "from": me["name"], "text": text})
-    where = "Aldric's door" if world.frontier else "the castle"
+    where = "Aldric's door"
     return world.moment("warlord", f'A letter from {me["name"]} arrived at {where}: "{text}"', 2, public=True)
 
 

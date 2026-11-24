@@ -314,7 +314,7 @@ def place_pos(world, pid):
 # ---------------------------------------------------------------- tracks
 def record(world, who, tool, args, moment):
     """Called after each action: where he was, what he did, for how long (the renderer animates it)."""
-    if not world.frontier or who != "king":
+    if who != "king":
         return
     me = world.agent(who)
     lv = world.city.living

@@ -34,11 +34,11 @@ from ..effects import COMMAND_EFFECTS
 from ..roles import FACTIONS, JOB_NAMES
 from . import life, personal
 
-SIM = ["work", "shop", "train", "protest", "volunteer", "donate", "support", "oppose", "event.help", "event.hinder"]
+SIM = ["work", "protest", "volunteer", "support", "oppose", "event.help", "event.hinder"]
 SOCIAL = ["steal", "attack", "gift", "befriend", "insult", "heal", "bless"]
 ACTIONS = SIM + SOCIAL + ["petition", "gift_king", "build_own", "talk", "none"]
 HOSTILE = {"steal", "attack", "insult"}
-SIM_OF = {"gift": "donate", "befriend": "volunteer", "petition": "support", "gift_king": "support",
+SIM_OF = {"gift": "volunteer", "befriend": "volunteer", "petition": "support", "gift_king": "support",
           "heal": "volunteer", "bless": "volunteer", "build_own": "work"}
 SKILL_NAMES = [k for k in trades.SKILLS]
 FRONTIER_WORK = ["A long day of it. Your hands know Emberfall a little better now.",
@@ -70,20 +70,21 @@ RULES = [  # (pattern, action) - first match wins
     (personal.ASK.pattern, "build_own"),
     (r"\b(fight|defend|guard|protect|rescue|save|charge|battle|slay|shoot|barricade)\b", "event.help"),
     (r"\b(steal|rob|sabotage|flee|run away|hide|betray|loot|desert)\b", "event.hinder"),
-    (r"\b(train|drill|practice|spar|sharpen|enlist)\b", "train"),
     (r"\b(protest|riot|complain|yell|grumble|march|strike)\b", "protest"),
     (r"\b(praise|cheer|kneel|toast|serve the king|bow)\b", "support"),
     (r"\b(mock|insult|hate|boo|laugh at the king|overthrow)\b", "oppose"),
-    (r"\b(give|donate|share|feed the poor|charity|pray)\b", "donate"),
+    (r"\b(give|donate|share|feed the poor|charity)\b", "volunteer"),
     (r"\b(help|volunteer|build|repair|clean|heal|tend|fix)\b", "volunteer"),
-    (r"\b(buy|sell|trade|market|drink|tavern|gamble|haggle|shop|bake)\b", "shop"),
-    (r"\b(work|farm|forge|fish|mine|chop|sew|plow|harvest)\b", "work"),
+    (r"\b(work|farm|forge|fish|mine|chop|sew|plow|harvest|bake|brew|cook|gather|hunt|dig|haul|train|practi[cs]e)\b",
+     "work"),
 ]
 
 
 def rule_read(text, has_event):
     t = text.lower()
     target = (re.findall(r"@([\w.]+)", t) or [""])[0].rstrip(".")
+    if t.rstrip().endswith("?") and re.match(r"\s*(who|what|where|why|how|is|are|can|could|does|do|did|anyone|any|will)\b", t):
+        return "talk", ""                         # a question about doing something isn't doing it
     for pat, act in RULES:
         if re.search(pat, t):
             if act == "attack_king":
@@ -190,7 +191,7 @@ READ_FRONTIER = ("""- (Emberfall is a frontier camp: there is no market, army, c
 
 
 def _read_system(world):
-    return READ.replace("\n- talk:", "\n" + READ_FRONTIER + "\n- talk:", 1) if world.frontier else READ
+    return READ.replace("\n- talk:", "\n" + READ_FRONTIER + "\n- talk:", 1)
 
 
 def _tell_system(rng):
@@ -202,8 +203,6 @@ def _tell_system(rng):
 def _world_now(world):
     """THE WORLD, for the model: what Emberfall actually is right now, so it can't make it up."""
     city = world.city
-    if not world.frontier:
-        return _context(city)
     from . import frontier as F
     f, L = F.summary(world), F.land(world)
     c = city.citizens
@@ -245,8 +244,7 @@ def _third(text):
 def _who(world, i):
     """How a subject is introduced to the model. On the frontier, the old castle trades and wards don't exist."""
     c = world.city.citizens
-    if world.frontier:
-        return c.roles.get(int(i)) or "settler"
+    return c.roles.get(int(i)) or "settler"
     return f"{c.label(i)} of {world.city.wards[int(c.ward[i])]['name']}"
 
 
@@ -298,15 +296,15 @@ FRONTIER_WORDS = [("the royal guard", "Aldric"), ("The guards", "The other settl
 
 def resolve(world, r, hostile_today):
     _resolve(world, r, hostile_today)
-    if world.frontier and r.get("facts", "").startswith("did this: "):
+    if r.get("facts", "").startswith("did this: "):
         r["facts"] = (f"spent the day on it ({_third_person(r.get('text', ''))[:90]}) - honest work, nothing fancy, "
                       f"and the camp is better for it")
         r.setdefault("reply_rule", world.city.rng.choice(FRONTIER_WORK))
-    if world.frontier:                 # the castle-mode rules talk about guards and dungeons; out here there are none
-        for k in ("facts", "reply_rule", "to_target", "mishap_text", "facts_note"):
-            if r.get(k):
-                for a, b in FRONTIER_WORDS:
-                    r[k] = r[k].replace(a, b)
+    # the castle-mode rules talk about guards and dungeons; out here there are none
+    for k in ("facts", "reply_rule", "to_target", "mishap_text", "facts_note"):
+        if r.get(k):
+            for a, b in FRONTIER_WORDS:
+                r[k] = r[k].replace(a, b)
 
 
 def _resolve(world, r, hostile_today):
@@ -319,13 +317,13 @@ def _resolve(world, r, hostile_today):
     if _skill_check(world, r):
         return
     act = r["action"]
-    if world.frontier:                                   # their own build: asking, or working on it
-        mine = personal.of(world, u)
-        if act == "build_own" or (mine and act in ("work", "volunteer", "none", "petition")
-                                  and personal.mentions(mine, r.get("text", ""))):
-            r["action"] = "build_own"
-            personal.ask(world, r)
-            return
+    # their own build: asking, or working on it
+    mine = personal.of(world, u)
+    if act == "build_own" or (mine and act in ("work", "volunteer", "none", "petition")
+                              and personal.mentions(mine, r.get("text", ""))):
+        r["action"] = "build_own"
+        personal.ask(world, r)
+        return
     elif act == "build_own":
         act = r["action"] = "petition"
     if act == "talk":
@@ -333,7 +331,7 @@ def _resolve(world, r, hostile_today):
                       "Aldric or a neighbour responds, or the place itself does. Nothing is gained or lost")
         r["reply_rule"] = city.rng.choice(TALK_RULES)
         return
-    if act == "attack" and t in ("king", "the king", "aldric", "king aldric") and world.frontier:
+    if act == "attack" and t in ("king", "the king", "aldric", "king aldric"):
         set_condition(city, u, "jailed", 1, "went for Aldric")
         r["facts"] = ("went for Aldric himself - he's bigger than he looks, sat on them until they calmed down, and "
                       "tied them to the post by the shack for the night. No one was badly hurt")
@@ -512,10 +510,9 @@ def _resolve(world, r, hostile_today):
                       + (" - and their well-argued letter went straight to the top of the pile"
                          if trades.knack(c, i) == "learned" else ""))
         r["reply_rule"] = "You've been added to the list at court. The king hears cases in the throne room."
-        if world.frontier:
-            r["facts"] = ("put an idea to Aldric while he worked; he listened and said he'd think on it (he does think "
-                          "on things - it may turn up in what he does next)")
-            r["reply_rule"] = "Aldric listened all the way through, which he doesn't always do. He said he'd think on it."
+        r["facts"] = ("put an idea to Aldric while he worked; he listened and said he'd think on it (he does think "
+                      "on things - it may turn up in what he does next)")
+        r["reply_rule"] = "Aldric listened all the way through, which he doesn't always do. He said he'd think on it."
         r["drama_floor"] = 1
     elif act == "gift_king" and _money(r.get("item") or "", r.get("text", "")) is not None:
         _give_money(world, r, i, _money(r.get("item") or "", r.get("text", "")))
@@ -533,17 +530,14 @@ def _resolve(world, r, hostile_today):
         if _fulfil(world, item, u):
             r["facts"] += " - and it's exactly what he'd been wanting"
             r["drama_floor"] = 2
-        if world.frontier:
-            from . import frontier
-            if not re.match(r"(a|an|the|my|some|his|her|their|\d+)\b", item, re.I):
-                item = trades.a_(item)
-            note = frontier.gift(world, item, u)
-            r["facts"] = (f"sent Aldric a gift: {item}. It was waiting at his door" + (f" {note}" if note else ""))
-            r["reply_rule"] = f"Your {item} reached Aldric's door." + (f" {note[1:-1].capitalize()}." if note else "")
-            world.moment("world", f"@{u} sent Aldric {item}." + (f" {note}" if note else ""), 2 if note else 1,
-                         public=True, handles=[u])
-        else:
-            world.moment("world", f"A gift arrived at the castle from @{u}: {item}.", 1, public=True, handles=[u])
+        from . import frontier
+        if not re.match(r"(a|an|the|my|some|his|her|their|\d+)\b", item, re.I):
+            item = trades.a_(item)
+        note = frontier.gift(world, item, u)
+        r["facts"] = (f"sent Aldric a gift: {item}. It was waiting at his door" + (f" {note}" if note else ""))
+        r["reply_rule"] = f"Your {item} reached Aldric's door." + (f" {note[1:-1].capitalize()}." if note else "")
+        world.moment("world", f"@{u} sent Aldric {item}." + (f" {note}" if note else ""), 2 if note else 1,
+                     public=True, handles=[u])
         r["drama_floor"] = max(r["drama_floor"], 2 if r.get("skilled") else 1)
     elif act == "none":
         r["facts"] = ""
@@ -563,8 +557,6 @@ def knows(world, u, skill):
     learned by doing it (PRACTICE tries, good or bad)."""
     c = world.city.citizens
     i = c.index[u]
-    if not world.frontier:
-        return trades.has_skill(c, i, skill)
     if skill in trades.NOBODY:
         return False
     if skill in world.city.living.get("learned", {}).get(u, []):
@@ -606,11 +598,11 @@ def _skill_check(world, r):
     missing = [x for x in need if not knows(world, u, x)]
     have = [x for x in need if x not in missing]
     label = _who(world, i)
-    if not missing and world.frontier:                        # something they know: it shows (no coins out here)
+    if not missing:                        # something they know: it shows (no coins out here)
         r["skilled"] = True
         c.counts["craft"][i] += 1
         what = trades.SKILL_LABEL.get(need[0], need[0])
-        if act in ("none", "work", "shop", "volunteer"):
+        if act in ("none", "work", "volunteer"):
             r["action"] = "work"
             r["facts"] = (f"knows {what} and it showed - something genuinely good came of it (no coins: there's "
                           f"barely any money in Emberfall)")
@@ -621,7 +613,7 @@ def _skill_check(world, r):
     if not missing:                                           # their own trade: a good day at it
         r["skilled"] = True
         c.counts["craft"][i] += 1
-        if act in ("none", "work", "shop", "volunteer"):
+        if act in ("none", "work", "volunteer"):
             bonus = int(rng.uniform(12, 28))
             c.wealth[i] += bonus
             r["action"] = "work"
@@ -632,9 +624,8 @@ def _skill_check(world, r):
             return True
         return False
     s = missing[0]
-    frontier = world.frontier                                 # out here nobody has a trade yet: everyone's learning
-    learnt = _practise(world, u, s) if frontier else False
-    if s not in trades.NOBODY and rng.random() < (0.5 if frontier else 0.2):         # beginner's luck
+    learnt = _practise(world, u, s)                           # out here nobody has a trade yet: everyone's learning
+    if s not in trades.NOBODY and rng.random() < 0.5:         # beginner's luck
         r["luck"] = True
         r["facts_note"] = f"had never done {trades.SKILL_LABEL.get(s, s)} before, but by sheer luck it sort of worked"
         r["reply_rule"] = (f"You'd never tried your hand at {trades.SKILL_LABEL.get(s, s)}. By sheer dumb luck, it "
@@ -645,7 +636,7 @@ def _skill_check(world, r):
         r["drama_floor"] = 1
         return False
     mishap, cons = trades.SKILLS[s][1], trades.SKILLS[s][2]
-    if frontier and cons == "hurt":
+    if cons == "hurt":
         cons = "bruised"                                      # a clumsy first try, not a day in bed
     jail = "the dungeon" if city.living["town"]["rooms"].get("dungeon") else "the stocks in the square"
     lead = ("got in without a sound - that part they know - but then " if "lockpicking" in have
@@ -843,10 +834,10 @@ def process(world, free, llm=None, ai_people=0):
             world.reply(tgt, "Meanwhile: " + (_you(r["outcome"], tgt) if told_by_model or not r.get("to_target")
                                               else r["to_target"]), "done_to_you")
     lv["acted_today"] = sorted(acted)
-    if world.frontier:                    # people who put their back into it today
-        from . import frontier
-        keen = [r["user"] for r in out if r.get("action") in ("work", "volunteer", "event.help")]
-        frontier.land(world).setdefault("workers_today", []).extend(keen)
+    # people who put their back into it today
+    from . import frontier
+    keen = [r["user"] for r in out if r.get("action") in ("work", "volunteer", "event.help")]
+    frontier.land(world).setdefault("workers_today", []).extend(keen)
     lv.setdefault("crowd_today", []).extend({k: r.get(k, "") for k in ("user", "action", "outcome", "drama")} for r in out)
     for r in out:
         if r["outcome"] and r["drama"] >= 2:
@@ -930,14 +921,15 @@ def _rule_reply(r):
     f = r.get("facts") or ""
     if not f:
         return ""
-    if "guards" in f or "locked up" in f:
+    if "stocks" in f or "locked up" in f:
         return f"No luck: {f}."
     if r["action"] == "gift_king":
-        return "Your gift reached the castle gate. The king hasn't decided what to do with it yet."
-    return {"work": "A long day's work, and a little more in your purse.", "shop": "You spent a bit at the market.",
-            "train": "You drilled until your arms ached.", "protest": "People heard you. Whether the king did is another matter.",
-            "volunteer": "You helped where you could; people noticed.", "donate": "Your kindness didn't go unnoticed.",
-            "support": "Word of your loyalty reached the castle.", "oppose": "The castle heard what you said. So did the guards.",
+        return "Your gift reached Aldric's door. He hasn't decided what to do with it yet."
+    return {"work": "A long day of it. Your hands know Emberfall a little better now.",
+            "protest": "People heard you. Whether Aldric did is another matter.",
+            "volunteer": "You helped where you could; people noticed.",
+            "support": "Word of your loyalty reached Aldric. He pretended not to be pleased.",
+            "oppose": "Aldric heard what you said. So did everyone else.",
             "event.help": "You threw yourself into it - and it helped.",
             "event.hinder": "You did things your own way. Not everyone was pleased."}.get(r["action"], "")
 
