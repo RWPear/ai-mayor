@@ -38,6 +38,9 @@ SIM = ["work", "protest", "volunteer", "support", "oppose", "event.help", "event
 SOCIAL = ["steal", "attack", "gift", "befriend", "insult", "heal", "bless"]
 ACTIONS = SIM + SOCIAL + ["petition", "gift_king", "build_own", "conjure", "talk", "none"]
 HOSTILE = {"steal", "attack", "insult"}
+KING_NAMES = ("king", "the king", "aldric", "king aldric", "kingdom", "the kingdom", "emberfall")
+KINGDOM_GIFT = re.compile(r"\b(bring|give|gift|offer|donate)\b.*\b(king|kingdom|aldric|emberfall)\b", re.I)
+GIFT_ITEM = re.compile(r"\b(bring|give|gift|offer|donate)s?\s+(?:him\s+|the king\s+)?((?:a|an|some|my|lots of|plenty of|\d+)?\s*[a-z' ]{2,30}?)(?=\s+(?:to|for)\b|[.!,]|$)", re.I)
 SIM_OF = {"gift": "volunteer", "befriend": "volunteer", "petition": "support", "gift_king": "support",
           "heal": "volunteer", "bless": "volunteer", "build_own": "work", "conjure": "support"}
 SKILL_NAMES = [k for k in trades.SKILLS]
@@ -66,7 +69,7 @@ RULES = [  # (pattern, action) - first match wins
     (r"\b(give|gift|send|pay|lend|share)\b.*@", "gift"),
     (r"\b(insult|mock|laugh at|roast|curse|spit on)\b.*@", "insult"),
     (r"@\S+", "befriend"),
-    (r"\b(give|send|gift|bring|offer|make)\b.*\bking\b|\bking\b.*\b(a gift|present)\b", "gift_king"),
+    (r"\b(give|send|gift|bring|offer|make)\b.*\bking(dom)?\b|\bking\b.*\b(a gift|present)\b", "gift_king"),
     (r"\b(ask|beg|petition|request|plead|suggest|propose)\b.*\bking\b|\bking\b.*\b(ask|beg|petition|request|job|should)\b",
      "petition"),
     (personal.ASK.pattern, "build_own"),
@@ -354,12 +357,19 @@ def _resolve(world, r, hostile_today):
         return
     elif act == "build_own":
         act = r["action"] = "petition"
+    # "I bring lots of resources for the kingdom": a gift to someone who's the king is a gift to the king
+    if act in ("gift", "befriend", "volunteer") and (t in KING_NAMES or (act == "gift" and not t and KINGDOM_GIFT.search(r.get("text", "")))):
+        act = r["action"] = "gift_king"
+        r["target"] = ""
+    if act == "gift_king" and not r.get("item"):
+        m = GIFT_ITEM.search(r.get("text", ""))
+        r["item"] = m.group(2).strip()[:40] if m else ""
     if act == "talk":
         r["facts"] = ("is talking, asking or joking - not doing anything yet. Answer what they said in the world: "
                       "Aldric or a neighbour responds, or the place itself does. Nothing is gained or lost")
         r["reply_rule"] = city.rng.choice(TALK_RULES)
         return
-    if act == "attack" and t in ("king", "the king", "aldric", "king aldric"):
+    if act == "attack" and t in KING_NAMES:
         set_condition(city, u, "jailed", 1, "went for Aldric")
         r["facts"] = ("went for Aldric himself - he's bigger than he looks, sat on them until they calmed down, and "
                       "tied them to the post by the shack for the night. No one was badly hurt")

@@ -240,3 +240,15 @@ def test_the_hosted_comment_model_is_optional_and_falls_back(monkeypatch):
     monkeypatch.setattr(llm.httpx, "post", boom)
     monkeypatch.setattr(api.local, "_chat", lambda *a, **k: (_json.dumps({"reply": "local"}), "stop"))
     assert api.json("sys", "user", {"type": "object"}) == {"reply": "local"}   # the API is down: local answers
+
+
+def test_a_gift_for_the_kingdom_reaches_the_king(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    p.comment("hauler", "x")
+    p._drain()
+    p.world.city.living["acted_today"] = []
+    out = intents.process(p.world, {"hauler": "I bring lots of resources for the kingdom to enjoy"}, None, 0)
+    assert out[0]["action"] == "gift_king"
+    inv = p.world.agent("king")["life"]["inventory"]
+    assert inv and inv[-1]["from"] == "hauler" and "resources" in inv[-1]["item"]

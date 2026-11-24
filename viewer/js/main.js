@@ -10,7 +10,6 @@ import { Land, V } from "./terrain.js";
 import { Nature } from "./nature.js";
 import { buildingMesh, tentsMesh, pilesMesh, cartMesh, WIN_LIT, FLAME, esc } from "./buildings.js";
 import { Person, Crowd, makePerson } from "./people.js";
-import { loadAssets, A as KIT } from "./assets.js";
 import { Rig, MODES } from "./camera.js";
 import { hash, rng, clamp } from "./noise.js";
 
@@ -433,7 +432,8 @@ function step(dtReal) {
     p.person.root.visible = !st.hidden;
     if (st.hidden) continue;
     p.person.root.position.copy(V(st.pos[0], st.pos[1], land.height(st.pos[0], st.pos[1])));
-    p.person.pose(st.anim, clock + (p.j % 100) / 10, st.walk ? headingTo(st.from, st.to) : st.heading ?? null);
+    const chat = st.anim === "idle" && p.j % 3 !== 0 ? "talk" : st.anim;        // standing about mostly means chatting
+    p.person.pose(chat, clock + (p.j % 100) / 10, st.walk ? headingTo(st.from, st.to) : st.heading ?? null);
   }
   if (crowd.list) {
     crowd.update(crowd.list.map((p) => {
@@ -444,7 +444,7 @@ function step(dtReal) {
       const swing = (Math.sin(clock * 4.5 + p.j) + 1) / 2;
       const lean = st.walk ? -0.08 : st.anim === "chop" || st.anim === "mine" || st.anim === "hammer" ? -0.05 - swing * 0.22
         : st.anim === "forage" || st.anim === "dig" || st.anim === "cut" ? -0.3 - swing * 0.12 : st.anim === "fish" ? -0.05 : 0;
-      return { x: st.pos[0], y: y + (st.sit || st.anim === "sit" ? -0.3 : 0), z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100, bob, lean, lie: st.lie,
+      return { x: st.pos[0], y, z: -st.pos[1], talk: st.anim === "talk" || (st.anim === "idle" && p.j % 3 !== 0), heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100, bob, lean, lie: st.lie,
         stride: st.walk ? Math.sin(clock * 9 + p.j) * 0.7 : 0, sit: st.sit || st.anim === "sit" || st.anim === "eat",
         walkPose: !!st.walk, work: ["chop", "mine", "hammer"].includes(st.anim) ? "swing" : ["forage", "dig", "cut", "fish"].includes(st.anim) ? "stoop" : null };
     }));
@@ -643,8 +643,8 @@ window.kingdom = {
 // ------------------------------------------------------------------ start
 (async () => {
   bindUi(); resize();
-  await Promise.all([loadIndex(), loadAssets((f) => { const el = document.getElementById("loading"); if (el) el.dataset.kit = Math.round(f * 100); })]);
-  window.__kit = { ready: KIT.ready };
+  await loadIndex();
+  window.__kit = { ready: true };
   if (!index.days.length) { $("empty").classList.add("show"); $("doing").textContent = "No scene loaded yet."; requestAnimationFrame(frame); return; }
   await showDay(index.days.length - 1);
   if (LIVE) { liveShape = shapeOf(S); live = startLive({ onScene: (d) => liveScene(d), onState: liveState }); }

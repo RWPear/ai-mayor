@@ -27,7 +27,7 @@ rises out of the clouds as Emberfall grows.
   cliffs, the warm springs...), and the island throws things at it: sky-whales, falling stars, a door in the hill.
 - **Skarn the Red** camps on a black crag floating to the north and sends raiders across on gliders once there's
   something worth taking.
-- **In 3D:** low-poly island, KayKit buildings, little "pip" people. Fixed recorders make timelapses of the
+- **In 3D:** a low-poly island, box-and-triangle houses, and little round-headed people who waddle about, work and chat. Fixed recorders make timelapses of the
   island growing.
 
 Guides: [docs/PLAY.md](docs/PLAY.md) (playing it live), [docs/FRONTIER.md](docs/FRONTIER.md) (how Emberfall
@@ -108,6 +108,3 @@ Releasing: work on `dev`; merge to `main` and tag (`git tag v0.3.0 && git push -
    step is the Replies panel in `./kingdom play` today; n8n to your phone later).
 2. **The daily video:** a recorder timelapse + Aldric's journal as narration + captions.
 
-## Credits
-
-3D buildings: KayKit Medieval Hexagon Pack by Kay Lousberg (CC0), www.kaylousberg.com.

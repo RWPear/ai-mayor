@@ -30,20 +30,20 @@ to see what it is. Click a line in the feed to jump there.
 
 ## What you see
 
-**The models:** buildings, building stages and scaffolding, ruins, tents and store piles come from the free
-KayKit *Medieval Hexagon Pack* by Kay Lousberg (CC0 - free for any use; www.kaylousberg.com), in
-`viewer/assets/kaykit/` with its licence.
+**The models are all hand-built and deliberately simple** (`viewer/js/buildings.js`): a house is a box, a
+triangle roof, a door and a window or two. Every building is a variation on that - a hut is a small one, a
+longhouse a long one with two doors, rowhouses are two or three side by side, a tower is a tall stone box with
+a pointed roof, a garden is a bed of soil with green rows. Settlers' own builds get red roofs, Aldric's blue.
+While something's going up you see its footing, walls rising with progress and poles round it; the roof goes
+on at the end. Windows glow at night, chimneys smoke morning and evening.
 
-**The people are pips** (`viewer/js/people.js`): little faceted gumdrops in their role's colour, a shade
-different each, with two bead eyes, floating nub hands, stubby feet and a hat that says what they do (a straw
-hat for farmers, a helmet for guards, a hood for thieves and monks, a pointy hat for scholars, a tuft of hair
-for anyone without a trade). They hop when they walk and squash when they land, swing tools, stoop to dig,
-sit by the fire and blink. Aldric is a slightly bigger royal-blue pip with a moustache and a battered hat
-(a crown once he's crowned). The crowd is the same pips drawn instanced, so hundreds cost a few draw calls.
-A house is picked by what it's called (a smithy,
-a tavern, a mill, a chapel...) and then by its shape, scaled to its lot; people's own builds use red roofs,
-the king's blue. The shack, fire pits, walls, roads and bridges are still hand-built. `?assets=off` shows
-the hand-built kit for everything.
+**The people** (`viewer/js/people.js`) are a round head on a body, in one of three shapes: **tall** (a
+bowling pin), **wide** (a blob) or **small** (a bean). The body colour says what they do (green for
+woodcutters, gold for farmers, blue for fishers, red for guards...), a shade off each so a crowd isn't one
+colour. No arms, legs or tools: all the life is in how they move - a waddle when they walk, a bow and bob as
+they work, a stoop when they garden or fish, a nod and a wobble when they talk (anyone standing about is
+usually chatting), a squash when they sit, lying flat asleep, and they blink. Aldric is a bigger blue one
+(with a little crown once he's crowned). The crowd is drawn instanced: hundreds of people are five draw calls.
 
 **The look:** in the spirit of Thronefall, but a world you can walk around in: clean flat colours, no
 textures, low-poly faceted ground, chunky trees (a few already turning orange), golden thatch and cream
