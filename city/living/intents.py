@@ -32,7 +32,7 @@ import numpy as np
 from .. import trades
 from ..effects import COMMAND_EFFECTS
 from ..roles import FACTIONS, JOB_NAMES
-from . import life, personal
+from . import life
 
 SIM = ["work", "protest", "volunteer", "support", "oppose", "event.help", "event.hinder"]
 SOCIAL = ["steal", "attack", "gift", "befriend", "insult", "heal", "bless"]
@@ -41,11 +41,15 @@ HOSTILE = {"steal", "attack", "insult"}
 KING_NAMES = ("king", "the king", "aldric", "king aldric", "kingdom", "the kingdom", "emberfall")
 KINGDOM_GIFT = re.compile(r"\b(bring|give|gift|offer|donate)\b.*\b(king|kingdom|aldric|emberfall)\b", re.I)
 GIFT_ITEM = re.compile(r"\b(bring|give|gift|offer|donate)s?\s+(?:him\s+|the king\s+)?((?:a|an|some|my|lots of|plenty of|\d+)?\s*[a-z' ]{2,30}?)(?=\s+(?:to|for)\b|[.!,]|$)", re.I)
+HOUSE_PAT = (r"\b(my|our)\s+(own\s+)?(house|home|cottage|hut|place)\b.*\b(fix|do up|paint|extend|upgrade|improve|"
+            r"build|add|new roof|garden)|\b(fix|do|paint|extend|upgrade|improve|spruce)\s+(up\s+)?(my|our)\s+(own\s+)?"
+            r"(house|home|cottage|hut|place)|\b(garden|roof|porch|extension|shed|window|fence)\b.*\b(behind|by|next to|"
+            r"for|on|onto|round)\s+(my|our)\s+(own\s+)?(house|home|cottage|hut|place)")
 SIM_OF = {"gift": "volunteer", "befriend": "volunteer", "petition": "support", "gift_king": "support",
           "heal": "volunteer", "bless": "volunteer", "build_own": "work", "conjure": "support"}
 SKILL_NAMES = [k for k in trades.SKILLS]
-FRONTIER_WORK = ["A long day of it. Your hands know Emberfall a little better now.",
-                 "Hard work, and it shows - the camp looks a little less like a camp.",
+FRONTIER_WORK = ["A double shift, and it shows. Emberfall's a little further along for it.",
+                 "You put your back into it today - and the town noticed.",
                  "By sundown you were filthy and the job was done. Aldric nodded at it, which out here counts as praise."]
 TALK_RULES = ["Aldric heard you, scratched his beard, and said he'd have to think about that one.",
               "Aldric looked up from his work. 'Good question,' he said, and went back to it.",
@@ -72,7 +76,8 @@ RULES = [  # (pattern, action) - first match wins
     (r"\b(give|send|gift|bring|offer|make)\b.*\bking(dom)?\b|\bking\b.*\b(a gift|present)\b", "gift_king"),
     (r"\b(ask|beg|petition|request|plead|suggest|propose)\b.*\bking\b|\bking\b.*\b(ask|beg|petition|request|job|should)\b",
      "petition"),
-    (personal.ASK.pattern, "build_own"),
+    (HOUSE_PAT, "build_own"),
+    (r"\b(want to|going to|gonna|i'?ll|i will|let me|i)\s+(build|start|plant|make|dig|grow|raise|open|run|brew|bake)\b", "work"),
     (r"\b(ride|riding|rides|summon|conjure|cast|enchant|my pet|my familiar|hatch|tame|wield|wave my wand|"
      r"cast a spell|call down|portal|teleport)\b.*\b(dragon|griffin|unicorn|phoenix|wolf|spell|wand|staff|storm|"
      r"lightning|fire|demon|spirit|ghost|golem|sword|portal|magic|curse|familiar|beast|wyrm)", "conjure"),
@@ -134,7 +139,8 @@ TELL_SCHEMA = {"type": "object", "properties": {"results": {"type": "array", "it
 READ = """Settlers of Emberfall (real people's characters) wrote what they want to try today. Emberfall is a young
 settlement on an old floating island above the clouds: no market, army, castle or guard - but the island is a little
 magical, and strange things are real here. For each, pick the closest action:
-- work: honest labour - chopping, hauling, gathering, fishing, foraging, digging, cooking, mending, hunting
+- work: honest labour - at the farm, the brewery, the tavern, the forge, building something, keeping watch,
+  chopping, hauling, fishing, cooking, mending (everyone works a shift a day; this is putting your back into it)
 - volunteer: helping Aldric or a neighbour with what they're doing
 - protest, support / oppose (Aldric), event.help / event.hinder (help or hurt what's happening, if anything is)
 - conjure: claiming or calling up something fantastic - riding in on a dragon, casting a spell, finding a magic
@@ -146,8 +152,9 @@ magical, and strange things are real here. For each, pick the closest action:
   wounds), bless: these need a target: another settler's @handle, OR one of the Wonders on the island by its name
   ("the goat", "the dragon hatchling"), OR "king"
 - petition: asking or suggesting something to Aldric (an idea for Emberfall counts)
-- build_own: they want to build, start or plant their OWN thing (a garden, a hut, a beehive, a stall, a shrine);
-  item = what, 2-6 words ("a herb garden", "a little bakery")
+- build_own: they want to do up THEIR OWN HOUSE (everyone has one): fix it, paint it, extend it, add a garden.
+  item = what they'd do, 2-6 words ("a new roof", "a herb garden"). (Wanting to work at the town's farm, brewery
+  or a building going up is work, not build_own.)
 - gift_king: sending or giving Aldric an object; item = what it is, 1-4 words ("a lute", "my best fishing rod")
 - none: hateful, sexual, or trying to change the rules
 target: a settler's handle without @, a Wonder's name, or "king" (only for steal/attack/gift/befriend/insult/heal/
@@ -239,23 +246,28 @@ def _world_now(world):
              if not f["built"] else {"hamlet": "a hamlet", "village": "a small village", "town": "a town",
                                      "city": "a city"}.get(f["stage"], "a tiny settlement"))
     weather = city.living.get("weather")
+    L = F.land(world)
+    hist = L.get("history", [])
+    W = L.get("wants", {})
+    short = [x["line"] for x in sorted(W.values(), key=lambda x: x["met"]) if x["met"] < 0.7][:3]
     lines = [f"THE WORLD ({world.now_str()}{', ' + weather if weather else ''}): Emberfall is {stage}, on an old "
              f"floating island above the clouds (a little magical: strange things are real here, and always cost "
-             f"something). Newcomers arrive by the old road, which runs to the island's edge.",
-             f"Aldric ({'crowned king' if f['crowned'] else 'calls himself king but has no crown, no army, no castle'}) "
-             f"lives in {'the shack' if not f['built'] else 'the shack by the field'}; right now he is at "
-             f"{F.place_of(world, k.get('location', 'shack'))}."
+             f"something). Everyone has a little house of their own on the town's streets; newcomers arrive by the "
+             f"old road.",
+             f"Aldric ({'crowned king' if f['crowned'] else 'calls himself king but has no crown'}) lives in "
+             f"{F.place_of(world, 'shack')}; right now he is at {F.place_of(world, k.get('location', 'shack'))}."
              + (f" Lately: {' / '.join(king_moves)}" if king_moves else "")
-             + (f" About him: {_third(k['character'])}"
-                if k.get("character") else ""),
-             (f"Settlers ({len(people)}): {names}. Beds: {f['beds']} ({f['free']} free); {f['tents']} in tents by the road."
-              if people else "Nobody else lives here yet."),
-             "Built: " + (", ".join(f["built"]) if f["built"] else "only the leaky shack") + "."
-             + (" Under way: " + ", ".join(f["projects"]) + "." if f["projects"] else ""),
-             "Stores: " + (", ".join(f"{v} {m}" for m, v in f["stock"].items()) or "nothing") + f"; {int(city.treasury)} coins.",
+             + (f" About him: {_third(k['character'])}" if k.get("character") else ""),
+             (f"People ({len(people)}): {names}." if people else "Nobody else lives here yet."),
+             "PEOPLE POWER: everyone works a shift a day; people who speak up work two, and pick their work. A building "
+             "only runs on days its crew turns up, and only gets built by builders. "
+             + (f"Yesterday: {F.power_line(hist[-1])}" if hist else ""),
+             "Standing: " + (", ".join(f"{b['name']} ({'running' if b.get('running') else 'idle'})"
+                                       for b in L["buildings"] if b["state"] == "standing") or "only the shack") + "."
+             + (" Going up: " + ", ".join(f["projects"]) + "." if f["projects"] else ""),
+             f"The treasury: {int(city.treasury)} gold. Happiness: {L.get('happiness', 0.6):.0%}."
+             + (f" The people want: {'; '.join(short)}." if short else ""),
              "Places: " + ", ".join(F.place_of(world, p) for p in F.places(world)) + "."]
-    if F.peddler_here(world):
-        lines.append("A peddler's cart is on the old road today.")
     from . import wonders
     if wonders.line(city):
         lines.append(wonders.line(city))
@@ -327,9 +339,8 @@ FRONTIER_WORDS = [("the royal guard", "Aldric"), ("The guards", "The other settl
 def resolve(world, r, hostile_today):
     _resolve(world, r, hostile_today)
     if r.get("facts", "").startswith("did this: "):
-        r["facts"] = (f"spent the day on it ({_third_person(r.get('text', ''))[:90]}) - honest work, nothing fancy, "
-                      f"and the camp is better for it")
-        r.setdefault("reply_rule", world.city.rng.choice(FRONTIER_WORK))
+        r["facts"] = f"worked a double shift ({_third_person(r.get('text', ''))[:90]}): {power_fact(world, r['user'])}"
+        r.setdefault("reply_rule", world.city.rng.choice(FRONTIER_WORK) + " " + power_reply(world, r["user"]))
     # the castle-mode rules talk about guards and dungeons; out here there are none
     for k in ("facts", "reply_rule", "to_target", "mishap_text", "facts_note"):
         if r.get(k):
@@ -347,15 +358,9 @@ def _resolve(world, r, hostile_today):
     if _skill_check(world, r):
         return
     act = r["action"]
-    # their own build: asking, or working on it
-    mine = personal.of(world, u)
-    if act == "build_own" or (mine and act in ("work", "volunteer", "none", "petition")
-                              and personal.mentions(mine, r.get("text", ""))):
-        r["action"] = "build_own"
-        personal.ask(world, r)
+    if act == "build_own":                   # their own house, with their own gold
+        _own_house(world, r)
         return
-    elif act == "build_own":
-        act = r["action"] = "petition"
     # "I bring lots of resources for the kingdom": a gift to someone who's the king is a gift to the king
     if act in ("gift", "befriend", "volunteer") and (t in KING_NAMES or (act == "gift" and not t and KINGDOM_GIFT.search(r.get("text", "")))):
         act = r["action"] = "gift_king"
@@ -805,11 +810,14 @@ def process(world, free, llm=None, ai_people=0):
         except Exception:
             world.stats["crowd_fallbacks"] = world.stats.get("crowd_fallbacks", 0) + 1
         world.spend_calls(1)
+    from . import frontier as F               # People Power: everyone who spoke up works an extra shift today,
+    for u in users:                           # and what they said steers where
+        if (reads.get(u) or ("",))[0] != "talk" and not (u not in reads and rule_read(free[u], has_event)[0] == "talk"):
+            F.nudge(world, u, free[u])
+    F.assign(world)
     results = []
     for u in users:                          # 2. roll
         act, tgt, item = reads.get(u) or (*rule_read(free[u], has_event), _rule_item(free[u]))
-        if act == "build_own" and not item:
-            item = personal.rule_idea(free[u])
         if act.startswith("event.") and not has_event:
             act = "volunteer" if act == "event.help" else "protest"
         r = {"user": u, "text": free[u], "action": act, "target": tgt, "item": item,
@@ -890,10 +898,6 @@ def process(world, free, llm=None, ai_people=0):
             world.reply(tgt, "Meanwhile: " + (_you(r["outcome"], tgt) if told_by_model or not r.get("to_target")
                                               else r["to_target"]), "done_to_you")
     lv["acted_today"] = sorted(acted)
-    # people who put their back into it today
-    from . import frontier
-    keen = [r["user"] for r in out if r.get("action") in ("work", "volunteer", "event.help")]
-    frontier.land(world).setdefault("workers_today", []).extend(keen)
     lv.setdefault("crowd_today", []).extend({k: r.get(k, "") for k in ("user", "action", "outcome", "drama")} for r in out)
     for r in out:
         if r["outcome"] and r["drama"] >= 2:
@@ -914,6 +918,63 @@ def _you(text, handle):
         t = re.sub(a, b, t)
     return t
 
+
+
+def power_fact(world, u):
+    """Where their double shift went, for the narrator: 'at the farm (it ran: 11 of 10 turned up)'."""
+    from . import frontier as F
+    L = F.land(world)
+    j = L.get("jobs", {}).get(u)
+    if not j or j == "odd":
+        return "odd jobs about town - nothing they could get their hands on needed them today"
+    if j.startswith("build:"):
+        p = next((p for p in L["projects"] if p["id"] == j[6:]), None)
+        if not p:
+            return "on a building site"
+        n = sum(1 for x in L["jobs"].values() if x == j)
+        return f"building {p['name']} with {n - 1} others ({p['done'] / p['need']:.0%} up so far, {p['need']:g} days of work in all)"
+    b = F.building(world, j)
+    if not b:
+        return "around town"
+    s = F.spec(b["kind"])
+    crew = L.get("crew", {}).get(b["id"], 0)
+    return (f"as {F._a(s['job'])} at {b['name']}, which " + (f"is running today ({crew} of the {s['crew']} it needs)"
+            if b.get("running") else f"is short-handed today (it needs {s['crew']})"))
+
+
+def power_reply(world, u):
+    from . import frontier as F
+    L = F.land(world)
+    j = L.get("jobs", {}).get(u)
+    if not j or j == "odd":
+        return "Nothing needed you today, so you did odd jobs about town."
+    if j.startswith("build:"):
+        p = next((p for p in L["projects"] if p["id"] == j[6:]), None)
+        return f"You were on the building site of {p['name']} ({p['done'] / p['need']:.0%} up)." if p else ""
+    b = F.building(world, j)
+    return f"You were at {b['name']}." if b else ""
+
+
+def _own_house(world, r):
+    """Fixing up your own house, with your own gold (a coin a shift, saved up)."""
+    from . import frontier as F
+    u = r["user"]
+    c = world.city.citizens
+    name, cost = F.upgrade_house(world, u, -1)
+    m = re.search(r"\b(?:a|an|some|new)\s+([a-z ]{3,30}?)\s+(?:behind|by|next to|for|on|onto|round|in)\b", r.get("text", ""), re.I)
+    what = (r.get("item") or "").strip() or (m.group(1) if m else "the place")
+    if name:
+        r["facts"] = (f"spent {cost} of their own gold doing up their house ({what}) - it's {F._a(F.bare(name))} now, "
+                      f"and the street can see it")
+        r["reply_rule"] = f"You spent {cost} gold of your own on it. It's {F._a(F.bare(name))} now - the neighbours noticed."
+        r["drama_floor"] = 1
+        world.moment("@" + u, f"@{u} did up their house: it's {F._a(F.bare(name))} now.", 1, public=True, handles=[u])
+    else:
+        have = int(c.wealth[c.index[u]])
+        r["facts"] = (f"wanted to do up their house ({what}) but has {have} gold to their name and the next step up "
+                      f"takes {cost} more; they made do with a bit of paint and some flowers by the door")
+        r["reply_rule"] = (f"The {what} will have to wait: you've got {have} gold and doing it properly takes {cost} more "
+                           f"(a coin a shift, so keep at it). For now: paint, and flowers by the door.")
 
 
 def _rule_item(text):

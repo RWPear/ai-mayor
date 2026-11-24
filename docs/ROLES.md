@@ -5,6 +5,14 @@ Every follower starts as a plain settler: nobody on the island has a trade yet. 
 teller, a monk, a smuggler. The code is `city/trades.py`. (A role is who they are; conjuring a dragon is something
 else - see Wonders in [FRONTIER.md](FRONTIER.md).)
 
+## Professions come from People Power
+
+The work people actually do is different: everyone works a shift a day at whatever Emberfall needs (see
+[FRONTIER.md](FRONTIER.md)), and **four days running at the same kind of work makes you it** - a farmer, a
+brewer, a barkeep, a builder, a guard. That's a profession: it shows in 3D (your colour), you hear about it, and
+it's where you're sent first. Saying what you want ("I want to be a brewer") steers your shifts that way; a
+role you take up below is who you are on top of it.
+
 ## Taking up a role
 
 Any of these, on any post:

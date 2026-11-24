@@ -23,9 +23,8 @@ from .. import storyteller
 
 CONSEQUENCES = {
     "nothing": {},
-    "food_loss": {"stock.food": -3}, "food_gain": {"stock.food": 3},
-    "wood_loss": {"stock.wood": -3}, "wood_gain": {"stock.wood": 3},
-    "stone_loss": {"stock.stone": -3}, "stone_gain": {"stock.stone": 3},
+    "gold_loss": {"gold": -6}, "gold_gain": {"gold": 6},
+    "building_damaged": {"build.any": -1},
     "defense_loss": {"service.defense": -0.04}, "defense_gain": {"service.defense": 0.04},
     "mood_loss": {"mood": -0.03}, "mood_gain": {"mood": 0.03},
     "loyalty_loss": {"loyalty": -0.03}, "loyalty_gain": {"loyalty": 0.03},
@@ -66,7 +65,7 @@ followed by real people online. The island is a little magical: wonders are real
 appear in hills, land rising from the clouds, falling stars, griffins, wizards) and they always cost something.
 Look at what has actually been happening and decide whether something should happen next, and what. Best of all:
 CONSEQUENCES - things that grow out of what Aldric, Skarn and the people actually did (a project that failed, a
-wonder someone conjured, a feud, people sleeping in tents, a hungry week). Sometimes something strange from the
+wonder someone conjured, a feud, a building nobody turns up to run, a tavern that ran dry). Sometimes something strange from the
 island or the sky. Aim for things people will want to screenshot.
 Rules:
 - tier {tier} of 3. tier 1 = everyday trouble, small stakes. tier 2 = serious. tier 3 = disasters. Match the tier.
@@ -100,7 +99,7 @@ def _effect(o, cap):
         return {}
     eff = CONSEQUENCES.get(o.get("consequence"), {})
     k = SIZE[max(1, min(cap, int(o.get("size") or 1)))]
-    return {key: (v if key == "island" else round(v * k) if key.startswith(("stock.", "treasury")) else v * k)
+    return {key: (v if key == "island" else v if key.startswith("build.") else round(v * k) if key.startswith(("gold", "treasury")) else v * k)
             for key, v in eff.items()}
 
 
@@ -183,8 +182,10 @@ def happenings(world):
                                                          if isl["lobes"] else "") + ". Events should fit that: "
         "strange weather on the cloud sea, creatures, wonders, falling stars, a sick goat, a fight over a well - not "
         "castles and kingdoms.",
-        f"Settlers: {f['settled']} ({f['tents']} in tents, {f['free']} free beds). Stores: {f['stock']}. "
-        f"Built: {', '.join(f['built']) or 'nothing'}. Building: {', '.join(f['projects']) or 'nothing'}.",
+        f"People: {f['settled']}, each in a house of their own; they all work a shift a day (People Power). "
+        f"Treasury: {f['gold']} gold. Happiness: {f['happiness']:.0%}. "
+        f"Built: {', '.join(f['built']) or 'nothing'} (running today: {', '.join(f['running']) or 'nothing'}). "
+        f"Going up: {', '.join(f['projects']) or 'nothing'}.",
         wonders.line(city) or "No wonders on the island yet.",
         "Who lives here: " + _who_lives_here(city),
         ("Skarn the Red's war camp on the crag to the north: " + (f"{c['warriors']} warriors" if c.get("arrived")

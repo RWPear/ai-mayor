@@ -467,8 +467,10 @@ class World:
         if not len(a):
             return []
         day = 7 <= self.hour() < 19
-        here = [int(i) for i in a[:3000] if (F.home_of(c, i) == pid if day else
-                                              (pid == "camp" and int(c.walled[i]) == -2))]
+        jobs = F.land(self).get("jobs", {})
+        bid = F.places(self).get(pid, {}).get("built")
+        here = [int(i) for i in a[:3000] if day and (jobs.get(c.handles[int(i)]) == bid if bid else
+                                                     (pid == "square" and jobs.get(c.handles[int(i)]) == "odd"))]
         return self.city.rng.sample(here, min(n, len(here))) if here else []
 
     # ------------------------------------------------------------------ comments through the day
@@ -542,7 +544,8 @@ class World:
         cmds = (self.city.pack or {}).get("commands", {})   # people who said they'd work today really do
         keen = [u for u, w in actions.items() if str(cmds.get(w, "")).split(":")[0] in ("work", "volunteer",
                                                                                         "event.help")]
-        F.land(self).setdefault("workers_today", []).extend(keen)
+        for u in keen:                                # a WORK command: an extra shift, wherever they're needed
+            F.nudge(self, u, "")
         self._hour_free.update(free)
         self._hour_story.update(story)
         bad = {f["user"] for f in flagged}
@@ -688,33 +691,22 @@ class World:
         return m
 
     def _frontier_tick(self):
-        """The frontier's clockwork: arrivals, word from the road, settlers' work, meals, the peddler."""
+        """Emberfall's clockwork: everyone's jobs in the morning, the little things all day, People Power counted
+        in the evening (frontier.py)."""
         t = self.clock % 1440
-        if t % 60 == 0:                          # the 3D view's hourly snapshot (trees, tents, stores, progress)
+        if t % 60 == 0:                          # the 3D view's hourly snapshot (projects rising, arrivals)
             from . import scene
             scene.sample(self)
-        L = F.land(self)
-        day = self.city.day + 1
         if t == 6 * 60:
-            F.morning(self)
-            F.peddler(self)
-        if t == 3 * 60:
-            F.rough_night(self)
+            F.assign(self)                       # today's jobs (comments through the day move people about)
         if self.city.living.get("risen_today"):
             F.announce_risen(self)
         if t % 120 == 0 and (self.city.citizens.status == F.ROAD).any():   # (an old save's road: let them in)
             F.arrive(self)
-        if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
-            F.labor(self, 0.25)
         from . import routine                    # everyone's day, and the little things in it
         routine.tick(self)
-        if t == 20 * 60:
-            F.meals(self)
-        if t == 21 * 60:                         # evenings: people's own builds
-            from . import personal
-            personal.daily(self)
-        if t == 18 * 60 + 30:                    # just before the post closes
-            F.day_summary(self)
+        if t == 18 * 60:                         # the end of the working day: People Power, counted
+            F.settle(self)
 
     def _warlord_arrival(self):
         """The antagonist doesn't exist for the first few days - then rumours, then smoke in the north.

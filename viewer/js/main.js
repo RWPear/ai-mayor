@@ -8,7 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { makeTextures, TEX, M } from "./materials.js";
 import { Land, V } from "./terrain.js";
 import { Nature } from "./nature.js";
-import { buildingMesh, tentsMesh, pilesMesh, cartMesh, WIN_LIT, FLAME, esc } from "./buildings.js";
+import { buildingMesh, housesMesh, streetsMesh, WIN_LIT, FLAME, esc } from "./buildings.js";
 import { Person, Crowd, makePerson } from "./people.js";
 import { Rig, MODES } from "./camera.js";
 import { hash, rng, clamp } from "./noise.js";
@@ -38,7 +38,7 @@ makeTextures();
 const index = { days: [], recorders: [] };
 let S = null, land = null, nature = null, rig = null, town = null, people = [], crowd = null, king = null;
 let now = 0, playing = !RECORD, speed = 6, lastEv = -1, captionUntil = 0, dayIx = 0;
-let smoke = null, fires = [], flags = [], lights = [], timed = [], projects = [], staged = [], piles = null;
+let smoke = null, fires = [], flags = [], spin = [], lights = [], timed = [], projects = [], staged = [];
 let live = null, liveClock = null, liveRate = 1, curT = 0;
 
 async function loadIndex() {
@@ -61,8 +61,8 @@ async function loadIndex() {
 }
 const DEFAULT_RECORDERS = [
   { name: "overview", pos: [-70, 95, -150], look: [30, 0, 10], fov: 38 },
-  { name: "the_field", pos: [5, 28, -40], look: [40, 0, 10], fov: 45 },
-  { name: "the_camp", pos: [20, 22, -95], look: [46, 0, -64], fov: 45 },
+  { name: "the_town", pos: [40, 75, -75], look: [0, 0, 5], fov: 45 },
+  { name: "the_square", pos: [-2, 14, -30], look: [-13, 0, -13], fov: 50 },
   { name: "top", pos: [32, 160, -20], look: [32, 0, 8], fov: 40 },
   { name: "king", follow: "king", offset: [9, 7, 9], fov: 45 },
 ];
@@ -84,7 +84,7 @@ async function showDay(i, keepTime = false) {
     land.recording = RECORD;
     nature = new Nature(scene, land, S);
     rig = new Rig(camera, renderer.domElement, land);
-    crowd = new Crowd(scene, QUALITY === "low" ? 220 : 600);
+    crowd = new Crowd(scene, QUALITY === "low" ? 400 : 1500);
     setupPost();
     const kp = S.actors.king.start.pos;
     rig.lookAt(kp, 18);
@@ -101,51 +101,43 @@ async function showDay(i, keepTime = false) {
   }
   if (town) scene.remove(town);              // (geometry is small and partly shared between days: let it go)
   town = new THREE.Group(); scene.add(town);
-  fires = []; flags = []; timed = []; projects = []; staged = [];
+  fires = []; flags = []; spin = []; timed = []; projects = []; staged = [];
   const smokeAnchors = [];
-  const ctx = { smoke: smokeAnchors, fires, flags, crowned: S.settlement.crowned };
-  const lots = [];
-  const pitBuilt = S.buildings.some((x) => x.shape === "firepit" && x.state === "standing");
+  const ctx = { smoke: smokeAnchors, fires, flags, spin, crowned: S.settlement.crowned };
+  const lots = [];                                 // (grass and trees keep off these)
   for (const b of S.buildings) {
-    if (b.id === "b0" && pitBuilt) b.noPit = true;                // his new fire pit replaces the old cold one
-    if (b.shape !== "wall_ring" && b.pos) lots.push({ pos: b.pos, hw: (b.rot % 180 ? b.size[1] : b.size[0]) / 2, hd: (b.rot % 180 ? b.size[0] : b.size[1]) / 2 });
+    if (b.shape !== "wall" && b.pos) lots.push({ pos: b.pos, hw: 4.6, hd: 4.6 });
     const m = buildingMesh(b, land, ctx);
     town.add(m);
-    const ups = (b.upgrades || []).filter((u) => u.t && u.t > S.start);
-    if (ups.length) {                            // the shack as it was before today's fixes, then after each one
-      const times = [...new Set(ups.map((u) => u.t))].sort((x, y) => x - y);
-      const stages = [{ at: -Infinity, mesh: buildingMesh({ ...b, upgrades: b.upgrades.filter((u) => !u.t || u.t <= S.start) }, land, { ...ctx, smoke: [], fires: [], flags: [] }) }];
-      times.slice(0, -1).forEach((tt) => stages.push({ at: tt, mesh: buildingMesh({ ...b, upgrades: b.upgrades.filter((u) => !u.t || u.t <= tt) }, land, { ...ctx, smoke: [], fires: [], flags: [] }) }));
-      stages.push({ at: times[times.length - 1], mesh: m });
-      stages.forEach((st) => { if (st.mesh !== m) town.add(st.mesh); });
-      staged.push(stages);
-    }
-    const when = b.state === "ruin" ? b.t : b.built_t;
-    if (when && when > S.start) {               // went up (or fell down) today: scaffolding until then
-      const before = buildingMesh({ ...b, state: "scaffold", progress: 0.9 }, land, { ...ctx, smoke: [], fires: [], flags: [] });
+    if (b.built_t && b.built_t > S.start) {       // went up today: scaffolding until then
+      const before = buildingMesh({ ...b, state: "scaffold", progress: 0.9, upgrade_of: null }, land, {});
       town.add(before);
-      timed.push({ at: when, after: m, before });
+      timed.push({ at: b.built_t, after: m, before });
     }
   }
   for (const p of S.projects) {
-    lots.push({ pos: p.pos, hw: (p.rot % 180 ? p.size[1] : p.size[0]) / 2, hd: (p.rot % 180 ? p.size[0] : p.size[1]) / 2 });
+    if (p.shape !== "wall") lots.push({ pos: p.pos, hw: 4.6, hd: 4.6 });
     projects.push({ p, mesh: null, shown: -1 });
   }
-  town.add(tentsMesh(S.tents, land, ctx));
-  if (S.routine) {                             // the fire everyone eats at, with logs to sit on
-    const C = S.routine.commons, pit = buildingMesh({ id: "commons", name: "the fire", shape: "firepit", pos: C, size: [3, 3], state: "standing" }, land, { ...ctx, fires: [] });
-    pit.scale.setScalar(1.4); town.add(pit);
+  town.add(housesMesh(S.houses || [], land));
+  for (const h of S.houses || []) lots.push({ pos: [h[0], h[1]], hw: h[4] / 2 + 0.6, hd: h[4] / 2 + 0.6, house: true });
+  const C = (S.town && S.town.square) || (S.routine && S.routine.commons);
+  if (C) {                                         // the square: the fire everyone eats at, with logs to sit on
+    const pit = new THREE.Group();
+    for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2, st = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5), M(0xdccfac)); st.position.set(Math.cos(a) * 0.9, 0.17, Math.sin(a) * 0.9); pit.add(st); }
+    pit.position.copy(V(C[0], C[1], land.height(C[0], C[1]))); pit.scale.setScalar(1.3); town.add(pit);
     const f = new THREE.Object3D(); pit.add(f); fires.push({ obj: f, commons: true });
     for (let k = 0; k < 5; k++) {
-      const a = k / 5 * Math.PI * 2 + 0.3, x = C[0] + Math.cos(a) * 2.6, z = C[1] + Math.sin(a) * 2.6;
-      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.8, 6), M(0x7a5634)); log.rotation.set(0, -a, Math.PI / 2);
+      const a = k / 5 * Math.PI * 2 + 0.3, x = C[0] + Math.cos(a) * 2.8, z = C[1] + Math.sin(a) * 2.8;
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.8, 6), M(0x8a4a26)); log.rotation.set(0, -a, Math.PI / 2);
       log.position.copy(V(x, z, land.height(x, z) + 0.3)); log.castShadow = true; town.add(log);
     }
+    lots.push({ pos: C, hw: 5, hd: 5, yard: true });
   }
-  piles = pilesMesh(S.piles, land); town.add(piles);
-  if (S.peddler) { const cart = cartMesh(S.peddler.pos, land); cart.userData.until = S.peddler.until; town.add(cart); timed.push({ at: S.peddler.until, after: new THREE.Group(), before: cart, peddler: true }); }
-  land.paint(S.trails || [], lots);
-  land.placeGrass(lots, S.trails || []);
+  const streets = ((S.town && S.town.streets) || []).map(([a, b]) => ({ from: a, to: b, wear: 1, w: 1.3 }));
+  town.add(streetsMesh((S.town && S.town.streets) || [], land));
+  land.paint([], lots.filter((l) => !l.house));
+  land.placeGrass(lots, streets);
   nature.clearAround(lots);
   addFires(); addSmoke(smokeAnchors); addPeople();
   addLabels();
@@ -188,13 +180,15 @@ function addSmoke(anchors) {
 }
 
 // ------------------------------------------------------------------ people
-// Everyone keeps the same simple day (city/living/routine.py): up at home, breakfast at the fire, work, lunch at
-// the fire, work, their own time, supper at the fire, bed - each person a few minutes earlier or later than the
-// next. Between blocks they walk; at work they move between real spots (a tree, a rock, a row in the garden).
-// Wherever two of them meet, the simulation says what happened between them (an encounter): they stop, turn to
-// each other and do it, with a little bubble over their heads.
-const WORK_ANIM = { woods: "chop", hill: "mine", river: "fish", field: "forage", road: "idle", camp: "idle", shack: "idle" };
-const ROLE_AT = { woods: ["woodcutter", "lumberjack"], hill: ["mason", "miner"], river: ["fisher", "sailor"], field: ["farmer", "shepherd", "farmhand"], road: ["guard", "scout"] };
+// Everyone keeps the same simple day (city/living/routine.py): up at home, breakfast on the doorstep, off to today's
+// job (People Power: the farm, the brewery, a building site - wherever the simulation sent them), lunch there, back
+// to it, their own time (the tavern, once there is one), supper at the square or at home, bed. Between blocks they
+// walk the streets; at work they move between real spots (a row in the field, a side of the scaffolding). Wherever
+// two meet, the simulation says what happened between them: they stop, turn to each other and do it, with a bubble.
+// Everyone is drawn instanced (two draw calls for the whole town); Aldric and his court are drawn as themselves.
+const WORK_ANIM = { farm: "forage", vineyard: "forage", well: "idle", brewery: "hammer", tavern: "talk", bakery: "hammer",
+  smithy: "hammer", tower: "idle", chapel: "pray", stage: "sing", market: "talk", cellar: "hammer", barracks: "hammer",
+  school: "talk", baths: "idle", keep: "talk" };
 const FREE_ANIM = { river: "fish", field: "forage", woods: "forage" };
 const MEAL = new Set(["breakfast", "lunch", "supper"]);
 const ENC = 24;                                               // minutes two people spend on an encounter
@@ -204,7 +198,6 @@ function addPeople() {
   spotPools = new Map(); byHandle = new Map();
   for (const p of people) town.remove(p.person.root);
   people = [];
-  const placePos = Object.fromEntries(S.places.map((p) => [p.id, p.pos]));
   king = makePerson({ king: true, crowned: S.actors.king.crowned, name: "Aldric" + (S.actors.king.crowned ? ", King of Emberfall" : "") });
   king.root.traverse((o) => { o.userData.tip = `<strong>Aldric</strong>${S.actors.king.becoming ? `<br>${esc(S.actors.king.becoming)}` : ""}`; });
   town.add(king.root);
@@ -212,97 +205,69 @@ function addPeople() {
     const p = makePerson({ role: c.id === "jester" ? "jester" : "steward", handle: c.id, name: c.name });
     town.add(p.root); people.push({ person: p, fixed: [c.pos[0] + 2.5, c.pos[1] - 2], anim: "talk", who: c, roam: c.id === "jester" });
   }
-  const named = S.actors.settlers.slice(0, QUALITY === "low" ? 24 : 90);
-  for (const s of named) {
-    const p = makePerson({ role: s.role, handle: s.handle, name: `@${s.handle}` });
-    const j = hash(s.handle);
-    const sched = s.schedule && s.schedule.length > 3 && s.schedule[0].pos ? s.schedule : template(s.home_pos, s.work, s.work_pos, j);
-    p.root.traverse((o) => { o.userData.tip = `<strong>@${esc(s.handle)}</strong><br>${esc(s.name)}, ${esc(s.role)}${s.condition ? ` (${s.condition})` : ""}<br><span class="muted">${esc(dayLine(sched))}</span>`; });
-    town.add(p.root);
-    const kings = S.projects.filter((x) => !x.owner), proj = kings.length && j % 3 === 0 ? kings[j % kings.length] : null;
-    const own = S.projects.find((x) => x.owner === s.handle);
-    const e = { person: p, s, home: s.home_pos, work: s.work_pos, workPlace: s.work, tent: s.home.tent !== undefined, j, sched, spots: workSpots(s.work, j, proj), own, seat: people.length };
-    people.push(e); byHandle.set(s.handle, e);
-  }
-  // everyone else, as a crowd with the same day (homes: houses by residents, then tents)
-  const homes = [];
-  for (const b of S.buildings) if (b.residents && b.residents.length) for (let k = 0; k < b.residents.length; k++) homes.push({ pos: b.pos, tent: false });
-  S.tents.forEach((t) => { homes.push({ pos: t, tent: true }); homes.push({ pos: t, tent: true }); });
-  const total = Object.values(S.actors.crowd.day || {}).reduce((a, b) => a + b, 0);
-  const want = Math.min(crowd.max, Math.max(0, total - S.actors.settlers.length));
   const list = [];
-  const work = Object.entries(S.actors.crowd.day || {});
-  const kingsP = S.projects.filter((x) => !x.owner), crew = new Map();
-  for (let i = 0; i < want; i++) {
-    const R = rng(i * 13 + S.day);
-    let wp = "field", acc = 0, roll = R() * total;
-    for (const [p, n] of work) { acc += n; if (roll <= acc) { wp = p; break; } }
-    const pj = kingsP.length ? kingsP[i % kingsP.length] : null;           // only so many hands fit on one building
-    const onProject = pj && R() < 0.35 && (crew.get(pj.id) || 0) < (CREW[pj.scale] || 4);
-    if (onProject) crew.set(pj.id, (crew.get(pj.id) || 0) + 1);
-    const wpos = onProject ? pj.pos : placePos[wp] || placePos.field;
-    const h = homes.length ? homes[(i + named.length) % homes.length] : { pos: placePos.field, tent: false };
-    const roles = ROLE_AT[wp] || ["farmer"], j = hash(i * 31 + 7);
-    list.push({ role: onProject ? "mason" : roles[i % roles.length], handle: `c${i}`, home: h.pos, work: wpos, tent: h.tent, j, workPlace: wp,
-      sched: template(h.pos, wp, wpos, j), spots: workSpots(wp, j, onProject ? pj : null), seat: named.length + i });
+  for (const s of S.actors.settlers.slice(0, crowd.max)) {
+    const j = hash(s.handle);
+    const e = { s, handle: s.handle, role: s.role, home: s.door || s.home_pos, workPlace: s.work, work: s.work_pos, j,
+      sched: s.schedule, seat: list.length, spots: workSpots(s.work, j), pos: null };
+    list.push(e); byHandle.set(s.handle, e);
   }
   crowd.set(list);
   crowd.list = list;
 }
 
-// the day for someone the simulation didn't send a schedule for (the crowd): the same shape
-function template(home, workPlace, workPos, j) {
-  const R = S.routine || { day: [{ from: 360, what: "up", where: "home" }, { from: 450, what: "work", where: "work" }, { from: 1110, what: "supper", where: "commons" }, { from: 1290, what: "sleep", where: "home" }], commons: [-14, -8] };
-  const off = (j % 31) - 15, D = R.day;
-  return D.map((b, k) => ({ from: b.from + off, to: (k + 1 < D.length ? D[k + 1].from : 1800) + off, what: b.what,
-    where: b.where === "work" ? workPlace : b.where === "free" ? "commons" : b.where,
-    pos: b.where === "home" ? home : b.where === "work" ? workPos : R.commons }));
-}
-const WORD = { up: "up", breakfast: "breakfast at the fire", lunch: "lunch at the fire", supper: "supper at the fire", sleep: "bed" };
-const FREE_WORD = { river: "fishing", field: "the garden", woods: "the woods", commons: "by the fire", visit: "visiting", own: "their own build" };
-function dayLine(sched) {
+const WORD = { up: "up", breakfast: "breakfast at home", lunch: "lunch at work", supper: "supper", sleep: "bed" };
+function dayLine(p) {
   const hm = (m) => `${String(Math.floor((m % 1440) / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  const name = (id) => (S.places.find((p) => p.id === id) || {}).name || id;
-  return sched.map((b) => `${hm(b.from)} ${WORD[b.what] || (b.what === "free" ? FREE_WORD[b.where] + (b.with ? ` @${b.with}` : "") : name(b.where))}`).join(" · ");
+  const name = (id) => id.startsWith("b:") ? ((S.buildings.find((b) => b.id === id.slice(2)) || {}).name || "work")
+    : id.startsWith("p:") ? `building ${((S.projects.find((b) => b.id === id.slice(2)) || {}).name || "something")}`
+      : (S.places.find((x) => x.id === id) || {}).name || id;
+  return p.sched.map((b) => `${hm(b.from)} ${b.what === "work" || b.what === "free" ? (b.what === "free" && b.where === "visit" ? `visiting @${b.with}` : name(b.where)) : b.what === "supper" ? `supper ${b.where === "home" ? "at home" : "in the square"}` : WORD[b.what]}`).join(" · ");
+}
+function personTip(p) {
+  const s = p.s || {};
+  return `<strong>@${esc(p.handle)}</strong> · ${esc(s.role || "settler")}<br>today: ${esc(s.job || "")}<br><span class="muted">${esc(dayLine(p))}</span>`;
 }
 
-const commonsPos = () => (S.routine && S.routine.commons) || [-14, -8];
+const commonsPos = () => (S.town && S.town.square) || (S.routine && S.routine.commons) || [-13, -13];
 function blockAt(sched, m) {
   for (let k = 0; k < sched.length; k++) { const b = sched[k]; if ((b.from <= m && m < b.to) || (b.from <= m + 1440 && m + 1440 < b.to)) return k; }
   return sched.length - 1;                                    // before getting up: still in bed
 }
-function seat(n, ring = 0) {                                  // a place round the fire, facing it (a sunflower: nobody on anyone's lap)
-  const C = commonsPos(), a = n * 2.39996 + ring, r = 3.6 + 1.2 * Math.sqrt(n);
+function seat(n, ring = 0) {                                  // a place round the fire, facing it (a sunflower)
+  const C = commonsPos(), a = n * 2.39996 + ring, r = 3.8 + 1.15 * Math.sqrt(n);
   const pos = [C[0] + Math.cos(a) * r, C[1] + Math.sin(a) * r];
   return { pos, heading: headingTo(pos, C) };
-}
-function doorstep(p) {                                        // just outside home, toward the fire
-  const C = commonsPos(), h = p.home, d = Math.hypot(C[0] - h[0], C[1] - h[1]) || 1, r = p.tent ? 2 : 4.2;
-  return [h[0] + (C[0] - h[0]) / d * r + ((p.j % 7) - 3) * 0.4, h[1] + (C[1] - h[1]) / d * r];
 }
 // where someone is `into` minutes into block k (after walking there)
 function spotIn(p, k, into) {
   const b = p.sched[k], j = p.j;
-  if (b.what === "sleep") return { pos: p.home, hidden: true };
-  if (b.what === "up") return { pos: doorstep(p), anim: into < 8 ? "idle" : "talk", heading: (j % 628) / 100 };
-  if (MEAL.has(b.what)) {
-    const s = seat(p.seat ?? j % 200), dur = b.to - b.from;
-    const anim = into < Math.min(25, dur * 0.5) ? "eat" : b.what === "supper" && j % 4 === 0 ? "sing" : b.what === "supper" && j % 11 === 0 ? "dance" : (j >>> 2) % 3 ? "talk" : "sit";
+  if (b.what === "sleep") return { pos: b.pos, hidden: true };
+  if (b.what === "up" || b.what === "breakfast" || (b.what === "supper" && b.where === "home")) {
+    const pos = [b.pos[0] + ((j % 5) - 2) * 0.35, b.pos[1]];
+    const anim = b.what === "up" ? (into < 8 ? "idle" : "talk") : into < 25 ? "eat" : "talk";
+    return { pos, anim, heading: (j % 628) / 100, sit: anim === "eat" };
+  }
+  if (b.what === "supper") {
+    const s = seat(p.seat ?? j % 200);
+    const anim = into < 30 ? "eat" : j % 4 === 0 ? "sing" : j % 11 === 0 ? "dance" : (j >>> 2) % 3 ? "talk" : "sit";
     return { pos: s.pos, heading: s.heading, anim, sit: anim === "eat" || anim === "sit" };
   }
   if (b.what === "free") {
-    if (b.where === "commons") { const s = seat(p.seat ?? j % 200, 1.2); return { pos: s.pos, heading: s.heading, anim: j % 3 ? "talk" : "sit", sit: j % 3 === 0 }; }
-    if (b.where === "visit") { const d = [b.pos[0] + 2.6 + (j % 3) * 0.5, b.pos[1] - 3]; return { pos: d, heading: headingTo(d, b.pos), anim: "talk" }; }
-    if (b.where === "own" && p.own) {
-      const o = p.own, a = (j % 628) / 100, r = Math.max(o.size[0], o.size[1]) / 2 + 0.9, pos = [o.pos[0] + Math.cos(a) * r, o.pos[1] + Math.sin(a) * r];
-      return { pos, anim: o.shape === "plot" ? "dig" : "hammer", heading: headingTo(pos, o.pos) };
+    if (b.where === "square") { const s = seat(p.seat ?? j % 200, 1.2); return { pos: s.pos, heading: s.heading, anim: j % 3 ? "talk" : "sit", sit: j % 3 === 0 }; }
+    if (b.where === "visit") { const d = [b.pos[0] + 1 + (j % 3) * 0.5, b.pos[1]]; return { pos: d, heading: headingTo(d, b.pos), anim: "talk" }; }
+    if (b.where.startsWith("b:")) {                      // the tavern, the stage, the chapel: a crowd round it
+      const a = (j * 2.39996) % 6.283, r = 5.6 + (j % 4) * 0.9, pos = [b.pos[0] + Math.cos(a) * r, b.pos[1] + Math.sin(a) * r];
+      const kind = (S.buildings.find((x) => x.id === b.where.slice(2)) || {}).shape;
+      return { pos, heading: headingTo(pos, b.pos), anim: kind === "stage" ? (j % 3 ? "dance" : "sing") : kind === "chapel" ? "pray" : j % 3 ? "talk" : "sing" };
     }
-    const sp = workSpots(b.where, j + 77, null), s = sp[0] || { pos: b.pos, face: null };
+    const sp = workSpots(b.where, j + 77), s = sp[0] || { pos: b.pos, face: null };
     return { pos: s.pos, anim: FREE_ANIM[b.where] || "idle", heading: s.face ? headingTo(s.pos, s.face) : (j % 628) / 100 };
   }
-  // work: from spot to spot (a tree, then the next tree), a while at each
-  const spots = p.spots && p.spots.length ? p.spots : [{ pos: b.pos, face: null, anim: WORK_ANIM[p.workPlace] || "idle" }];
-  const seg = 50 + (j % 40), spotAt = (q) => spots[(hash(j * 7 + q * 13) >>> 0) % spots.length];
+  // work (and lunch at work): from spot to spot, a while at each
+  const spots = p.spots && p.spots.length ? p.spots : [{ pos: b.pos, face: null, anim: "idle" }];
+  if (b.what === "lunch") { const s = spots[0]; return { pos: [s.pos[0] + 0.6, s.pos[1] + 0.6], anim: "eat", sit: true, heading: (j % 628) / 100 }; }
+  const seg = 45 + (j % 40), spotAt = (q) => spots[(hash(j * 7 + q * 13) >>> 0) % spots.length];
   const q = Math.floor(into / seg) + k * 5, at = into - (q - k * 5) * seg;
   const cur = spotAt(q), prev = q > k * 5 ? spotAt(q - 1) : cur;
   const d = Math.hypot(cur.pos[0] - prev.pos[0], cur.pos[1] - prev.pos[1]), walkT = d / WALK;
@@ -312,9 +277,9 @@ function spotIn(p, k, into) {
 
 // where a settler is at minute t: their routine, unless they're in the middle of an encounter
 const WALK = 70;                                              // metres a minute, an easy stroll
-const CREW = { tiny: 1, small: 3, medium: 5, large: 8, huge: 14 };
 function routineAt(p, t) {
   const m = (((t % 1440) + 1440) % 1440), S_ = p.sched;
+  if (!S_ || !S_.length) return { hidden: true };
   const k = blockAt(S_, m), b = S_[k], mm = m >= b.from ? m : m + 1440, into = mm - b.from;
   const kp = (k + S_.length - 1) % S_.length, pb = S_[kp];
   const a = spotIn(p, kp, Math.max(0, pb.to - pb.from - 1)).pos, z = spotIn(p, k, 0).pos;
@@ -342,9 +307,8 @@ function settlerAt(p, t, eventFor) {
     if (!other) return { pos: mine.pos, anim, heading: mine.heading };
     const theirs = routineAt(other, e.t + 1);
     if (me === "a" || theirs.hidden) return { pos: mine.pos, anim: into < 3 ? "idle" : anim, heading: headingTo(mine.pos, theirs.pos), sit: anim === "eat" || anim === "sit" };
-    // b walks over to a, does it with them, and walks back to where they'd be
     const dx = mine.pos[0] - theirs.pos[0], dz = mine.pos[1] - theirs.pos[1], dl = Math.hypot(dx, dz) || 1;
-    const meet = dl > 0.3 ? [theirs.pos[0] + dx / dl * 1.3, theirs.pos[1] + dz / dl * 1.3] : [theirs.pos[0] + 1.3, theirs.pos[1]];
+    const meet = dl > 0.3 ? [theirs.pos[0] + dx / dl * 1.1, theirs.pos[1] + dz / dl * 1.1] : [theirs.pos[0] + 1.1, theirs.pos[1]];
     const walkT = Math.min(3, Math.hypot(meet[0] - mine.pos[0], meet[1] - mine.pos[1]) / WALK + 0.4);
     if (into < walkT) return { pos: lerp2(mine.pos, meet, into / walkT), anim: "walk", walk: true, from: mine.pos, to: meet };
     const back = routineAt(p, e.t + ENC);
@@ -356,6 +320,7 @@ function settlerAt(p, t, eventFor) {
 
 // the little bubbles over people in the middle of something
 let bubbles = [];
+const tmpB = new THREE.Vector3();
 function drawBubbles(t) {
   const holder = $("labels");
   if (!holder || !S) return;
@@ -363,92 +328,75 @@ function drawBubbles(t) {
   for (const e of S.encounters || []) {
     if (t < e.t || t >= e.t + ENC) continue;
     const a = byHandle.get(e.a), b = byHandle.get(e.b);
-    if (!a || !a.person.root.visible) continue;
-    const pa = a.person.root.position, pb = b && b.person.root.visible ? b.person.root.position : pa;
-    const w = pa.clone().add(pb).multiplyScalar(0.5); w.y += 2.6 * a.person.root.scale.y;
+    if (!a || !a.pos) continue;
+    const pb = b && b.pos ? b.pos : a.pos;
+    const w = a.pos.clone().add(pb).multiplyScalar(0.5); w.y += 2.4;
     const d = w.distanceTo(cam);
-    if (d < 110) list.push({ e, w, d, into: t - e.t });
+    if (d < 120) list.push({ e, w, d, into: t - e.t });
   }
   list.sort((x, y) => x.d - y.d);
   while (bubbles.length < 12) { const el = document.createElement("div"); el.className = "bubble"; holder.appendChild(el); bubbles.push(el); }
-  const W = innerWidth, H = innerHeight;
+  const W = innerWidth, H = innerHeight, placed = [];
   bubbles.forEach((el, i) => {
     const it = list[i];
     if (!it || RECORD) { el.style.display = "none"; return; }
-    const p = it.w.clone().project(camera);
+    const p = tmpB.copy(it.w).project(camera);
     if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) { el.style.display = "none"; return; }
+    let sx = (p.x + 1) / 2 * W, sy = (1 - p.y) / 2 * H;
+    for (let k = 0; k < 4 && placed.some(([x, y]) => Math.abs(x - sx) < 90 && Math.abs(y - sy) < 22); k++) sy -= 22;   // don't stack on each other
+    placed.push([sx, sy]);
     el.style.display = "block";
     if (el.dataset.n !== String(it.e.t) + it.e.a) { el.dataset.n = String(it.e.t) + it.e.a; el.textContent = it.e.label; el.title = it.e.text; el.className = `bubble ${it.e.d < 0 ? "sour" : it.e.d > 0 ? "sweet" : ""}`; }
-    el.style.opacity = String(Math.min(1, it.into / 2, (ENC - it.into) / 2) * (it.d < 60 ? 1 : (110 - it.d) / 50));
-    el.style.transform = `translate(${(p.x + 1) / 2 * W}px, ${(1 - p.y) / 2 * H}px) translate(-50%, -100%)`;
+    el.style.opacity = String(Math.min(1, it.into / 2, (ENC - it.into) / 2) * (it.d < 60 ? 1 : (120 - it.d) / 60));
+    el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
   });
 }
 
-// the places someone works today: real things to stand at. Each place has a pool of spots (one per standing
-// tree, one per rock, a step apart around the scaffolding, a row in each garden, ...) and people are dealt
-// spots from it in turn, so a crowd spreads out instead of piling onto one spot.
+// the places someone works today: real spots to stand at. A building's crew stands round it (a field's in its
+// rows); builders ring the scaffolding; odd jobs wander the streets. Spots are dealt out in turn so a crew spreads.
 let spotPools = new Map();
-function workSpots(where, j, proj) {
-  const key = proj ? `p:${proj.id}` : where;
-  if (!spotPools.has(key)) spotPools.set(key, { spots: makePool(where, proj), next: 0 });
-  const pool = spotPools.get(key), all = pool.spots, ex = all.excl || 0;
+function workSpots(where, j) {
+  const key = where;
+  if (!spotPools.has(key)) spotPools.set(key, { spots: makePool(where), next: 0 });
+  const pool = spotPools.get(key), all = pool.spots;
   if (!all.length) return [];
   const q = pool.next++, out = [];
-  if (q < ex) return [all[q]];                                          // one tender per garden row
-  const rest = all.slice(ex), L = rest.length;
-  for (let k = 0; k < 6; k++) out.push(rest[(q + k * 37 + (j % 7) * k) % L]);
+  for (let k = 0; k < 6; k++) out.push(all[(q + k * 7 + (j % 5) * k) % all.length]);
   return out;
 }
-function makePool(where, proj) {
-  const R = rng(hash(String(where) + (proj ? proj.id : ""))), out = [];
-  const near = (a, b, d) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [a[0] + (b[0] - a[0]) / L * d, a[1] + (b[1] - a[1]) / L * d]; };
-  if (proj) {                                              // around the scaffolding, facing the walls, a step apart
-    const [w, d] = proj.size, rot = (proj.rot || 0) % 180 ? 1 : 0, hw = (rot ? d : w) / 2 + 1.1, hd = (rot ? w : d) / 2 + 1.1;
-    const per = 2 * (hw + hd) * 2 / 1.4;
-    for (let k = 0; k < per; k++) {
-      const u = (k / per) * 4, side = Math.floor(u), f = (u % 1) * 2 - 1;
-      const pos = side === 0 ? [proj.pos[0] + f * hw, proj.pos[1] - hd] : side === 1 ? [proj.pos[0] + hw, proj.pos[1] + f * hd]
-        : side === 2 ? [proj.pos[0] - f * hw, proj.pos[1] + hd] : [proj.pos[0] - hw, proj.pos[1] - f * hd];
-      out.push({ pos, face: proj.pos, anim: R() < 0.75 ? "hammer" : "dig" });
+function makePool(where) {
+  const R = rng(hash(String(where))), out = [];
+  const ringAround = (c, r, n, anim) => { for (let k = 0; k < n; k++) { const a = k / n * 6.283 + R() * 0.2, pos = [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r]; out.push({ pos, face: c, anim }); } };
+  if (where.startsWith("b:") || where.startsWith("p:")) {
+    const b = where[0] === "b" ? S.buildings.find((x) => x.id === where.slice(2)) : S.projects.find((x) => x.id === where.slice(2));
+    if (!b) return out;
+    if (where[0] === "p") { ringAround(b.pos, 4.8, 16, "hammer"); out.forEach((s, i) => { if (i % 4 === 3) s.anim = "dig"; }); return out; }
+    if (b.shape === "farm" || b.shape === "vineyard") {
+      for (let x = -3; x <= 3; x += 1.5) for (let z = -3; z <= 3; z += 2) out.push({ pos: [b.pos[0] + x, b.pos[1] + z], face: [b.pos[0] + x, b.pos[1] + z + 1], anim: "forage" });
+      return out;
+    }
+    ringAround(b.pos, 5, 10, WORK_ANIM[b.shape] || "idle");
+    return out;
+  }
+  if (where === "square") {                                 // odd jobs: about the streets
+    const st = (S.town && S.town.streets) || [];
+    for (let k = 0; k < 40; k++) {
+      const s = st.length ? st[Math.floor(R() * st.length)] : [commonsPos(), commonsPos()], f = R();
+      out.push({ pos: [s[0][0] + (s[1][0] - s[0][0]) * f, s[0][1] + (s[1][1] - s[0][1]) * f], face: null, anim: R() < 0.5 ? "idle" : "talk" });
     }
     return out;
   }
-  if (where === "woods") {
-    const ts = S.trees_all || S.trees, felled = Math.round(S.trees_felled || 0);
-    for (const tr of ts.slice(felled, felled + 120)) out.push({ pos: near([tr[0], tr[1]], land.woods.pos, -1.3), face: [tr[0], tr[1]], anim: "chop" });
-  } else if (where === "hill") {
-    for (const st of (S.stones_all || S.stones).slice(Math.round(S.stones_hauled || 0)).slice(0, 160)) {
-      const a = R() * 6.28, x = st[0] + Math.cos(a) * 1.3, z = st[1] + Math.sin(a) * 1.3, y = land.height(x, z);
-      const slope = Math.max(Math.abs(land.height(x + 1.5, z) - y), Math.abs(land.height(x, z + 1.5) - y)) / 1.5;
-      if (slope < 0.3) out.push({ pos: [x, z], face: [st[0], st[1]], anim: "mine" });   // not halfway up a cliff
-      if (out.length >= 120) break;
-    }
-  } else if (where === "river") {
+  if (where === "river") {
     const P = S.terrain.river.path, w = S.terrain.river.width / 2 + 1.6;
-    for (let k = 0; k < 120; k++) {
-      const i = Math.floor(R() * (P.length - 1)), f = R(), a = P[i], b = P[i + 1];
-      const x = a[0] + (b[0] - a[0]) * f, z = a[1] + (b[1] - a[1]) * f, L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-      const nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L, sgn = (x + nx - land.field[0]) ** 2 + (z + nz - land.field[1]) ** 2 < (x - nx - land.field[0]) ** 2 + (z - nz - land.field[1]) ** 2 ? 1 : -1;
-      out.push({ pos: [x + nx * w * sgn, z + nz * w * sgn], face: [x, z], anim: R() < 0.6 ? "fish" : "dig" });
-    }
-  } else if (where === "field") {
-    for (const b of S.buildings.filter((x) => x.shape === "plot" && x.state === "standing")) {      // one per row-step
-      const [w, d] = (b.rot || 0) % 180 ? [b.size[1], b.size[0]] : b.size, hw = w / 2 + 0.9, hd = d / 2 + 0.9;
-      for (let x = -hw + 0.8; x < hw; x += 2.2) for (const sz of [-1, 1]) out.push({ pos: [b.pos[0] + x, b.pos[1] + sz * hd], face: [b.pos[0] + x, b.pos[1]], anim: "forage" });   // along the beds' edges
-      for (let z = -hd + 2; z < hd - 1; z += 2.4) for (const sx of [-1, 1]) out.push({ pos: [b.pos[0] + sx * hw, b.pos[1] + z], face: [b.pos[0], b.pos[1] + z], anim: "forage" });
-    }
-    out.excl = out.length;
-    for (let k = 0; k < 140; k++) { const a = R() * 6.28, r = 14 + R() * 40; out.push({ pos: [land.field[0] + Math.cos(a) * r, land.field[1] + Math.sin(a) * r], face: null, anim: R() < 0.5 ? "cut" : "forage" }); }
-  } else if (where === "road") {                          // guards and scouts walk the old road
-    const P = S.terrain.road.path;
     for (let k = 0; k < 60; k++) {
       const i = Math.floor(R() * (P.length - 1)), f = R(), a = P[i], b = P[i + 1];
-      out.push({ pos: [a[0] + (b[0] - a[0]) * f + (R() - 0.5) * 6, a[1] + (b[1] - a[1]) * f + (R() - 0.5) * 6], face: null, anim: "idle" });
+      const x = a[0] + (b[0] - a[0]) * f, z = a[1] + (b[1] - a[1]) * f, L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      out.push({ pos: [x - (b[1] - a[1]) / L * w, z + (b[0] - a[0]) / L * w], face: [x, z], anim: "fish" });
     }
-  } else {
-    const c = (S.places.find((x) => x.id === where) || {}).pos || land.field;
-    for (let k = 0; k < 40; k++) { const a = R() * 6.28, r = 3 + R() * 12; out.push({ pos: [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r], face: c, anim: "idle" }); }
+    return out;
   }
+  const c = (S.places.find((x) => x.id === where) || {}).pos || commonsPos();
+  for (let k = 0; k < 40; k++) { const a = R() * 6.28, r = 3 + R() * 14; out.push({ pos: [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r], face: null, anim: "idle" }); }
   return out;
 }
 
@@ -509,8 +457,6 @@ function step(dtReal) {
   const night = 1 - daylight;
   // the day's hourly samples: trees, stones
   const sm = (S.samples || []).filter((x) => x.t <= t).pop();
-  if (sm) { nature.setFelled(sm.felled); nature.setHauled(sm.hauled); }
-  else { nature.setFelled(S.trees_felled); nature.setHauled(S.stones_hauled); }
   for (const x of timed) { const after = t >= x.at; x.after.visible = after; x.before.visible = !after; }
   for (const stages of staged) { let cur = stages[0]; for (const st of stages) if (t >= st.at) cur = st; for (const st of stages) st.mesh.visible = st === cur; }
   for (const pr of projects) {
@@ -543,19 +489,15 @@ function step(dtReal) {
       }
       p.person.root.position.copy(V(pos[0], pos[1], land.height(pos[0], pos[1]))); p.person.pose(anim, clock + 3, head); p.person.root.visible = h > 6 && h < 22; continue;
     }
-    const st = settlerAt(p, t, eventFor);
-    p.person.root.visible = !st.hidden;
-    if (st.hidden) continue;
-    p.person.root.position.copy(V(st.pos[0], st.pos[1], land.height(st.pos[0], st.pos[1])));
-    const chat = st.anim === "idle" && p.j % 3 !== 0 ? "talk" : st.anim;        // standing about mostly means chatting
-    p.person.pose(chat, clock + (p.j % 100) / 10, st.walk ? headingTo(st.from, st.to) : st.heading ?? null);
   }
   if (crowd.list) {
     crowd.update(crowd.list.map((p) => {
-      const st = settlerAt(p, t);
-      if (st.hidden) return { hidden: true, x: 0, y: -50, z: 0, heading: 0 };
-      return { x: st.pos[0], y: land.height(st.pos[0], st.pos[1]), z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100,
-        lie: st.lie, sit: st.sit || st.anim === "sit", walkPose: !!st.walk, kind: ["sing", "dance", "eat"].includes(st.anim) ? st.anim : null,
+      const st = settlerAt(p, t, eventFor);
+      if (st.hidden) { p.pos = null; return { hidden: true, x: 0, y: -50, z: 0, heading: 0 }; }
+      const y = land.height(st.pos[0], st.pos[1]);
+      p.pos = (p.pos || new THREE.Vector3()).set(st.pos[0], y, -st.pos[1]);
+      return { x: st.pos[0], y, z: -st.pos[1], heading: st.walk ? headingTo(st.from, st.to) : st.heading ?? (p.j % 628) / 100,
+        lie: st.lie, sit: st.sit || st.anim === "sit", walkPose: !!st.walk, kind: ["sing", "dance", "eat", "pray"].includes(st.anim) ? st.anim : null,
         talk: st.anim === "talk" || (st.anim === "idle" && p.j % 3 !== 0),
         work: ["chop", "mine", "hammer"].includes(st.anim) ? "swing" : ["forage", "dig", "cut", "fish"].includes(st.anim) ? "stoop" : null };
     }));
@@ -578,6 +520,7 @@ function step(dtReal) {
     }
   }
   for (const f of flags) f.rotation.y = Math.sin(clock * 2 + f.id) * 0.25 * land.uniforms.uWind.value;
+  for (const w of spin) w.rotation.z = clock * 0.8;                     // windmills turn when the farm's running
   // camera
   rig.update(dtReal, kingS, () => directorShot(t, kingS));
   if (!RECORD) hud(t, h, wx, kingS);
@@ -591,7 +534,7 @@ function directorShot(t, k) {
   const roll = R();
   if (upcoming.length && roll < 0.45) { const e = upcoming[0]; showCaption(e.text, e.drama >= 2); return { pos: e.pos, dist: 12 + e.drama * 3, height: 6 + e.drama * 2, angle: R() * 6, spin: 0.05, hold: 7 + R() * 3 }; }
   if (roll < 0.62) return { pos: S.places.find((p) => p.id === "field")?.pos || [38, 6], dist: 70, height: 45, angle: R() * 6, spin: 0.03, hold: 8, rise: 0.4 };
-  if (roll < 0.75 && people.length) { const p = people[Math.floor(R() * people.length)]; const pos = p.person.root.position; if (p.person.root.visible) return { pos: [pos.x, -pos.z], dist: 6, height: 2.5, angle: R() * 6, spin: 0.08, hold: 6 }; }
+  if (roll < 0.75 && crowd.list && crowd.list.length) { const p = crowd.list[Math.floor(R() * crowd.list.length)]; if (p.pos) return { pos: [p.pos.x, -p.pos.z], dist: 7, height: 3, angle: R() * 6, spin: 0.08, hold: 6 }; }
   return { follow: true, dist: 4.5 + R() * 6, height: 1.6 + R() * 3, angle: R() * 6, spin: 0.06 * (R() < 0.5 ? -1 : 1), hold: 7 + R() * 4 };
 }
 
@@ -599,8 +542,9 @@ function directorShot(t, k) {
 function buildHud() {
   const st = S.settlement;
   $("title").textContent = `${S.city}, day ${LIVE ? S.day + 1 : S.day}`;
-  const chips = [[st.crowned ? "crowned" : "not crowned"], [st.stage], [`${st.settled} settlers`], [`${st.beds} beds, ${st.free_beds} free`],
-    st.tents ? [`${st.tents} in tents`, "warn"] : null].filter(Boolean);
+  const running = S.buildings.filter((b) => b.running).length, idle = S.buildings.filter((b) => b.needs_crew && !b.running).length;
+  const chips = [[st.crowned ? "crowned" : "not crowned"], [st.stage], [`${st.settled} people`], [`${running} running`],
+    idle ? [`${idle} idle`, "warn"] : null, S.projects.length ? [`${S.projects.length} going up`] : null].filter(Boolean);
   $("stats").innerHTML = chips.map(([t, c]) => `<span class="chip ${c || ""}">${esc(t)}</span>`).join("");
   $("events").innerHTML = S.events.map((e, i) => `<button class="ev ${e.public ? "public" : ""} d${e.drama}" data-i="${i}" type="button"><span class="t">${esc(e.time.split(", ")[1])}</span>${esc(e.text)}</button>`).join("");
   document.querySelectorAll(".ev").forEach((el) => el.addEventListener("click", () => { const e = S.events[+el.dataset.i]; now = e.t - S.start - 2; if (e.pos) { rig.set("orbit"); rig.lookAt(e.pos, 16); syncMode(); } }));
@@ -615,8 +559,9 @@ function hud(t, h, wx, k) {
   $("clock").textContent = `${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor((h % 1) * 60)).padStart(2, "0")} · ${wx}`;
   $("doing").textContent = k.text || (k.anim === "sleep" ? "Aldric is asleep." : k.anim === "walk" ? "Aldric is walking." : "Aldric is between things.");
   const sm = (S.samples || []).filter((x) => x.t <= t).pop();
-  const stores = (sm && sm.stores) || S.settlement.stores;
-  $("stores").innerHTML = Object.entries(stores).map(([m, v]) => `<span class="chip">${v} ${esc(m)}</span>`).join("") + `<span class="chip">${S.settlement.gold} gold</span>`;
+  const st = S.settlement, pw = st.power, wants = Object.entries(st.wants || {}).filter(([, x]) => x.met < 0.7).map(([w]) => w);
+  $("stores").innerHTML = `<span class="chip">${(sm && sm.gold) ?? st.gold} gold</span>` + (pw ? `<span class="chip" title="${esc(pw ? `Yesterday: ${pw.people} people, ${pw.shifts} shifts` : "")}">⚒ ${pw.shifts} shifts</span>` : "")
+    + `<span class="chip">happiness ${Math.round((st.happiness || 0.6) * 100)}%</span>` + (wants.length ? `<span class="chip warn" title="What the people want and haven't got">wants: ${esc(wants.slice(0, 3).join(", "))}</span>` : "");
   let idx = -1;
   for (let i = 0; i < S.events.length; i++) if (S.events[i].t <= t) idx = i;
   if (idx !== lastEv) {
@@ -687,7 +632,11 @@ function bindUi() {
     if (!S || rig.mode === "walk") { tip.style.display = "none"; return; }
     mouse.set(ev.clientX / innerWidth * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
     ray.setFromCamera(mouse, camera);
-    const hit = ray.intersectObjects(town.children, true).find((x) => x.object.userData && x.object.userData.tip && x.object.visible);
+    const hits = ray.intersectObjects([...town.children, crowd.group], true);
+    const hx = hits.find((x) => x.object.visible && x.object.userData && (x.object.userData.tip || x.object.userData.houseTip || x.object.userData.crowd));
+    const html = !hx ? "" : hx.object.userData.crowd ? personTip(hx.object.userData.crowd.personAt(hx.instanceId))
+      : hx.object.userData.houseTip ? hx.object.userData.houseTip(hx.instanceId) : hx.object.userData.tip;
+    const hit = html ? { object: { userData: { tip: html } } } : null;
     if (hit) { tip.innerHTML = hit.object.userData.tip; tip.style.display = "block"; tip.style.left = `${Math.min(ev.clientX + 14, innerWidth - 300)}px`; tip.style.top = `${ev.clientY + 14}px`; }
     else tip.style.display = "none";
   });
@@ -706,10 +655,10 @@ function setMode(m) {
 // ------------------------------------------------------------------ live (./kingdom play)
 // A new scene arrives every tick. Only rebuild the town when something you'd see changed shape (a building
 // finished, a project started, a tent went up, new people); otherwise swap the data in place so nothing pops.
-const shapeOf = (d) => JSON.stringify([d.day, d.start, d.settlement.crowned, d.tents.length, d.actors.settlers.length,
-  ((d.terrain.island || {}).lobes || []).length,
-  Object.values(d.actors.crowd.day || {}).reduce((a, b) => a + b, 0) >> 3,
-  d.buildings.map((b) => [b.id, b.state, b.built_t, (b.upgrades || []).length]), d.projects.map((p) => p.id), !!d.peddler]);
+const shapeOf = (d) => JSON.stringify([d.day, d.start, d.settlement.crowned, (d.houses || []).map((h) => h[3]).join(""),
+  d.actors.settlers.length, ((d.terrain.island || {}).lobes || []).length,
+  d.buildings.map((b) => [b.id, b.state, b.tier, b.running, b.disrepair]), d.projects.map((p) => p.id),
+  d.actors.settlers.map((s) => s.work).join("|")]);
 let liveShape = "";
 async function liveScene(d) {
   const sh = shapeOf(d);
@@ -724,8 +673,7 @@ async function liveScene(d) {
   const old = S;
   S = d; land.S = d;
   for (const pr of projects) pr.p = d.projects.find((p) => p.id === pr.p.id) || pr.p;
-  if (piles) town.remove(piles);
-  piles = pilesMesh(S.piles, land); town.add(piles);
+  for (const p of crowd.list || []) { const s = d.actors.settlers.find((x) => x.handle === p.handle); if (s) { p.s = s; p.sched = s.schedule; } }
   if (old.events.length !== d.events.length) buildHud();
 }
 function liveState(st) {

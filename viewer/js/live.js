@@ -5,9 +5,9 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
 
-const EXAMPLES = ["I chop wood all morning", "I want to start a vegetable garden behind my house", "I become a thief",
-  "I steal bread from the stores", "I send Aldric an axe", "I challenge @someone to a duel", "WORK", "STATUS",
-  "I sing for the settlers by the fire", "I ask the king to build a bridge"];
+const EXAMPLES = ["I work the farm all day", "I help build the tavern", "I want to be a brewer", "I put a new roof on my house",
+  "I leave 20 coins at Aldric's door", "I challenge @someone to a duel", "I become a thief", "WORK", "STATUS",
+  "I sing for everyone at the stage", "I ask the king to build a wine cellar"];
 
 export async function api(path, body) {
   const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });

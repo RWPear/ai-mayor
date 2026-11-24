@@ -2,33 +2,36 @@
 
 **An AI is building a kingdom on a floating island. Follow and you live there. Comment to change it.**
 
-Aldric starts with nothing: a leaky shack in a field on an old floating island above the clouds, a dull axe,
-fifteen coins. He wants to be king. Followers are the people of Emberfall: following walks you in (a free bed,
-or a tent by the old road), and every comment is your character doing something - chopping wood, building a
-garden, stealing from a neighbour, riding in on a dragon. The game decides what happens; a narrator writes you a
-reply that carries your story on. The island is a little magical: wild claims come true, at a cost, and new land
-rises out of the clouds as Emberfall grows.
+Aldric starts alone in a leaky shack on an old floating island above the clouds. He wants to be king. Followers are
+the people of Emberfall: following walks you in and gives you a little house of your own on the town's streets, and
+every comment is your character doing something. The kingdom grows on **People Power**: every follower works a
+shift a day, and buildings only get built - and only run - if enough people turn up.
 
 ```bash
 ./kingdom play --fresh --king llm      # play it live in your browser: comment as anyone, approve every reply
+./kingdom demo                         # a 50-person kingdom ten days in, to watch
 ```
 
-- **Comments are moves.** Your first real attempt each day is your move; it changes the world. Questions and
-  jokes are talk (answered in the world, no move used). After your move, more comments are conversation with
-  Aldric and the others - up to 3 replies a day. Every reply waits for approval before it goes anywhere.
-- **The world remembers.** Each person's story so far goes to the narrator, so threads carry on (the goat that
-  follows you, the question Aldric asked you yesterday).
-- **Wonders.** Claim a dragon and there IS one - a hatchling that eats the stores. Cast a spell and it works,
-  sideways. Wonders persist, cost something every day, and can be hunted, fed or stolen.
-- **Aldric lives in real time.** He gathers, builds, invents what to build, talks to people, holds court, and
-  every night decides who he's becoming. At 10 settlers they vote on crowning him; once crowned, every 30 days
-  comes the Reckoning: KNEEL or REVOLT.
-- **The island grows.** New land rises from the clouds at the rim as Emberfall grows (the east meadow, the glass
-  cliffs, the warm springs...), and the island throws things at it: sky-whales, falling stars, a door in the hill.
-- **Skarn the Red** camps on a black crag floating to the north and sends raiders across on gliders once there's
-  something worth taking.
-- **In 3D:** a low-poly island, box-and-triangle houses, and little round-headed people who waddle about, work and chat. Fixed recorders make timelapses of the
-  island growing.
+- **People Power.** Everyone works one shift a day; people who comment work two, and what they say steers where
+  ("I'll work the farm", "I help build the tavern"). A farm only runs on days ten people work it; a brewery is 30
+  days of building work - thirty people do it in a day, nobody never does. Keep turning up at the same work and you
+  become it: a farmer, a brewer, a builder.
+- **Gold decides how fine.** Building costs people, not gold - but the gold Aldric puts in decides whether it's a beer
+  tent or a beer hall. Running buildings earn gold; your shifts earn you a coin each, to do up your own house.
+- **The people want things** (food, water, a pint, music, a chapel, wine...) and how well they're met is the town's
+  happiness. Aldric decides what gets built next; whether it gets built is up to whether you turn up.
+- **Comments are moves.** Your first real attempt each day is your move; questions and jokes are talk (answered in
+  the world). Every reply waits for approval before it goes anywhere. Each person's story so far, and their friends
+  and feuds, go to the narrator, so threads carry on.
+- **The town lives on its own.** Everyone keeps a simple day (work, lunch, the tavern, supper, bed), and wherever two
+  people meet something small happens - shared bread, gossip, an argument about the well. It adds up into
+  friendships, feuds and fights while nobody's commenting.
+- **Wonders.** Claim a dragon and there IS one - a hatchling that eats three gold of food a day. Wonders persist and
+  cost something every day.
+- **The island grows.** New land rises from the clouds at the rim as Emberfall grows, and the island throws things at
+  it: sky-whales, falling stars, a door in the hill. **Skarn the Red** raids once there's something worth taking.
+- **In 3D,** Thronefall-style: a grid town of little orange houses round a keep, fields and a windmill, a striped
+  beer tent, tiny people going about their day, bubbles when they meet. Fixed recorders make timelapses.
 
 Guides: [docs/PLAY.md](docs/PLAY.md) (playing it live), [docs/FRONTIER.md](docs/FRONTIER.md) (how Emberfall
 works), [docs/WORLD.md](docs/WORLD.md) (the 3D view and recordings), [docs/SCENE.md](docs/SCENE.md) (the 3D data),
@@ -81,12 +84,13 @@ city/llm.py          the model client (Ollama, or optionally a hosted model for 
 city/storyteller.py  events: starting, ticking, what the comments did to them
 city/living/         the living world
   world.py           the clock, every tick, replies
-  frontier.py        the island: land, stores, building, people arriving, stages, the crown, new land
+  frontier.py        People Power: jobs, crews, building, gold, wants, houses, stages, the crown, new land
   frontier_tools.py  what Aldric can do, sees and wants
   agents.py          the minds (Aldric, Skarn): two-step decisions
   intents.py         reading comments -> the game decides -> the narrator writes the reply; talk
   wonders.py         wonders: wild claims made real, at a cost
   routine.py         everyone's day, and the little things between people (friends, feuds)
+content/buildings.yaml  what can be built: crews, days of work, versions by gold, what people want
   director.py        invents events from what's been happening
   scene.py           everything the 3D view needs
 viewer/              the 3D view (three.js, no build step)

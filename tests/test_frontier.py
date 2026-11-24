@@ -1,4 +1,5 @@
-"""The frontier start: one man, a leaky shack, and everything built by hand."""
+"""Emberfall on People Power: everyone works a shift a day, buildings need crews to run and builders to go up, gold
+decides how fine they are (city/living/frontier.py)."""
 import numpy as np
 
 from city.living import frontier as F
@@ -13,347 +14,169 @@ def _world(followers=5, seed=3, llm=None, voice=None):
     city = City(config.load(), seed=seed)
     w = World(city, king_brain=llm, voice_llm=voice)
     w.post(RuleMayor(), [f"u{i}" for i in range(followers)], [])
-    for i in range(followers):
-        w.note_comment({"username": f"u{i}", "id": f"c{i}", "post": city.day})
     return city, w
 
 
 def _arrive(w, handles):
-    """New followers, straight in (as when they follow)."""
     c = w.city.citizens
     return F.join_road(w, c.add_many(handles, w.city.day, w.city.ward_for, revive=False))
 
 
-def _days(w, n, followers=None, comments=None):
-    from city.mayor import RuleMayor
-    out = []
-    for _ in range(n):
-        out.append(w.post(RuleMayor(), followers or [], comments or []))
-    return out
+def _build_now(w, kind, gold=None):
+    """A finished building of this kind (as if the people had built it)."""
+    w.city.treasury += 1000
+    p, why = F.start(w, kind, F.spec(kind)["tiers"][0]["gold"] if gold is None else gold)
+    assert p, why
+    p["done"] = p["need"]
+    F.finish(w, p)
+    return F.land(w)["buildings"][-1]
 
 
-def test_he_starts_with_nothing_and_followers_walk_straight_in():
-    city, w = _world()
+def test_he_starts_alone_and_every_follower_gets_a_house_straight_away():
+    from city import config
+    from city.living.world import World
+    from city.model import City
+    city = City(config.load(), seed=3)
+    w = World(city)
     L = F.land(w)
-    assert w.agent("king")["location"] in F.places(w)
-    assert city.treasury <= 20 and F.capacity(city) == 0 and not L["crowned"]
-    assert F.settled(city) == 5 and F.on_road(city) == 0 and F.tents(city) == 5     # no beds yet: tents
-    assert {"shack", "woods", "river", "hill", "field", "road"} <= set(F.places(w))
-    assert "throne_room" not in F.places(w)
+    assert [b["kind"] for b in L["buildings"]] == ["keep"] and not L["houses"] and not L["crowned"]
+    _arrive(w, ["ann", "bob", "cat", "dan", "eve"])
+    assert F.settled(city) == 5 and set(L["houses"]) == {"ann", "bob", "cat", "dan", "eve"}
+    from city.living import scene
+    lots = [scene.house_lot(w, L["houses"][h]["n"])["pos"] for h in L["houses"]]
+    assert len({tuple(p) for p in lots}) == 5                         # a house each, on its own lot
+    assert "moved into a little house" in city.living["just_arrived"]["ann"]["text"]
 
 
-def test_gathering_is_where_the_stuff_is():
-    city, w = _world()
-    me = w.agent("king")
-    assert FT.gather(w, me, {"material": "stone"}) is None and "rocky hill" in me["nudge"]
-    me["location"] = "woods"
-    FT.gather(w, me, {"material": "wood", "how": "dragging deadfall"})
-    assert F.land(w)["stock"]["wood"] >= 1
-
-
-def test_ideas_are_priced_once_by_what_they_are():
-    city, w = _world()
-    cottage = F.design(w, "a little cottage with a thatched roof")
-    assert cottage["kind"] == "housing" and 2 <= cottage["capacity"] <= 4 and "thatching" in cottage["know"]
-    flats = F.design(w, "a tall apartment building of stone and timber")
-    assert flats["scale"] == "huge" and flats["capacity"] >= 60 and "multi-storey building" in flats["know"]
-    assert sum(flats["needs"].values()) > 10 * sum(cottage["needs"].values())
-    assert flats["hours"] / flats["capacity"] < cottage["hours"] / cottage["capacity"]   # bigger is more efficient
-    assert F.design(w, "a storehouse for food")["kind"] == "storage"
-    assert F.design(w, "a row of timber houses")["scale"] == "large"
-    assert not F.design(w, "a flying castle")["possible"]
-    assert F.design(w, "a little cottage with a thatched roof") is cottage                # decided once
-
-
-def test_the_model_says_what_it_is_and_the_code_says_what_it_costs():
-    class Voice:
-        def json(self, system, user, schema, **kw):
-            return {"possible": True, "why_not": "", "name": "a mansion for everyone", "kind": "housing",
-                    "scale": "small", "material": "wood", "capacity": 9999, "techniques": [], "boosts": "",
-                    "look": "a long low house"}
-
-        def chat(self, *a, **k):
-            return "ok"
-
-    city, w = _world(voice=Voice())
-    d = F.design(w, "a mansion for literally everyone")
-    assert d["capacity"] <= 4                                  # a small building can't house 9999 people
-
-
-def test_building_uses_materials_and_teaches():
-    city, w = _world()
-    me = w.agent("king")
-    L = F.land(w)
-    me["location"] = "field"
-    FT.plan(w, me, {"idea": "a small cottage with a thatched roof"})
-    p = next(x for x in L["projects"] if "cottage" in x["name"])
-    for m in p["needs"]:
-        L["stock"][m] = 0
-    assert FT.build(w, me, {"project": p["name"]}) is not None and p["progress"] == 0   # nothing to build with
-    for m, n in p["needs"].items():
-        L["stock"][m] = n + 1
-    city.rng.random = lambda: 0.01                                          # it goes well
-    for k in range(20):
-        if p.get("done"):
-            break
-        me["life"]["needs"]["energy"] = 1.0
-        p["hours_day"] = k                                  # a new day each time (one man can only do so much a day)
-        FT.build(w, me, {"project": p["name"]})
-    assert p.get("done") and F.capacity(city) >= 2 and "thatching" in L["know"]
-    assert L["stock"]["wood"] < 5
-
-
-def test_beds_then_tents_then_moving_in():
-    city, w = _world(followers=0)
-    L = F.land(w)
-    L["buildings"].append({"id": "bx", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": 2,
-                           "place": "field", "quality": "good", "day": 1})
-    _arrive(w, [f"u{i}" for i in range(6)])
-    for i in range(6):
-        w.note_comment({"username": f"u{i}", "id": f"c{i}", "post": city.day})
-    c = city.citizens
-    assert F.settled(city) == 6 and F.housed(city) == 2 and F.tents(city) == 4 and "camp" in F.places(w)
-    texts = [a["text"] for a in city.living["just_arrived"].values()]     # (woven into their next reply)
-    assert sum("tent" in t for t in texts) == 4
-    L["buildings"].append({"id": "by", "name": "a longhouse", "kind": "housing", "scale": "medium", "capacity": 8,
-                           "place": "field", "quality": "good", "day": 2})
-    assert F.rehouse(w) == 4 and F.tents(city) == 0
-    assert any("moved_in" in x.get("kinds", [x["kind"]]) for x in city.living["outbox"])
-    assert int((c.walled[c.active()] >= 0).sum()) == 6
-
-
-def test_settlers_work_on_his_projects():
-    city, w = _world(followers=10)
-    L = F.land(w)
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
-    me = w.agent("king")
-    me["location"] = "field"
-    FT.plan(w, me, {"idea": "a small cottage with a thatched roof"})
-    p = L["projects"][0]
-    for m, n in p["needs"].items():
-        L["stock"][m] = n
-    before = p["progress"]
-    lazy = F._hours_today(w)[0]
-    L["workers_today"] = [f"u{i}" for i in range(10)]
-    keen = F._hours_today(w)[0]
-    assert keen > 2 * lazy                                     # commenting WORK really matters
-    F.labor(w, 1.0)
-    assert p["progress"] > before or p.get("done")
-
-
-def test_hungry_nights_drive_people_away():
-    city, w = _world(followers=10)
-    L = F.land(w)
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
-    for _ in range(3):
-        L["stock"]["food"] = 0
-        F.meals(w)
-    assert F.settled(city) < 10
-
-
-def test_nobody_calls_him_king_until_he_is_crowned():
-    city, w = _world()
-    assert F.title(city, "The king walked to the river.") == "Aldric walked to the river."
-    F.land(w)["crowned"] = True
-    assert F.title(city, "The king walked to the river.") == "The king walked to the river."
-
-
-def test_the_settlers_vote_on_a_crown():
+def test_everyone_works_a_shift_and_commenters_work_two_where_they_say():
     city, w = _world(followers=12)
-    L = F.land(w)
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
-    F.after_post(w)
-    assert any(a["id"].startswith("crowning_") for a in city.events)
-    a = next(a for a in city.events if a["id"].startswith("crowning_"))
-    city.events.remove(a)
-    city.event_log.append({**a, "winner": "CROWN", "crowd": "CROWN"})
-    F.after_post(w)
-    assert L["crowned"]
+    _build_now(w, "farm")
+    F.nudge(w, "u0", "I'll help out at the farm today")
+    jobs = F.assign(w)
+    assert len(jobs) == 12 and F.land(w)["jobs"]["u0"] == F.land(w)["buildings"][-1]["id"]
+    assert F.today(w)["extra"] == {"u0": 1}
+    r = F.settle(w)
+    assert r["shifts"] == 13 and r["extra"] == 1
 
 
-def test_skarn_waits_until_there_is_something_to_raid():
+def test_a_building_only_runs_when_its_whole_crew_turns_up():
+    city, w = _world(followers=9)
+    farm = _build_now(w, "farm")
+    F.assign(w)
+    assert not farm["running"]                                        # nine people, a farm needs ten
+    gold = city.treasury
+    r = F.settle(w)
+    assert any(n == farm["name"] for n, *_ in r["idle"]) and farm["condition"] < 1
+    _arrive(w, ["tenth"])
+    F.assign(w)
+    assert farm["running"]
+    r = F.settle(w)
+    assert any(n == farm["name"] for n, *_ in r["ran"]) and city.treasury > gold
+
+
+def test_nobody_builds_it_and_it_never_goes_up_and_a_crowd_still_takes_a_day():
+    city, w = _world(followers=0)
+    city.treasury = 500
+    p, why = F.start(w, "farm", 0)
+    assert p and p["need"] >= 8
+    F.settle(w)
+    assert p in F.land(w)["projects"] and p["done"] == 0               # nobody here: nothing happens
+    _arrive(w, [f"b{i}" for i in range(40)])
+    assert p in F.land(w)["projects"] and p["done"] == 0               # arriving isn't building: it's counted tonight
+    F.settle(w)
+    assert p not in F.land(w)["projects"] and F.land(w)["buildings"][-1]["kind"] == "farm"
+
+
+def test_gold_decides_which_version_you_get_and_upgrades_take_builders():
+    city, w = _world(followers=15)
+    city.treasury = 300
+    p, _ = F.start(w, "tavern", 0)
+    assert p["name"] == "a beer tent" and city.treasury == 300
+    F.land(w)["projects"].clear()
+    p, _ = F.start(w, "tavern", 260)
+    assert p["name"] == "a beer hall" and p["tier"] == 2 and city.treasury == 50
+    F.land(w)["projects"].clear()
+    b = _build_now(w, "brewery", 0)
+    up, why = F.invest(w, b, 60)
+    assert up and up["upgrade_of"] == b["id"] and b["tier"] == 0       # not yet: the people have to do it up
+    up["done"] = up["need"]
+    F.finish(w, up)
+    assert b["tier"] == 1 and b["name"] == "a brewery"
+
+
+def test_a_tavern_without_beer_stands_idle():
+    city, w = _world(followers=20)
+    tav = _build_now(w, "tavern", 0)
+    F.assign(w)
+    assert not tav["running"]
+    _build_now(w, "brewery", 0)
+    F.assign(w)
+    assert tav["running"]
+
+
+def test_turning_up_at_the_same_work_makes_you_it():
+    city, w = _world(followers=10)
+    _build_now(w, "farm")
+    for _ in range(F.STREAK):
+        F.settle(w)
+    assert set(F.land(w)["prof"].values()) == {"farmer"}
+    assert city.citizens.label(city.citizens.index["u0"]) == "farmer"
+    assert any("became a farmer" in x["text"] for x in city.living["impact"]["u0"])     # (their record says so)
+
+
+def test_wants_and_happiness():
+    city, w = _world(followers=20)
+    assert F.wants(w)["food"]["met"] == 0
+    low = F.happiness(w)
+    _build_now(w, "farm")
+    F.assign(w)
+    assert F.wants(w)["food"]["met"] == 1 and F.happiness(w) > low
+
+
+def test_your_own_gold_does_up_your_own_house():
     city, w = _world(followers=3)
-    _days(w, 9)
-    assert not city.living["warcamp"].get("arrived")
-
-
-def test_a_first_week_of_people_and_houses():
-    city, w = _world(followers=4)
-    rs = _days(w, 8)
-    assert F.settled(city) == 4
-    assert any(b["kind"] == "housing" for b in F.land(w)["buildings"])     # he got a roof up in the first week
-    assert all(r["frontier"] for r in rs)
-    assert not any(r.get("election") for r in rs)
-
-
-def test_the_king_thinks_in_two_steps_on_the_frontier():
-    from city.living.agents import LLMBrain
-
-    class Mind:
-        n = 0
-
-        def json(self, system, user, schema, **kw):
-            Mind.n += 1
-            if "focus" in schema["properties"]:
-                assert "shack" in user or "nothing" in user.lower()
-                return {"thought": "I need a roof.", "focus": "building", "intention": "plan a hut",
-                        "new_goal": "a dry place to sleep"}
-            return {"tool": "plan", "args": {"idea": "a hut of branches and mud", "place": "the field"}}
-
-    city, w = _world(llm=LLMBrain(Mind()))
-    F.land(w)["projects"] = []
-    Mind.n = 0
-    me = w.agent("king")
-    tool, args = w.brains["king"].choose(w, "king", __import__("city.living.tools", fromlist=["x"]).available(w, "king"))
-    assert tool == "plan" and "hut" in args["idea"] and Mind.n == 2
-    assert "nobody has crowned you" in FT.identity({**me, "_crowned": False})
-
-
-def test_the_peddler_sells_tools():
-    city, w = _world()
-    me = w.agent("king")
-    me["location"] = "road"
-    F.peddler(w, force=True)
-    L = F.land(w)
-    L["peddler"]["goods"] = ["an iron axe"]
-    city.treasury = 40
-    FT.trade(w, me, {"buy": "iron axe"})
-    assert F.tool_x(city, "wood") == 2.0 and city.treasury == 15
-
-
-def test_ambition_grows_with_the_place():
-    city, w = _world(followers=0)
-    L = F.land(w)
-    assert F.max_scale(w) == "small"                                # one man alone: cottages, not tenements
-    p, why = F.start_project(w, "a tall apartment building of stone and timber", "field")
-    assert p is None and "far too much" in why or "comes close" in why
-    L["buildings"].append({"id": "b9", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": 3,
-                           "place": "field", "quality": "good", "day": 1})
-    assert F.max_scale(w) == "small"                                # experience alone isn't enough without hands
     c = city.citizens
-    c.add_many([f"s{i}" for i in range(12)], city.day, city.ward_for)
-    assert F.max_scale(w) == "medium"                               # hands, but he's only ever built small
-    L["buildings"].append({"id": "b10", "name": "a longhouse", "kind": "housing", "scale": "medium", "capacity": 8,
-                           "place": "field", "quality": "good", "day": 2})
-    assert F.max_scale(w) == "large"
+    c.wealth[c.index["u1"]] = 30
+    name, cost = F.upgrade_house(w, "u1", -1)
+    assert name == "a cottage" and cost == 25 and F.land(w)["houses"]["u1"]["tier"] == 1
+    name, need = F.upgrade_house(w, "u1", -1)
+    assert name is None and need > 5
+
+
+def test_the_king_builds_what_people_want_and_not_twins_of_idle_buildings():
+    city, w = _world(followers=12)
+    city.treasury = 100
+    assert FT.next_build(w) == "farm"                                  # food first
+    farm = _build_now(w, "farm")
+    farm["running"] = False
+    F.land(w)["wants"] = F.wants(w)
+    assert FT.next_build(w) != "farm"                                  # it's standing idle: it needs people, not a twin
+    tool, args = FT.rule_king(w, w.agent("king"), FT.unlocked(w) | {"plan": None})
+    assert tool in ("plan", "invest", "build", "rally", "walk", "do", "talk", "hold_court")
+
+
+def test_the_kings_tools():
+    city, w = _world(followers=25)
+    city.treasury = 200
     me = w.agent("king")
-    out = FT.plan(w, me, {"idea": "a tall apartment building of stone and timber"})
-    assert out and "laughed at himself" in out["text"]
+    m = FT.plan(w, me, {"kind": "a tavern", "gold": 60})
+    assert "tavern" in m["text"] and F.land(w)["projects"][-1]["kind"] == "tavern"
+    m = FT.rally(w, me, {"building": "tavern", "text": "Beer by Friday!"})
+    assert F.land(w)["rally"]["id"] == F.land(w)["projects"][-1]["id"]
+    b = _build_now(w, "farm")
+    m = FT.invest(w, me, {"building": b["name"], "gold": 40})
+    assert m and "a farm" in m["text"]
 
 
-def test_even_a_crowd_takes_days_on_a_big_building():
-    city, w = _world(followers=0)
-    L = F.land(w)
-    p = {"id": "px", "name": "a tenement", "place": "field", "progress": 0.0, "hours": F.SCALES["huge"]["hours"],
-         "needs": {"wood": 10}, "used": {}, "kind": "housing", "scale": "huge", "capacity": 90, "know": [],
-         "boosts": "", "look": "", "missing": [], "helpers": []}
-    L["projects"].append(p)
-    L["stock"]["wood"] = 1000
-    F.work(w, p, 5000, who="settlers")                      # 500 people for 10 hours: still only one crew's worth
-    assert 0 < p["progress"] < 0.6 and not p.get("done")
-
-
-def test_the_first_days_show_something():
-    city, w = _world(followers=4)
-    _days(w, 3)
-    L = F.land(w)
-    built = [b for b in L["buildings"] if b["id"] != "b0"]
-    assert len(built) >= 2                                   # a fire pit or a roof on day one, then a cottage
-    assert any(b["kind"] == "housing" for b in built)        # a man alone gets a cottage up in a day or two
-    n = w.agent("king")["life"]["needs"]
-    assert n["company"] > 0.2                               # alone by choice: loneliness doesn't eat his days
-
-
-def _settlers(n=4):
-    city, w = _world(followers=n)
-    L = F.land(w)
-    L["buildings"].append({"id": "bx", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": n,
-                           "place": "field", "quality": "good", "day": 1,
-                           "lot": {"pos": [30, 0], "size": [6, 5, 3.6], "rot": 0, "shape": "cottage"}})
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
-    return city, w, L
-
-
-def test_a_settler_asks_to_start_a_garden_and_the_king_says_yes():
-    from city.living import intents, personal, scene, tools
-    city, w, L = _settlers()
-    out = intents.process(w, {"u1": "I want to start a vegetable garden behind my house"}, None, 0)
-    assert out[0]["action"] == "build_own"
-    case = personal.pending(city, "u1")
-    assert case and "garden" in case["idea"]
-    me = w.agent("king")
-    me["location"] = L["court_place"]
-    tools.hold_court(w, me, {"case": case["id"], "verdict": "grant", "words": "Grow us some turnips."})
-    p = personal.of(w, "u1")
-    assert p and p["lot"] and p["lot"]["shape"] == "plot"
-    home = scene.home_pos(w, "u1")
-    assert abs(p["lot"]["pos"][0] - home[0]) + abs(p["lot"]["pos"][1] - home[1]) < 30      # by their house
-    assert any("court" in x.get("kinds", [x["kind"]]) and "said yes" in x["text"] for x in city.living["outbox"] if x["to"] == "u1")
-    for _ in range(20):                                      # evenings, then a keen day
-        personal.daily(w)
-        if not personal.of(w, "u1"):
-            break
-    b = next(b for b in L["buildings"] if b.get("owner") == "u1")
-    assert b["name"].startswith("@u1's") and b["kind"] == "food"
-    ex = scene.export(w)
-    assert any(x.get("owner") == "u1" for x in ex["buildings"])
-
-
-def test_commenting_about_your_build_speeds_it_up_and_nobody_saying_no_means_yes():
-    from city.living import intents, life, personal
-    city, w, L = _settlers()
-    intents.process(w, {"u2": "I'd like to build a little beehive by my cottage"}, None, 0)
-    case = personal.pending(city, "u2")
-    case["day"] = city.day - 2                               # the king never got to it
-    life.age_docket(w)
-    p = personal.of(w, "u2")
-    assert p and not personal.pending(city, "u2")
-    city.living["acted_today"] = []
-    intents.process(w, {"u2": "I spend the day on my beehive, smoking out the wasps first"}, None, 0)
-    assert p["progress"] >= personal.KEEN / p["hours"] - 1e-6 or p.get("done")
-
-
-def test_too_big_to_build_alone_becomes_a_petition():
-    from city.living import intents, personal
-    city, w, L = _settlers()
-    intents.process(w, {"u3": "I want to build a great stone tower with a hall for the whole village"}, None, 0)
-    assert not personal.pending(city, "u3")
-    assert any(k["kind"] == "petition" and k["who"] == "u3" for k in city.living["docket"])
-
-
-def test_followers_walk_in_at_once_by_default():
-    city, w = _world()
-    assert F.settled(city) == 5 and F.on_road(city) == 0
-    arrived = city.living.get("just_arrived") or {}
-    assert set(arrived) <= {f"u{i}" for i in range(5)}
-    assert F.summary(w)["next_arrival"] is None
-    assert "arriv" not in F.status_line(F.summary(w)).lower()
-
-
-def test_a_first_comment_gets_a_welcome_not_a_wait():
+def test_a_month_on_people_power():
+    """The whole thing, end to end: people arrive, the king plans, the people build and run, gold comes in."""
     city, w = _world(followers=0)
     from city.mayor import RuleMayor
-    w.post(RuleMayor(), ["newbie"], [])
-    r = w.post(RuleMayor(), [], [{"username": "newbie", "id": "n1", "text": "I chop wood for the king",
-                                  "post": city.day}])
-    out = [x for x in r["outbox"] if x.get("to") == "newbie"]
-    assert out, "the newcomer got no reply"
-    txt = " ".join(x["text"] for x in out).lower()
-    assert "road" not in txt or "emberfall" in txt
-    assert F.settled(city) >= 1
-
-
-def test_growing_a_stage_is_noticed_and_the_island_answers():
-    city, w = _world(followers=0)
-    assert F.land(w)["stage"] == "alone" and not F.island(city)["lobes"]
-    _arrive(w, [f"n{i}" for i in range(12)])                 # alone -> village in one go
-    assert F.land(w)["stage"] == "village"
-    assert len(F.island(city)["lobes"]) == 2                 # a piece of new land per stage crossed
-    assert {"jester", "steward"} <= set(F.land(w)["court"])
-    w.tick()
-    told = " ".join(m["text"] for m in city.living["moments"])
-    assert "the east meadow" in told and "the glass cliffs" in told           # everyone hears about it
+    for d in range(14):
+        new = [f"p{d}_{k}" for k in range(4)]
+        w.post(RuleMayor(), new, [])
+    L = F.land(w)
+    assert F.settled(city) >= 50
+    assert len([b for b in L["buildings"] if b["kind"] != "keep"]) >= 4
+    assert any(b.get("running") for b in L["buildings"]) and L["history"] and city.treasury >= 0
+    assert L["happiness"] > 0.3

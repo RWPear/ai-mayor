@@ -168,7 +168,7 @@ def markdown(city, r):
                 f"Stage: **{f['stage']}**" + (" · crowned" if f["crowned"] else " · not crowned") +
                 (f" · built: {', '.join(f['built'])}" if f["built"] else " · nothing built yet") +
                 (f" · building: {', '.join(f['projects'])}" if f["projects"] else "") +
-                (f" · knows: {', '.join(f['know'])}" if f["know"] else ""), ""]
+                (f" · running today: {', '.join(f['running'])}" if f.get("running") else ""), ""]
     ch = r.get("chronicle")
     if ch and (ch["top"] or ch["meanwhile"]):
         out.append("## The last 24 hours")

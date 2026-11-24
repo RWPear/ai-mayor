@@ -161,10 +161,18 @@ def apply(city, effects, ward=None, ctx=None, daily=False):
             if w.get("councilor") is not None:     # the hold's lord loses the title, and can't get it back soon
                 w.setdefault("barred", {})[str(w["councilor"])] = city.day + 30
             w["councilor"] = None
-        elif head == "stock":               # the island's stores: stock.food, stock.wood, stock.starmetal...
-            land = ((city.living or {}).get("town") or {}).get("land")
-            if land is not None:
-                land["stock"][target] = max(0, land["stock"].get(target, 0) + int(val))
+        elif head == "gold":                # gold: straight into (or out of) the treasury, never below zero
+            city.treasury = max(0.0, city.treasury + float(val))
+        elif head == "build" and city.living:   # build.<kind>: an event leaves a building behind (or knocks one down)
+            from .living import frontier as F
+            if float(val) < 0:
+                bs = [b for b in F.land(city)["buildings"] if b["state"] == "standing" and b["id"] != "b0"]
+                b = city.rng.choice(bs) if target == "any" and bs else F.find_building(city, target)
+                if b and b["id"] != "b0":
+                    b["condition"] = 0.0
+                    b["disrepair"] = True
+            elif target in F.kinds():
+                F.gift_building(city, target)
         elif head == "island" and city.living:   # new land rises from the clouds
             from .living import frontier as F
             F.grow_island(city, int(val))

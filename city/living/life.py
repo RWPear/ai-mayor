@@ -188,15 +188,7 @@ def age_docket(world):
         i = c.index.get(k["who"])
         if i is None:
             continue
-        if k["kind"] == "permit":                    # nobody said no: they start anyway
-            from . import personal
-            p = personal.grant(world, k)
-            if p:
-                world.reply(k["who"], f"🌱 Nobody said no, so you pegged out {k.get('idea') or 'your plot'} by your "
-                                      "home and started. You'll put in a couple of hours each evening.", "court",
-                            credit=f"started building {k.get('idea') or 'their own plot'}")
-                world.moment("world", f"Nobody said no, so @{k['who']} started building {k.get('idea')} by their "
-                                      "home.", 1, public=True, handles=[k["who"]])
+        if k["kind"] == "permit":                    # (older saves)
             continue
         if k["kind"] == "crime":
             city.living.get("conditions", {}).pop(k["who"], None)
@@ -221,10 +213,12 @@ def visitors(world):
         return None
     i = int(city.rng.choice(np.where(act)[0].tolist()))
     if city.living.get("town", {}).get("land"):
-        asks = ["wants to know when their house will be ready", "says someone's been taking from the woodpile",
-                "found a strange old coin in the field",
-                "complains that the tents leak", "wants Aldric to settle a fight over the last dry blanket",
-                "says there are wolf tracks by the stores", "offers to teach the children their letters"]
+        asks = ["wants to know why the farm needs ten people when they could do it with six",
+                "says their neighbour's goat keeps eating their roof", "found a strange old coin in the field",
+                "wants Aldric to settle whose turn it is to run the well", "asks for a bigger window",
+                "says there are wolf tracks by the farm", "offers to teach the children their letters",
+                "wants to know when there'll be a proper tavern", "complains the builders start hammering at dawn",
+                "asks if a street could be named after their grandmother"]
     else:
         asks = None
     asks = asks or ["wants the king to settle a dispute about a stolen goat", "asks for a loan to fix their roof",

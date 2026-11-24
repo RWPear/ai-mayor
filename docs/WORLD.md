@@ -30,30 +30,28 @@ to see what it is. Click a line in the feed to jump there.
 
 ## What you see
 
-**The models are all hand-built and deliberately simple** (`viewer/js/buildings.js`): a house is a box, a
-triangle roof, a door and a window or two. Every building is a variation on that - a hut is a small one, a
-longhouse a long one with two doors, rowhouses are two or three side by side, a tower is a tall stone box with
-a pointed roof, a garden is a bed of soil with green rows. Settlers' own builds get red roofs, Aldric's blue.
-While something's going up you see its footing, walls rising with progress and poles round it; the roof goes
-on at the end. Windows glow at night, chimneys smoke morning and evening.
+**The town** (`viewer/js/buildings.js`) is a grid of blocks round the keep, with dirt streets between them.
+Every person's house is one of a few hundred instanced boxes - an orange-walled hut with a plank roof, then a
+cottage with a chimney, a house with a garden, a two-storey townhouse with a blue roof, by the gold they've put in.
+Every other building has its own silhouette you can read from across the island: fenced crop beds (a barn, then a
+windmill whose sails turn when it's running) for the farm, a shed and a big vat for the brewery, a striped beer tent
+then a tavern with a sign then a long beer hall, a stilted watchtower, a white chapel with a bell tower, market
+stalls under striped awnings, rows of vines, a cellar door in a grassy bank, the keep growing from a shack to a hall
+to a stone keep to a castle. Running buildings smoke and their windows glow at night; idle ones sit dark and sag
+when neglected. Going up: a footing, walls rising with the day's work, poles round it, the roof last. Hover over
+anything: a building says who's working it today ("running today: 10 farmers (needs 10)").
 
-**The people** (`viewer/js/people.js`) are a round head on a body, in one of three shapes: **tall** (a
-bowling pin), **wide** (a blob) or **small** (a bean). The body colour says what they do (green for
-woodcutters, gold for farmers, blue for fishers, red for guards...), a shade off each so a crowd isn't one
-colour. No arms, legs or tools: all the life is in how they move - a waddle when they walk, a bow and bob as
-they work, a stoop when they garden or fish, a nod and a wobble when they talk (anyone standing about is
-usually chatting), a squash when they sit, lying flat asleep, and they blink. Aldric is a bigger blue one
-(with a little crown once he's crowned). The crowd is drawn instanced: hundreds of people are five draw calls.
-They keep the simulation's day (docs/FRONTIER.md): out of the door at six, breakfast round **the fire**
-(a ring of logs west of the shack, everyone in their own seat), off to work moving from tree to tree or row to
-row, back to the fire for lunch, their own time, supper (some sing, some dance), and in at half past nine.
-When the simulation says two people had a moment, one walks over to the other, they turn to face each other
-and do it, with a little bubble over their heads ("shares bread", "argues", "lends a hand"). Hover over
-anyone to see their whole day.
+**The people** (`viewer/js/people.js`) are tiny: a round head on a little body, one of three shapes, coloured by
+what they do. Everyone is drawn instanced - two draw calls for the whole town. They keep their day: out of the door
+at six, breakfast on the doorstep, off to today's job (round the building, along the field rows, round the
+scaffolding, wandering the streets on odd jobs), lunch there, the tavern or the stage in the evening, supper round
+the square's fire or at home, in at half past nine. When the simulation says two people had a moment, one walks
+over, they turn to each other and do it, with a bubble ("shares bread", "argues", "lends a hand"). Hover over anyone
+for their job today and their whole day. Aldric (bigger, blue, a crown once he's crowned) and his court are drawn as
+themselves.
 
-**The look:** in the spirit of Thronefall, but a world you can walk around in: clean flat colours, no
-textures, low-poly faceted ground, chunky trees (a few already turning orange), golden thatch and cream
-walls, turquoise water, a soft cyan sky, warm sun and soft blue shadows. Bushes, flowers, pebbles and lone
+**The look:** Thronefall's: deep teal grass, warm orange timber and plank roofs, cream stone and cream cliffs under
+the island, lime-green pines, bright blue water, warm sun and navy shadows. No textures, low-poly faceted ground. Bushes, flowers, pebbles and lone
 trees dot the meadow. `?style=textured` brings back the older painted look (planks, stones, thatch
 textures, dense grass).
 
@@ -74,11 +72,10 @@ The recorders are fixed cameras listed in `content/recorders.yaml`:
 | Recorder | What it watches |
 |---|---|
 | `the_island` | the whole floating island from out in the clouds - the best one for watching it grow |
-| `overview` | the settlement: the field, the woods, the hill, the road |
-| `the_field` | where the buildings go up |
-| `the_camp` | the tents, filling as people arrive and emptying as houses finish |
-| `the_woods` | the trees coming down |
-| `top` | the plan of the place, Prison Architect style |
+| `overview` | the settlement: the town, the woods, the hill, the road |
+| `the_town` | the streets round the keep, filling with houses and buildings |
+| `the_square` | supper round the fire (19:30) |
+| `top` | the plan of the town, straight down |
 | `king` | over Aldric's shoulder |
 
 Each one has a position, a target, a lens and the times of day it takes a picture.
@@ -89,8 +86,8 @@ Each one has a position, a target, a lens and the times of day it takes a pictur
    a frame (`runs/<run>/recordings/<recorder>/00001_day001_0800.png`...).
 3. Stitches each recorder's frames into `recordings/<recorder>.mp4`.
 
-A month from the `overview` recorder is the whole story: a shack in a field, the woods shrinking, paths
-wearing in, the camp filling and emptying, apartment blocks going up.
+A month from the `the_town` recorder is the whole story: a shack, then a street of little houses, a farm, a beer
+tent, block after block, the keep becoming a castle.
 
 | Option | |
 |---|---|

@@ -106,12 +106,6 @@ def talk(world, me, args):
                               f'"{said or "Hello there."}" You answered: "{reply}"', "king_talked",
                 credit="talked with the king")
     taught = ""
-    from . import frontier
-    k = frontier.learn_from(world, int(i))
-    if k:
-        taught = f" @{c.handles[i]} showed him a thing or two about {k}."
-        world.reply(c.handles[i], f"🔨 You showed Aldric how {k} works. He's going to use it.", "taught",
-                    credit=f"taught Aldric {k}")
     return world.moment("king", f'The king stopped to talk with @{c.handles[i]}: "{said or "Hello there."}" - '
                                 f'"{reply}"' + taught, 2, public=True, place=me.get("location"), handles=[c.handles[i]])
 
@@ -126,16 +120,6 @@ def do(world, me, args):
     lf = me.setdefault("life", life.new_life())
     label = f"{out.get('activity', '')} {what}".lower()
     eating = re.search(r"\b(eat|ate|meal|breakfast|lunch|dinner|supper|stew|bread|feast|snack|food)", label)
-    if eating:                                 # on the frontier a meal comes out of the stores
-        from . import frontier
-        st = frontier.land(world)["stock"]
-        if st.get("food", 0) >= 1:
-            st["food"] -= 1
-        else:
-            eating = None
-            out["hunger"] = min(out.get("hunger", 0.0), 0.0)
-            out["outcome"] = "There was nothing left to eat. Aldric's stomach growled at the empty pot."
-            out["drama"] = max(int(out.get("drama", 0)), 1)
     if eating:
         out["hunger"] = max(out.get("hunger", 0.0), 0.5)          # a meal is a meal
     if re.search(r"\b(nap|sleep|doze|lie down)", label):
@@ -146,10 +130,6 @@ def do(world, me, args):
     lf["skills"][act] = lf["skills"].get(act, 0) + 1
     if out.get("learned"):
         lf["knowledge"] = (lf.get("knowledge", []) + [out["learned"]])[-20:]
-    from . import frontier
-    k = frontier.learn_by_doing(world, f"{what} {out.get('learned', '')}")
-    if k:
-        out["outcome"] = out["outcome"].rstrip(".") + f". Somewhere in there, he worked out {k}."
     if out.get("found"):
         lf["inventory"] = (lf.get("inventory", []) + [{"item": out["found"], "from": None, "day": world.city.day + 1}])[-20:]
     if out.get("made"):
@@ -263,23 +243,6 @@ def hold_court(world, me, args):
                 city.treasury += fine
                 effect = f" - fined {fine:.0f} gold"
         c.log(i, city.day + 1, f"was judged by the king: {verdict}")
-        if case["kind"] == "permit":                 # someone asked to build their own thing
-            from . import personal
-            yes = verdict in ("grant", "reward", "pardon")
-            what = case.get("idea") or "it"
-            if yes:
-                personal.grant(world, case, words)
-            else:
-                personal.deny(world, case)
-            world.reply(case["who"], (f"🌱 Aldric said yes: build {what} by your home. You'll put in a couple of "
-                                      "hours each evening - more on any day you tell us you're working on it."
-                                      if yes else f"Aldric said no to {what}. Not now, anyway.")
-                        + (f' He said: "{words}"' if words else ""), "court",
-                        credit=f"got leave to build {what}" if yes else None)
-            return world.moment("king", f"At court: @{case['who']} asked to build {what}. "
-                                        f"{'Aldric said yes' if yes else 'Aldric said no'}."
-                                + (f' "{words}"' if words else ""), 1, public=True, place=me.get("location"),
-                                handles=[case["who"]])
         world.reply(case["who"], f"⚖️ At court, the king heard your case ({case['text'][:120]}). Verdict: "
                                  f"{verdict.upper()}{effect}."
                     + (f' He said: "{words}"' if words else ""), "court",
@@ -506,8 +469,8 @@ def unlocked(world, who):
 
 
 # how long before a tool makes sense again (minutes) - stops letter spam and speech loops
-COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "plan": 90, "organize": 240, "appoint": 720,
-                     "trade": 30},
+COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "plan": 120, "invest": 240, "rally": 600,
+                     "appoint": 720},
             "warlord": {"taunt": 720, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
 
 
@@ -534,9 +497,8 @@ def available(world, who):
     return {n: v for n, v in unlocked(world, who).items() if _ready(world, who, n)}
 
 ARG.update({   # the frontier's tools (city/living/frontier_tools.py)
-    "material": "wood, stone, clay, thatch, rope or food (only what's here)",
-    "how": "how you go about it, in a few words (optional)",
-    "idea": "what you want to build, in your own words - anything at all",
-    "project": "which project (its name)", "task": "a project's name, or a material to gather",
-    "people": "how many settlers", "title": "the job you're giving them",
-    "buy": "what to buy from the peddler", "sell": "e.g. '20 wood'"})
+    "kind": "what to build: one of the kinds listed under Building (farm, tavern, brewery...)",
+    "gold": "how much gold to put in (more gold buys a finer version - see the tiers); 0 for the plainest",
+    "building": "a building's name (one that's standing)",
+    "project": "which project (its name)", "title": "the job you're giving them",
+    "name": "a name of your own for it (optional)"})

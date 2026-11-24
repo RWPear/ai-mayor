@@ -131,23 +131,25 @@ export class Person {
   }
 }
 
-// everyone else: instanced, five draw calls for hundreds of people (three bodies, heads, eyes)
+// everyone: instanced, two draw calls for a whole town - one tiny body and one round head each (a body shape per
+// person by scaling one pin: tall, wide or small), coloured by what they do
+const SHAPE = { tall: [0.95, 1.12, 0.95], wide: [1.3, 0.82, 1.15], small: [0.85, 0.78, 0.85] };
 export class Crowd {
-  constructor(scene, max = 600) {
+  constructor(scene, max = 1500) {
     const g = geos();
     this.max = max;
     const flat = (c) => new THREE.MeshStandardMaterial({ color: c ?? 0xffffff, roughness: 1, flatShading: true });
     const im = (geo, mat) => { const m = new THREE.InstancedMesh(geo, mat, max); m.castShadow = true; m.frustumCulled = false; m.count = 0; return m; };
-    this.bodies = { tall: im(g.tall.geo, flat()), wide: im(g.wide.geo, flat()), small: im(g.small.geo, flat()) };
-    this.heads = im(g.head, flat());
-    this.eyes = im(g.eyes, flat(0x1d1915)); this.eyes.castShadow = false;
-    this.all = [...Object.values(this.bodies), this.heads, this.eyes];
+    this.bodies = im(g.tall.geo, flat());
+    this.heads = im(new THREE.IcosahedronGeometry(1, 0), flat());
+    this.all = [this.bodies, this.heads];
     this.group = new THREE.Group(); this.group.add(...this.all);
     scene.add(this.group);
-    this.people = []; this.looks = [];
+    this.people = []; this.looks = []; this.who = new Int32Array(max);
     this.o = new THREE.Object3D(); this.o.rotation.order = "YXZ";
     this.m = new THREE.Matrix4(); this.l = new THREE.Matrix4(); this.r = new THREE.Matrix4(); this.e = new THREE.Euler(0, 0, 0, "YXZ");
     this.col = new THREE.Color();
+    this.bodies.userData.crowd = this.heads.userData.crowd = this;
   }
 
   set(people) {   // [{role, handle, ...}]
@@ -158,31 +160,29 @@ export class Crowd {
   // states: [{x, y, z, heading, walkPose, work: "swing"|"stoop"|null, talk, sit, lie, kind (sing/dance/eat), hidden}]
   update(states) {
     const o = this.o, m = this.m, l = this.l, r = this.r, e = this.e, col = this.col, t = performance.now() / 1000, g = geos();
-    const n = { tall: 0, wide: 0, small: 0, head: 0 };
+    const V = g.tall;
+    let n = 0;
     states.forEach((s, i) => {
       if (i >= this.people.length || s.hidden) return;
-      const L = this.looks[i], V = g[L.kind], j = (this.people[i].j || i) % 100;
+      const L = this.looks[i], j = (this.people[i].j || i) % 100, sh = SHAPE[L.kind];
       const kind = s.lie ? "sleep" : s.kind ? s.kind : s.walkPose ? "walk" : s.work === "swing" ? "work" : s.work === "stoop" ? "stoop" : s.sit ? "sit" : s.talk ? "talk" : "idle";
       const q = motion(kind, t, j);
-      o.position.set(s.x, s.y + (q.lie ? 0.4 : q.y) * L.size, s.z);
+      o.position.set(s.x, s.y + (q.lie ? 0.35 : q.y) * L.size, s.z);
       o.rotation.set(q.lie ? Math.PI / 2 : q.lean, s.heading + q.turn, q.sway, "YXZ");
       o.scale.setScalar(L.size); o.updateMatrix();
       m.copy(o.matrix);
-      const body = this.bodies[L.kind], k = n[L.kind]++;
-      body.setMatrixAt(k, l.makeScale(q.sx, q.sy, q.sx).premultiply(m));
-      body.setColorAt(k, col.setHex(L.body));
-      // head: up on top of the (squashed) body, nodding and looking about
+      this.bodies.setMatrixAt(n, l.makeScale(sh[0] * q.sx, sh[1] * q.sy, sh[2] * q.sx).premultiply(m));
+      this.bodies.setColorAt(n, col.setHex(L.body));
       e.set(-q.nod, q.look, q.tilt);
-      l.makeTranslation(0, V.top * q.sy + V.head * 0.78, 0).multiply(r.makeRotationFromEuler(e)).multiply(r.makeScale(V.head, V.head, V.head)).premultiply(m);
-      const h = n.head++;
-      this.heads.setMatrixAt(h, l); this.heads.setColorAt(h, col.setHex(L.skin));
-      if (q.lie || (t + j) % (2.5 + (j % 5) / 2) < 0.12) l.multiply(r.makeScale(1, 0.12, 1));   // blink
-      this.eyes.setMatrixAt(h, l);
+      l.makeTranslation(0, V.top * sh[1] * q.sy + V.head * 0.8, 0).multiply(r.makeRotationFromEuler(e)).multiply(r.makeScale(V.head, V.head, V.head)).premultiply(m);
+      this.heads.setMatrixAt(n, l); this.heads.setColorAt(n, col.setHex(L.skin));
+      this.who[n] = i;
+      n++;
     });
-    for (const k of ["tall", "wide", "small"]) this.bodies[k].count = n[k];
-    this.heads.count = this.eyes.count = n.head;
+    this.bodies.count = this.heads.count = n;
     for (const im of this.all) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
   }
+  personAt(instanceId) { return this.people[this.who[instanceId]]; }
 }
 
 export function makePerson(opts) { return new Person(opts); }

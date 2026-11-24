@@ -27,11 +27,15 @@ it.
 
 ## Commenting
 
-Type any handle and a comment. A new handle follows on the spot and walks into Emberfall: a free bed if
-there is one, a tent by the road if not. Their first comment gets a reply that welcomes them and plays out
-what they said. Comments play out on the next tick, and own-words moves ("I chop wood all
-morning", "I want to start a garden behind my house") within the game hour. The **Ideas** list has some to
-try.
+Type any handle and a comment. A new handle follows on the spot, walks into Emberfall and gets a little house
+of their own. Their first comment gets a reply that welcomes them and plays out what they said. Comments play
+out on the next tick, and own-words moves ("I work the farm all day", "I help build the tavern", "I put a new
+roof on my house") within the game hour. The **Ideas** list has some to try.
+
+**Every comment is People Power.** Everyone works a shift a day anyway; someone who comments works two, and
+what they say steers them to that work (the farm, the brewery, a building going up) - you'll see them walk over
+in 3D. Keep at the same work four days and you become it. The evening count ("People Power today: 64 shifts...")
+is in **What happened**, and the left-hand panel shows gold, shifts, happiness and what people want.
 
 **One move a day, then talk.** Each person's first real attempt of the day is their move: it changes
 the world (chopping, building, brewing, stealing). A question or a joke ("who do I have to kill to get a

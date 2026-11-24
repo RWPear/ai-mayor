@@ -143,12 +143,21 @@ def conjure(world, u, text, item=""):
 def _now(world, w):
     """The cost bites the day it appears too, so it's felt."""
     city = world.city
-    from . import frontier as F
-    st = F.land(world)["stock"]
     if w["upkeep"] == "hungry":
-        st["food"] = max(0, st.get("food", 0) - 2)
-    elif w["upkeep"] == "mischief" and st.get("thatch", 0):
-        st["thatch"] = max(0, st["thatch"] - 2)
+        city.treasury = max(0.0, city.treasury - 3)
+    elif w["upkeep"] == "mischief":
+        _knock(world)
+
+
+def _knock(world):
+    """Mischief: something in town takes a knock (a building's condition)."""
+    from . import frontier as F
+    bs = [b for b in F.land(world)["buildings"] if b["state"] == "standing" and b["id"] != "b0"]
+    if bs:
+        b = world.city.rng.choice(bs)
+        b["condition"] = max(0.0, b.get("condition", 1.0) - 0.15)
+        return b
+    return None
 
 
 def daily(world):
@@ -156,25 +165,22 @@ def daily(world):
     (upkeep: hungry eats the stores; mischief knocks things over; noisy costs everyone sleep; noticed / growing /
     backfire make news now and then; anything else is just a story)"""
     city = world.city
-    from . import frontier as F
-    stock = F.land(world)["stock"]
     c = city.citizens
     told = []
     for w in list(state(city)["open"]):
         up = w.get("upkeep")
         if up == "hungry":
-            if stock.get("food", 0) >= 2:
-                stock["food"] -= 2
+            if city.treasury >= 3:
+                city.treasury -= 3
                 if city.rng.random() < 0.3:
-                    told.append(f"The {w['name']} ate two days' worth of food from the stores before anyone woke up.")
+                    told.append(f"The {w['name']} ate its way through three gold's worth of the town's food before anyone woke up.")
             else:
                 w["mood"] = "hungry"
-                told.append(f"There was nothing left for the {w['name']} to eat. It is looking at the goats. And at people.")
+                told.append(f"There was nothing left to feed the {w['name']}. It is looking at the goats. And at people.")
         elif up == "mischief" and city.rng.random() < 0.5:
-            what = city.rng.choice(["knocked over the woodpile", "chewed through a tent rope", "got into the stores",
-                                    "chased Aldric round the shack", "stole someone's boots"])
-            if "woodpile" in what:
-                stock["wood"] = max(0, stock.get("wood", 0) - 3)
+            b = _knock(world)
+            what = (f"got into {b['name']} and made a mess of it" if b else
+                    city.rng.choice(["chased Aldric round the keep", "stole someone's boots", "rang the bell at 3am"]))
             told.append(f"The {w['name']} {what}.")
         elif up == "noisy":
             for i in c.active().nonzero()[0][:40]:

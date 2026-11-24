@@ -1,0 +1,265 @@
+# What Emberfall can build. There are no materials: a building costs PEOPLE (person-days of building work) and the
+# GOLD put into it decides which version you get - a beer tent or a beer hall. Then it needs a CREW every day to
+# run: a farm only feeds anyone on days ten people work it.
+#
+#   job      what the people who work it become (after a few days running it)
+#   want     what it gives the people (see wants below); a running building covers `serves` people's worth of it
+#   build    person-days to put it up (the first tier; each tier up takes half that again, times the tier)
+#   crew     people a day to run it (less than that and it stands idle)
+#   gold     gold a day into the treasury on days it runs
+#   needs    another kind of building that has to be running too (no tavern without a brewery's beer)
+#   pop      how many people Emberfall needs before anyone asks for it
+#   tiers    by gold invested: the first tier's gold is the least it can be built for. x multiplies serves and gold
+#   shape    how the 3D view draws it
+keep:
+  name: the keep
+  job: steward
+  want: pride
+  build: 0
+  crew: 0
+  gold: 0
+  pop: 0
+  serves: 0
+  shape: keep
+  tiers:
+    - {gold: 0, name: the shack, look: "a one-room shack with a roof that leaks", x: 1}
+    - {gold: 60, name: Aldric's hall, look: "a long timber hall with a carved door", x: 1}
+    - {gold: 300, name: the keep, look: "a square timber keep with a palisade round it", x: 1}
+    - {gold: 1200, name: the castle, look: "a stone castle with four towers and a gatehouse", x: 1}
+farm:
+  name: a farm
+  job: farmer
+  want: food
+  build: 24
+  crew: 10
+  gold: 3
+  pop: 0
+  serves: 25
+  shape: farm
+  tiers:
+    - {gold: 0, name: a vegetable patch, look: "rows of cabbages and onions behind a fence", x: 1}
+    - {gold: 40, name: a farm, look: "plank-edged fields and a little barn", x: 1.8}
+    - {gold: 180, name: a great farm, look: "wide fields, a barn and a windmill", x: 3}
+well:
+  name: a well
+  job: water carrier
+  want: water
+  build: 9
+  crew: 1
+  gold: 0
+  pop: 5
+  serves: 40
+  shape: well
+  tiers:
+    - {gold: 0, name: a well, look: "a stone well with a bucket on a rope", x: 1}
+    - {gold: 30, name: a covered well, look: "a deep well under a little roof, with a winch", x: 2}
+brewery:
+  name: a brewery
+  job: brewer
+  want: beer
+  build: 30
+  crew: 4
+  gold: 2
+  pop: 8
+  serves: 30
+  shape: brewery
+  tiers:
+    - {gold: 0, name: a brew shed, look: "a shed with a copper pot and a lot of barrels", x: 1}
+    - {gold: 60, name: a brewery, look: "a brewhouse with a big round vat and a sweet smell", x: 2}
+tavern:
+  name: a tavern
+  job: barkeep
+  want: company
+  needs: brewery
+  build: 36
+  crew: 3
+  gold: 6
+  pop: 10
+  serves: 25
+  shape: tavern
+  tiers:
+    - {gold: 0, name: a beer tent, look: "a striped tent, three barrels and some benches", x: 1}
+    - {gold: 50, name: a tavern, look: "a crooked tavern with a painted sign and a warm fire", x: 2}
+    - {gold: 250, name: a beer hall, look: "a long hall with tables for a hundred and a band in the corner", x: 4}
+bakery:
+  name: a bakery
+  job: baker
+  want: bread
+  needs: farm
+  build: 24
+  crew: 3
+  gold: 3
+  pop: 15
+  serves: 30
+  shape: bakery
+  tiers:
+    - {gold: 10, name: a bread oven, look: "a clay dome oven under a lean-to", x: 1}
+    - {gold: 80, name: a bakery, look: "a bakery with a chimney that never stops smoking", x: 2.2}
+blacksmith:
+  name: a blacksmith
+  job: smith
+  want: tools
+  build: 36
+  crew: 3
+  gold: 4
+  pop: 12
+  serves: 40
+  shape: smithy
+  tiers:
+    - {gold: 20, name: a forge, look: "an open forge with an anvil and a bellows", x: 1}
+    - {gold: 120, name: a smithy, look: "a stone smithy ringing from dawn to dark", x: 2}
+watchtower:
+  name: a watchtower
+  job: guard
+  want: safety
+  build: 18
+  crew: 3
+  gold: 0
+  pop: 15
+  serves: 30
+  shape: tower
+  tiers:
+    - {gold: 0, name: a lookout post, look: "a platform on four poles", x: 1}
+    - {gold: 40, name: a watchtower, look: "a tall timber watchtower with a roof and a bell", x: 2}
+palisade:
+  name: a palisade
+  job: builder
+  want: safety
+  build: 90
+  crew: 0
+  gold: 0
+  pop: 30
+  serves: 200
+  shape: wall
+  tiers:
+    - {gold: 30, name: a palisade, look: "a wall of sharpened logs round the town", x: 1}
+    - {gold: 400, name: a stone wall, look: "a stone wall with a gatehouse", x: 2}
+chapel:
+  name: a chapel
+  job: priest
+  want: faith
+  build: 42
+  crew: 2
+  gold: 1
+  pop: 20
+  serves: 50
+  shape: chapel
+  tiers:
+    - {gold: 10, name: a shrine, look: "a little roofed shrine with candles", x: 1}
+    - {gold: 90, name: a chapel, look: "a white chapel with a bell tower", x: 2.5}
+stage:
+  name: a stage
+  job: musician
+  want: music
+  build: 18
+  crew: 3
+  gold: 2
+  pop: 20
+  serves: 40
+  shape: stage
+  tiers:
+    - {gold: 0, name: a music stump, look: "a big tree stump where anyone can play", x: 1}
+    - {gold: 70, name: a bandstand, look: "a round bandstand with bunting", x: 2.5}
+market:
+  name: a market
+  job: trader
+  want: trade
+  build: 42
+  crew: 5
+  gold: 10
+  pop: 30
+  serves: 60
+  shape: market
+  tiers:
+    - {gold: 20, name: a market square, look: "a few stalls under striped awnings", x: 1}
+    - {gold: 160, name: a market hall, look: "a covered market hall with a clock", x: 2.5}
+vineyard:
+  name: a vineyard
+  job: vintner
+  want: wine
+  build: 30
+  crew: 6
+  gold: 2
+  pop: 40
+  serves: 20
+  shape: vineyard
+  tiers:
+    - {gold: 30, name: a vineyard, look: "rows of vines tied to stakes", x: 1}
+    - {gold: 150, name: a grand vineyard, look: "terraces of vines and a press house", x: 2.5}
+cellar:
+  name: a wine cellar
+  job: cellarer
+  want: wine
+  needs: vineyard
+  build: 36
+  crew: 2
+  gold: 9
+  pop: 45
+  serves: 30
+  shape: cellar
+  tiers:
+    - {gold: 60, name: a wine cellar, look: "a cool cellar dug into a bank, with a heavy door", x: 1}
+    - {gold: 300, name: a grand wine cellar, look: "vaulted cellars that go on forever, and a tasting room", x: 2.5}
+barracks:
+  name: barracks
+  job: soldier
+  want: safety
+  build: 48
+  crew: 8
+  gold: 0
+  pop: 50
+  serves: 120
+  shape: barracks
+  tiers:
+    - {gold: 40, name: barracks, look: "a long barracks with a training yard", x: 1}
+    - {gold: 250, name: a fort, look: "a walled fort with banners", x: 2.5}
+school:
+  name: a school
+  job: teacher
+  want: learning
+  build: 42
+  crew: 2
+  gold: 1
+  pop: 60
+  serves: 40
+  shape: school
+  tiers:
+    - {gold: 30, name: a schoolhouse, look: "a one-room school with a bell", x: 1}
+    - {gold: 200, name: a library, look: "a library with a round reading room", x: 2.5}
+baths:
+  name: bathhouse
+  job: bathkeeper
+  want: comfort
+  build: 48
+  crew: 3
+  gold: 5
+  pop: 80
+  serves: 50
+  shape: baths
+  tiers:
+    - {gold: 60, name: a bathhouse, look: "steaming wooden tubs under a roof", x: 1}
+    - {gold: 300, name: the great baths, look: "stone baths fed by a warm spring", x: 2.5}
+
+# What the people want, and what share of them want it. A want is met by running buildings that serve it.
+wants:
+  food:     {share: 1.0,  pop: 1,  weight: 3, line: "something to eat"}
+  water:    {share: 1.0,  pop: 5,  weight: 2, line: "clean water close by"}
+  beer:     {share: 0.7,  pop: 8,  weight: 1, line: "a pint of something"}
+  company:  {share: 0.6,  pop: 10, weight: 1, line: "somewhere to drink together"}
+  tools:    {share: 0.4,  pop: 12, weight: 1, line: "proper tools"}
+  bread:    {share: 0.6,  pop: 15, weight: 1, line: "fresh bread"}
+  safety:   {share: 1.0,  pop: 15, weight: 2, line: "to feel safe at night"}
+  faith:    {share: 0.4,  pop: 20, weight: 1, line: "somewhere to pray"}
+  music:    {share: 0.5,  pop: 20, weight: 1, line: "music in the evenings"}
+  trade:    {share: 0.5,  pop: 30, weight: 1, line: "somewhere to buy and sell"}
+  wine:     {share: 0.3,  pop: 40, weight: 1, line: "wine, like proper people"}
+  learning: {share: 0.25, pop: 60, weight: 1, line: "a school for the children"}
+  comfort:  {share: 0.4,  pop: 80, weight: 1, line: "a hot bath"}
+  pride:    {share: 0.0,  pop: 0,  weight: 0, line: "a king worth the name"}
+
+# Your own house: free and automatic when you arrive. Your own gold (one coin a shift) can make it nicer.
+houses:
+  - {gold: 0, name: a hut}
+  - {gold: 25, name: a cottage}
+  - {gold: 80, name: a house with a garden}
+  - {gold: 250, name: a fine townhouse}

@@ -22,27 +22,21 @@ recorders:
     fov: 38
     times: ["08:00", "12:00", "17:00"]
 
-  - name: the_field           # where the buildings go up
-    pos: [5, 28, -40]
-    look: [40, 0, 10]
+  - name: the_town            # the streets round the keep, filling with houses
+    pos: [40, 75, -75]
+    look: [0, 0, 5]
     fov: 45
     times: ["09:00", "13:00", "17:30"]
 
-  - name: the_camp            # tents by the old road: full after an arrival day, emptying as houses finish
-    pos: [20, 22, -95]
-    look: [46, 0, -64]
-    fov: 45
-    times: ["12:00", "20:30"]
+  - name: the_square          # supper round the fire
+    pos: [-2, 14, -30]
+    look: [-13, 0, -13]
+    fov: 50
+    times: ["19:30"]
 
-  - name: the_woods           # watch the trees come down
-    pos: [-20, 30, 10]
-    look: [-72, 0, 48]
-    fov: 42
-    times: ["12:00"]
-
-  - name: top                 # straight down, Prison Architect style: the plan of the place
-    pos: [32, 160, -20]
-    look: [32, 0, 8]
+  - name: top                 # straight down: the plan of the town
+    pos: [0, 160, -20]
+    look: [0, 0, 8]
     fov: 40
     times: ["12:00"]
 

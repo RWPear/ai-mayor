@@ -15,14 +15,15 @@ const PAINTED = {
   pine: 0x2c5a3a, trunk: 0x5c3d24, crop: 0x8dbb4c, banner: 0x274b8a, fire: 0xffa13d, glass: 0x2a2f33,
   windowLit: 0xffc977, autumn1: 0xb8862f, autumn2: 0xa5532c, soil: 0x6a4c2e, roofRed: 0x9c4b32,
 };
-// bright, soft and a little toy-like: yellow-green fields, golden thatch, cream walls, turquoise water
+// Thronefall-ish: deep teal grass, warm orange timber, cream stone and cliffs, lime pines, bright blue water -
+// and (with the lights in terrain.js) navy shadows
 const PASTEL = {
-  grass: 0x8cbf4e, grassDry: 0xb3c95b, grassDark: 0x5f9a45, mud: 0xa98a5c, dirt: 0xd8b67c, sand: 0xe8d39a,
-  rock: 0xaeaab2, water: 0x4db3c6, plaster: 0xf6e4bf, plaster2: 0xf1d6a6, plaster3: 0xeee2c6, timber: 0x6e4a32,
-  plank: 0xb0804f, plankDark: 0x86603d, thatch: 0xe6b65d, thatchOld: 0xc9a05a, stone: 0xc2bcb0, slate: 0x5f80b0,
-  clay: 0xcd6a45, iron: 0x6d747c, canvas: 0xf1e7cf, gold: 0xf2c24e, leaf1: 0x5ea646, leaf2: 0x7fbd4b, leaf3: 0x4b8d40,
-  pine: 0x3f8253, trunk: 0x7d5538, crop: 0xa9d158, banner: 0x3f6fc4, fire: 0xffa13d, glass: 0x3c4a57,
-  windowLit: 0xffd27f, autumn1: 0xeaa53c, autumn2: 0xdb7342, soil: 0x9b6b42, roofRed: 0xc85f3f,
+  grass: 0x2f6f60, grassDry: 0x3b7c64, grassDark: 0x255d55, mud: 0x8a5a3c, dirt: 0xb07650, sand: 0xd8c79c,
+  rock: 0xe4d6ae, water: 0x46aee8, plaster: 0xe9a463, plaster2: 0xdf9658, plaster3: 0xefb578, timber: 0x8a4a26,
+  plank: 0xd9863f, plankDark: 0xb5652c, thatch: 0xc1582d, thatchOld: 0xa84b28, stone: 0xdccfac, slate: 0x4766b0,
+  clay: 0xc45f35, iron: 0x5e6680, canvas: 0xf1e2c2, gold: 0xf2c24e, leaf1: 0x7cc84e, leaf2: 0x98d85a, leaf3: 0x5fb046,
+  pine: 0x76c24c, trunk: 0x6b3a20, crop: 0xe9c46a, banner: 0x2f55b0, fire: 0xffa13d, glass: 0x23305a,
+  windowLit: 0xffd27f, autumn1: 0xeaa53c, autumn2: 0xdb7342, soil: 0x9a5c36, roofRed: 0xb94a2a,
 };
 export const C = FLAT ? PASTEL : PAINTED;
 // in the flat look a texture name just means "the colour that thing is"

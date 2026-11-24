@@ -60,8 +60,8 @@ export class Island {
 }
 
 // colour of the land itself: meadow, with a tint on each piece of risen land
-const LOBE_TINT = { meadow: 0x9ccf5a, cliffs: 0xd8d2c2, grove: 0x6fa86a, springs: 0xc9b06a, ruins: 0xa8a890,
-  crystals: 0xb7b3e6, point: 0xcfe0b0, skygarden: 0x7fc76a };
+const LOBE_TINT = { meadow: 0x3f8a5c, cliffs: 0xd8cfae, grove: 0x2f7a6a, springs: 0x6a8a64, ruins: 0x8a9a80,
+  crystals: 0x6a7ac0, point: 0x4f8a70, skygarden: 0x3f9a5a };
 export function landColor(x, z, y, steep, c = new THREE.Color()) {
   c.setHex(C.grass).lerp(new THREE.Color(C.grassDry), clamp(fbm(x * 0.02 + 9, z * 0.02, 3) + 0.35, 0, 1) * 0.6)
     .lerp(new THREE.Color(C.grassDark), clamp(fbm(x * 0.004, z * 0.004, 2) + 0.15, 0, 1) * 0.55);
@@ -166,9 +166,9 @@ export class Land {
     }));
     const P = [], col = [], c = new THREE.Color();
     const shade = (k, i) => {
-      if (k === 0) return c.setHex(0x5b8a3a);                            // the grass lip
-      if (k === 1) return c.setHex(0x6b4a2e);                            // topsoil
-      return c.setHex([0x9a5442, 0x8a4a3a, 0x7d4436, 0xa0624a][(hash(i * 5 + k) % 4)]).offsetHSL(0, 0, -k * 0.022);
+      if (k === 0) return c.setHex(0x2a6457);                            // the grass lip
+      if (k === 1) return c.setHex(0xb98f62);                            // topsoil
+      return c.setHex([0xe6d8b0, 0xd9c99c, 0xcdbb8c, 0xe0cfa2][(hash(i * 5 + k) % 4)]).offsetHSL(0, 0, -k * 0.02);   // cream cliffs
     };
     const tri = (a, b, d, k, i) => { P.push(...a, ...b, ...d); shade(k, i); for (let q = 0; q < 3; q++) col.push(c.r, c.g, c.b); };
     for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < rim.length; i++) {
@@ -231,13 +231,15 @@ export class Land {
       if (camp && (this.S.tents || []).length) c.lerp(mud, (1 - smoothstep(10, 26, Math.hypot(x - camp[0], z - camp[1]))) * 0.75);
       if (Math.hypot(x, z) < 9) c.lerp(dirt, (1 - Math.hypot(x, z) / 9) * 0.7);         // trodden around the shack
       for (const t of trails) {
-        const w = 0.6 + 1.6 * t.wear / maxWear;
+        const w = t.w ?? 0.6 + 1.6 * t.wear / maxWear;
+        if (x < Math.min(t.from[0], t.to[0]) - w - 1 || x > Math.max(t.from[0], t.to[0]) + w + 1 ||
+            z < Math.min(t.from[1], t.to[1]) - w - 1 || z > Math.max(t.from[1], t.to[1]) + w + 1) continue;
         const d = distToSeg(x, z, t.from, t.to);
-        if (d < w + 1) c.lerp(dirt, (1 - smoothstep(w * 0.4, w + 1, d)) * (0.35 + 0.55 * t.wear / maxWear));
+        if (d < w + 1) c.lerp(dirt, (1 - smoothstep(w * 0.4, w + 1, d)) * (t.w ? 0.85 : 0.35 + 0.55 * t.wear / maxWear));
       }
-      c.lerp(new THREE.Color(0x6b8f3a), (1 - smoothstep(0, 3, this.island.sd(x, z))) * 0.5);   // the lip at the rim
+      c.lerp(new THREE.Color(0x2a6457), (1 - smoothstep(0, 3, this.island.sd(x, z))) * 0.5);   // the lip at the rim
       for (const L of lots) {                                                        // bare earth under buildings
-        if (Math.abs(x - L.pos[0]) < L.hw + 1.5 && Math.abs(z - L.pos[1]) < L.hd + 1.5) c.lerp(dirt, 0.55);
+        if (Math.abs(x - L.pos[0]) < L.hw + 0.5 && Math.abs(z - L.pos[1]) < L.hd + 0.5) c.lerp(L.yard ? dirt : grass, L.yard ? 0.3 : 0.4);
       }
       if (FLAT) {                                                                    // a touch of variety per facet
         const v = (hash(i0 * 31 + 7) % 1000) / 1000 - 0.5;
@@ -416,7 +418,9 @@ export class Land {
       g *= 1 - clamp((y - 6) / 6, 0, 1) * smoothstep(this.hill.r * 1.3, this.hill.r * 0.5, Math.hypot(x - this.hill.pos[0], z - this.hill.pos[1]));
       for (const L of lots) if (Math.abs(x - L.pos[0]) < L.hw + 1 && Math.abs(z - L.pos[1]) < L.hd + 1) { g = 0; break; }
       if (g > 0) for (const t of paths) {
-        const w = 0.6 + 1.6 * t.wear / maxWear;
+        const w = t.w ?? 0.6 + 1.6 * t.wear / maxWear;
+        if (x < Math.min(t.from[0], t.to[0]) - w - 1 || x > Math.max(t.from[0], t.to[0]) + w + 1 ||
+            z < Math.min(t.from[1], t.to[1]) - w - 1 || z > Math.max(t.from[1], t.to[1]) + w + 1) continue;
         if (distToSeg(x, z, t.from, t.to) < w + 0.4) { g *= 0.15 + 0.85 * (1 - t.wear / maxWear); }
       }
       const k = (j * N + i) * 4;
@@ -464,7 +468,7 @@ export class Land {
     const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
     this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
     this.scene.add(this.stars);
-    this.hemi = FLAT ? new THREE.HemisphereLight(0xdcefff, 0xa89a6a, 1.0) : new THREE.HemisphereLight(0xcfe3ff, 0x40502c, 0.8);
+    this.hemi = FLAT ? new THREE.HemisphereLight(0x8fa6ff, 0x1c2456, 1.0) : new THREE.HemisphereLight(0xcfe3ff, 0x40502c, 0.8);
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     this.sun.castShadow = true;
     const sm = this.q === "low" ? 1024 : 4096;
@@ -531,7 +535,7 @@ export class Land {
     const warm = clamp(1 - Math.abs(elev) * 3, 0, 1);
     this.sun.color.setHSL(0.09, 0.6 * warm + (FLAT ? 0.25 : 0.1), 0.75 + 0.2 * (1 - warm));
     this.hemi.intensity = 0.15 + day * (grey ? 0.9 : FLAT ? 1.05 : 0.75);
-    if (FLAT) this.hemi.color.setHSL(0.58, 0.45, 0.6 + 0.28 * day);  // shadows go a soft blue, not black
+    if (FLAT) this.hemi.color.setHSL(0.63, 0.75, 0.42 + 0.2 * day);  // shadows go navy, not black (Thronefall)
     this.moon.intensity = (1 - day) * 0.35;
     this.moon.position.copy(focus).add(new THREE.Vector3(-120, 200, 80)); this.moon.target = this.sun.target;
     this.stars.material.opacity = (1 - day) * (grey ? 0.15 : 0.9);

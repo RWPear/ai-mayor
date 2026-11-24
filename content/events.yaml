@@ -8,8 +8,8 @@
 #   choices:   {WORD: {text, effects...}} - the words are a vote; options with `side: WORD` let Aldric back one
 #   options:   what Aldric can do about it (cost_pc x people, max 20 people's worth, out of his purse)
 #
-# Effects: mood, mood.hold, loyalty, treasury, treasury_pc, service.defense, stock.<food|wood|stone|clay|thatch|rope|
-#          anything> (the island's stores), island: 1 (new land rises), wonder: "name | kind | what it is | its catch |
+# Effects: mood, mood.hold, loyalty, treasury, treasury_pc, service.defense, gold (into or out of the treasury),
+#          build.<kind>: 1 (an event leaves a building behind) / build.any: -1 (something takes a battering), island: 1 (new land rises), wonder: "name | kind | what it is | its catch |
 #          upkeep" (kind: creature, object, magic, place; upkeep: hungry, mischief, noisy, noticed, growing, or "")
 # Text placeholders: {hold}, {resident} (a real @handle)
 
@@ -44,7 +44,7 @@
   days: 2
   commands: {FETCH: help, DIG: help, AVOID: hinder}
   help_needed: 0.3
-  on_help: {text: "{resident} dragged the fallen star out of the woods. It's starmetal - and still warm.", stock.starmetal: 3, mood: 0.04}
+  on_help: {text: "{resident} dragged the fallen star out of the woods. It's starmetal - and still warm.", gold: 30, mood: 0.04}
   on_timeout: {text: "The glow faded. By the time anyone looked, the crater was empty.", mood: -0.01}
 
 - id: will_o_wisps
@@ -54,8 +54,8 @@
   days: 2
   commands: {FOLLOW: help, IGNORE: hinder}
   help_needed: 0.25
-  on_help: {text: "{resident} followed the lights all night and came back at dawn with pockets full of mushrooms that glow.", stock.food: 6, mood.hold: 0.05}
-  on_timeout: {text: "The lights went away. Two goats went with them.", stock.food: -3}
+  on_help: {text: "{resident} followed the lights all night and came back at dawn with pockets full of mushrooms that glow.", mood.hold: 0.05, mood: 0.02}
+  on_timeout: {text: "The lights went away. Two goats went with them.", gold: -5}
 
 - id: cloud_storm
   title: "A storm is rolling across the cloud sea toward the island"
@@ -66,7 +66,7 @@
   commands: {BRACE: help, TIE: help, PANIC: hinder}
   help_needed: 0.35
   on_help: {text: "Everything was tied down when the storm hit. Emberfall shook, and held.", mood: 0.05, loyalty: 0.03}
-  on_timeout: {text: "The storm tore through the camp. Tents are in the trees and half the thatch is gone.", stock.thatch: -6, mood: -0.06}
+  on_timeout: {text: "The storm tore through the camp. Tents are in the trees and half the thatch is gone.", build.any: -1, mood: -0.06}
   options:
     - {id: shack, label: "Everyone into the shack", cost_pc: 0, effects: {progress: 0.25}, text: "Aldric packed everyone into the shack. It was cosy. Too cosy."}
 
@@ -77,7 +77,7 @@
   days: 2
   commands: {SHORE: help, BUILD: help, FLEE: hinder}
   help_needed: 0.35
-  on_help: {text: "{resident} and the others piled stone along the edge. It held.", mood.hold: 0.05, stock.stone: -4}
+  on_help: {text: "{resident} and the others piled stone along the edge. It held.", mood.hold: 0.05}
   on_timeout: {text: "A slice of {hold} broke off and fell into the clouds. Nobody was standing on it. Probably.", mood.hold: -0.06}
 
 - id: door_in_the_hill
@@ -100,7 +100,7 @@
   days: 2
   choices:
     BEFRIEND: {text: "The griffin stays. It eats a goat a week and nobody steals from Emberfall any more.", wonder: "the griffin on the crag | creature | a griffin nesting on the crag, watching everything | eats from the stores | hungry", service.defense: 0.1}
-    SCARE: {text: "Pots, pans and shouting. The griffin left - and took the washing with it.", stock.rope: -3}
+    SCARE: {text: "Pots, pans and shouting. The griffin left - and took the washing with it.", gold: -3}
   options:
     - {id: back_friend, label: "Back BEFRIEND", side: BEFRIEND, cost_pc: 0, text: "Aldric has always wanted a griffin."}
     - {id: back_scare, label: "Back SCARE", side: SCARE, cost_pc: 0, text: "Aldric doesn't trust anything with that many claws."}
@@ -125,10 +125,10 @@
   days: 2
   commands: {TRADE: help, HAGGLE: help, IGNORE: hinder}
   help_needed: 0.3
-  on_help: {text: "The airship traders went home with a hold full of wood and left Emberfall richer.", treasury: 25, stock.wood: -6, mood: 0.03}
+  on_help: {text: "The airship traders went home with a hold full of wood and left Emberfall richer.", treasury: 25, mood: 0.03}
   on_timeout: {text: "The airship cast off. The traders said Emberfall wasn't worth the stop. Yet.", mood: -0.02}
   options:
-    - {id: buy_nails, label: "Buy nails and tools", cost_pc: 1, effects: {progress: 0.2, stock.nails: 10}, text: "Aldric bought a sack of nails. He looks at them often."}
+    - {id: buy_nails, label: "Buy nails and tools", cost_pc: 1, effects: {progress: 0.2}, text: "Aldric bought a sack of nails. He looks at them often."}
 
 - id: cloud_mist
   title: "A thick cloud-mist has rolled over the island - people are getting lost"
@@ -160,7 +160,7 @@
   days: 1
   commands: {FEAST: help, COOK: help, SULK: hinder}
   help_needed: 0.25
-  on_help: {text: "The first feast on the island. {resident} danced on a table. The table did not survive.", mood: 0.1, loyalty: 0.04, stock.food: -6}
+  on_help: {text: "The first feast on the island. {resident} danced on a table. The table did not survive.", mood: 0.1, loyalty: 0.04, gold: -10}
   on_timeout: {text: "Nobody could agree on the food. There was no feast.", mood: -0.02}
 
 - id: wolves
@@ -173,7 +173,7 @@
   commands: {HUNT: help, HIDE: hinder}
   help_needed: 0.45
   on_help: {text: "The wolves were driven back into the woods. {resident} kept a pelt.", mood.hold: 0.07}
-  on_timeout: {text: "The wolves got into the stores in {hold}.", stock.food: -5, mood.hold: -0.05}
+  on_timeout: {text: "The wolves got into the stores in {hold}.", gold: -8, mood.hold: -0.05}
 
 # =========================================================================== Skarn the Red (started by the war camp)
 # He camps on a black crag of rock floating north of Emberfall, and his raiders cross on hide gliders.
@@ -190,7 +190,7 @@
   on_help: {text: "{hold} held! {resident} was first to the edge with a pitchfork. {warlord}'s raiders flapped home.",
             loyalty.hold: 0.06}
   on_timeout: {text: "{warlord}'s raiders burned the edge of {hold} and flew north with the food.", mood.hold: -0.12,
-               stock.food: -8, loyalty.hold: -0.06}
+               gold: -15, build.any: -1, loyalty.hold: -0.06}
   options:
     - {id: lead, label: "Aldric runs to {hold} with a torch", cost_pc: 0, effects: {progress: 0.25, loyalty.hold: 0.03}, text: "Aldric ran to {hold} waving a torch and shouting."}
     - {id: abandon, label: "Pull everyone back to the shack", cost_pc: 0, effects: {loyalty.hold: -0.1}, text: "Aldric pulled everyone back to the shack. {hold} is on its own."}
@@ -208,7 +208,7 @@
   on_help: {text: "VICTORY! {warlord}'s horde broke against Emberfall. Songs will be sung about this day.",
             loyalty: 0.12, mood: 0.1}
   on_timeout: {text: "{warlord}'s horde sacked the edges of the island and flew off with the stores. Emberfall survives, barely.",
-               loyalty: -0.12, mood: -0.08, stock.food: -15, stock.wood: -10}
+               loyalty: -0.12, mood: -0.08, gold: -40, build.any: -1}
   options:
     - {id: lead_charge, label: "Aldric leads the charge himself", cost_pc: 0, effects: {progress: 0.15, loyalty: 0.03}, text: "Aldric put a pot on his head and led the charge."}
     - {id: tribute, label: "Pay the horde to leave", cost_pc: 3, ends: true, effects: {loyalty: -0.08}, text: "Aldric paid {warlord} to go away. Nobody will let him forget it."}

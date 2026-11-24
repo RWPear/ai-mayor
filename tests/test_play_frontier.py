@@ -26,7 +26,7 @@ def test_commenting_as_a_new_handle_follows_and_gets_a_reply_to_approve(tmp_path
             p._tick()
     mine = [r for r in p.replies if r["to"] == "reid_tester"]
     assert mine and all(r["status"] == "pending" for r in mine)
-    assert any("garden" in r["text"] for r in mine)
+    assert any("farm" in r["text"] or "garden" in r["text"] or "building" in r["text"] or "odd jobs" in r["text"] for r in mine)
     out = p.set_reply({"id": mine[0]["id"], "status": "approved", "text": "Edited by hand."})
     assert out["ok"] and out["reply"]["status"] == "approved" and out["reply"]["edited"]
     assert any(m.get("comment") and m["who"] == "@reid_tester" for m in p.feed()["log"])
@@ -207,13 +207,13 @@ def test_the_goat_can_be_hunted_once_it_exists(tmp_path):
 
 
 def test_wonders_cost_something_every_day(tmp_path):
-    from city.living import frontier as F, wonders
+    from city.living import wonders
     p = _play(tmp_path)
-    w = wonders.add(p.world, "dragon hatchling", "creature", owner="x", what="a hatchling", cost="eats the stores",
+    w = wonders.add(p.world, "dragon hatchling", "creature", owner="x", what="a hatchling", cost="eats the town's food",
                     upkeep="hungry")
-    F.land(p.world)["stock"]["food"] = 10
+    p.city.treasury = 10
     wonders.daily(p.world)
-    assert F.land(p.world)["stock"]["food"] == 8 and w in wonders.state(p.world.city)["open"]
+    assert p.city.treasury == 7 and w in wonders.state(p.city)["open"]
 
 
 def test_the_hosted_comment_model_is_optional_and_falls_back(monkeypatch):
@@ -252,3 +252,17 @@ def test_a_gift_for_the_kingdom_reaches_the_king(tmp_path):
     assert out[0]["action"] == "gift_king"
     inv = p.world.agent("king")["life"]["inventory"]
     assert inv and inv[-1]["from"] == "hauler" and "resources" in inv[-1]["item"]
+
+
+def test_a_comment_is_an_extra_shift_where_it_says(tmp_path):
+    from city.living import frontier as F, intents
+    p = _play(tmp_path)
+    for h in ("ann", "bob"):
+        p.comment(h, "x")
+    p._drain()
+    p.city.treasury = 100
+    F.start(p.world, "farm", 0)
+    p.world.city.living["acted_today"] = []
+    out = intents.process(p.world, {"ann": "I help build the farm today"}, None, 0)
+    assert F.today(p.world)["extra"].get("ann") == 1 and F.land(p.world)["jobs"]["ann"].startswith("build:")
+    assert "building" in out[0]["reply"] or "double shift" in out[0]["reply"].lower() or "farm" in out[0]["reply"]

@@ -78,7 +78,8 @@ nothing, the crowd's pick wins. Tune the size of these in `content/balance.yaml`
 
 | Key | What it does | Example |
 |---|---|---|
-| `stock.<material>` | the island's stores (food, wood, stone, clay, thatch, rope, or anything new: starmetal) | `stock.food: -6` |
+| `gold` | into (or out of) the treasury, never below zero | `gold: -15` |
+| `build.<kind>` | `build.any: -1` batters a random building (it falls into disrepair until people run it again); `build.tavern: 1` leaves a new one behind | `build.any: -1` |
 | `treasury` / `treasury_pc` | Aldric's purse, flat / per person (capped at 20 people's worth; never below 0) | `treasury: 25` |
 | `island` | new land rises from the clouds at the rim, with a new place on it | `island: 1` |
 | `wonder` | a wonder appears: `"name \| kind \| what it is \| its catch \| upkeep"` | see the griffin in events.yaml |

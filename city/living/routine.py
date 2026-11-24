@@ -3,12 +3,12 @@
 The day has one simple shape, the same for everyone (each person a few minutes earlier or later than the next):
 
     06:00  up           at home
-    06:30  breakfast    at the fire
-    07:30  work         where their job is (the woods, the hill, the river, the field, a building going up)
-    12:00  lunch        at the fire
+    06:30  breakfast    at home (neighbours over the fence)
+    07:30  work         today's job (city/living/frontier.py: People Power): the farm, the brewery, a building site
+    12:00  lunch        where they work
     13:00  work
-    17:30  their own time   fishing, the garden, their own build, a friend's door
-    19:00  supper       at the fire
+    17:30  their own time   the tavern (once there is one), a friend's door, fishing, the square
+    19:00  supper       the square for the first streets, at home further out
     21:30  bed
 
 Wherever two people are in the same place at the same time, something small can happen between them: they share
@@ -24,20 +24,17 @@ from . import frontier as F
 
 DAY = [  # (minute, what, where)
     (6 * 60, "up", "home"),
-    (6 * 60 + 30, "breakfast", "commons"),
+    (6 * 60 + 30, "breakfast", "home"),
     (7 * 60 + 30, "work", "work"),
-    (12 * 60, "lunch", "commons"),
+    (12 * 60, "lunch", "work"),
     (13 * 60, "work", "work"),
     (17 * 60 + 30, "free", "free"),
     (19 * 60, "supper", "commons"),
     (21 * 60 + 30, "sleep", "home"),
 ]
-WORDS = {"up": "up and about", "breakfast": "breakfast at the fire", "work": "work", "lunch": "lunch at the fire",
-         "free": "their own time", "supper": "supper at the fire", "sleep": "bed"}
-FREE = {  # what they do with their own time, by where
-    "river": "fishing at the river", "field": "tending a patch in the field", "woods": "gathering mushrooms in the woods",
-    "commons": "sitting by the fire", "visit": "visiting", "own": "working on their own build",
-}
+WORDS = {"up": "up and about", "breakfast": "breakfast at home", "work": "work", "lunch": "lunch where they work",
+         "free": "their own time", "supper": "supper", "sleep": "bed"}
+SQUARE_SEATS = 60                 # the first streets eat at the square; further out, supper's at home
 
 
 def _h(*parts):
@@ -80,17 +77,19 @@ def friends_of(world, h, best=3):
 
 
 def free_time(world, i):
-    """Where someone spends their own time today: their own build if they have one, a friend's door, or a pastime."""
-    city, c = world.city, world.city.citizens
+    """Where someone spends their own time today: the tavern (if it's open and they're a drinker), a friend's door,
+    or a pastime."""
+    city, c, L = world.city, world.city.citizens, F.land(world)
     h = c.handles[int(i)]
-    from . import personal
-    if personal.of(world, h):
-        return "own", None
     day = city.day + 1
+    pubs = [b for b in L["buildings"] if b.get("running") and b["kind"] in ("tavern", "stage", "baths", "chapel")]
+    if pubs and _h(h, day, "pub") % 3:
+        b = pubs[_h(h, day) % len(pubs)]
+        return "b:" + b["id"], None
     close = [o for o, v in friends_of(world, h) if v["s"] >= 5 and o in c.index and c.active()[c.index[o]]]
     if close and _h(h, day, "visit") % 3 == 0:
         return "visit", close[_h(h, day) % len(close)]
-    return ["river", "field", "woods", "commons", "commons"][_h(h, day, "free") % 5], None
+    return ["river", "field", "woods", "square", "square"][_h(h, day, "free") % 5], None
 
 
 def schedule(world, i):
@@ -99,23 +98,26 @@ def schedule(world, i):
     h = c.handles[int(i)]
     day = world.city.day + 1
     cache = getattr(world, "_sched", None)
+    key = (day, len(F.land(world).get("jobs", {})), F.land(world).get("jobs", {}).get(h))
     if cache is None or cache.get("day") != day:
         cache = world._sched = {"day": day}
-    if h in cache:
-        return cache[h]
-    cache[h] = out = _schedule(world, i, h)
+    if h in cache and cache[h][0] == key:
+        return cache[h][1]
+    out = _schedule(world, i, h)
+    cache[h] = (key, out)
     return out
 
 
 def _schedule(world, i, h):
-    c = world.city.citizens
     off = offset(h)
-    work = F.home_of(c, i)
+    work = F.job_place(world, h)
     free, friend = free_time(world, i)
+    hs = F.land(world)["houses"].get(h)
+    supper = "square" if hs and hs["n"] < SQUARE_SEATS else "home"
     out = []
     for k, (m, what, where) in enumerate(DAY):
         to = DAY[k + 1][0] if k + 1 < len(DAY) else 30 * 60
-        place = {"home": "home", "commons": "commons", "work": work, "free": free}[where]
+        place = {"home": "home", "commons": supper, "work": work, "free": free}[where]
         out.append({"from": m + off, "to": to + off, "what": what, "where": place, "with": friend if where == "free" else None})
     return out
 
@@ -175,17 +177,25 @@ FILL = {
                  "who sits nearest the fire", "whether Aldric is a real king", "how many legs a sky-whale has"],
     "tease": ["haircut", "singing", "terrible cooking", "fear of the edge", "boots", "laugh"],
     "song": ["the drowned miller", "the king with no crown", "the goat that ate the moon", "a girl from the south road"],
-    "help": {"woods": ["drag a log out of the brambles", "fell a tree that wouldn't fall"], "hill": ["lever out a stone the size of a pig", "carry a stone down the ramp"],
-             "river": ["haul in a net", "dig out a stuck cart"], "field": ["clear a patch of thistles", "carry the bundles back"],
-             "road": ["chase off a fox", "mend the signpost"], "*": ["carry a load back", "fix a broken handle"]},
-    "tip": {"woods": ["split a log along the grain", "tell a sound tree from a rotten one"], "hill": ["find the crack in a stone", "lift with the legs"],
-            "river": ["gut a fish in three cuts", "read the water"], "field": ["twist thatch so it holds", "tell an onion from a lily"],
+    "help": {"farm": ["get a cart of cabbages out of the mud", "chase the crows off the seedlings"],
+             "build": ["get a beam up onto the frame", "hold a wall straight while the pegs went in"],
+             "brewery": ["roll a full barrel up the ramp", "stir the mash before it caught"],
+             "tavern": ["carry a drunk home", "change a barrel mid-song"], "bakery": ["knead a trough of dough", "pull the loaves before they burned"],
+             "blacksmith": ["work the bellows", "hold a red-hot horseshoe steady"], "watchtower": ["haul the bell rope", "spot a fox in the cabbages"],
+             "market": ["put up a stall in the wind", "count a jar of coppers"], "well": ["fish a bucket out of the well"],
+             "vineyard": ["tie up a row of vines"], "cellar": ["shift a cask"], "*": ["carry a load across town", "fix a broken handle"]},
+    "tip": {"farm": ["tell a weed from a carrot", "plant onions the right way up"], "build": ["cut a joint that holds", "set a post plumb"],
+            "brewery": ["tell when the mash is ready", "smell bad hops"], "tavern": ["pour a pint without the foam", "end a fight with a joke"],
+            "bakery": ["know bread's done by the knock", "shape a plait loaf"], "blacksmith": ["read the colour of hot iron"],
             "*": ["tie a knot that holds", "sharpen a blade on a stone"]},
-    "race": {"woods": ["fell a birch first"], "hill": ["carry the most stone"], "river": ["catch the first fish"],
-             "field": ["cut the most bundles"], "*": ["finish first"]},
-    "mishap": {"woods": ["a tree that came down the wrong way", "a lost axe head"], "hill": ["a dropped stone and a squashed toe"],
-               "river": ["a torn net", "a fish that got away"], "field": ["a trampled row"], "*": ["a broken tool", "a spilled load"]},
-    "nap": {"woods": ["under an oak"], "hill": ["behind a boulder"], "river": ["in the reeds"], "field": ["in the long grass"], "*": ["in the shade"]},
+    "race": {"farm": ["dig a row fastest"], "build": ["hammer in ten pegs"], "brewery": ["roll a barrel the length of the yard"],
+             "tavern": ["carry six mugs at once"], "bakery": ["shape the most loaves"], "*": ["finish first"]},
+    "mishap": {"farm": ["a trampled row of onions", "a gate left open and a goat in the cabbages"],
+               "build": ["a wall that went up crooked", "a hammer dropped from the roof"],
+               "brewery": ["a barrel that went sour"], "tavern": ["a smashed mug and a tab nobody paid"],
+               "bakery": ["a tray of burned loaves"], "blacksmith": ["a cracked anvil"], "*": ["a broken tool", "a spilled load"]},
+    "nap": {"farm": ["behind the haystack"], "build": ["under the scaffolding"], "brewery": ["between two barrels"],
+            "tavern": ["under a table"], "*": ["in the shade"]},
     "spot": ["the edge, to look down at the clouds", "the waterfall", "the top of the rocky hill", "the river bend"],
     "trinket": ["a carved wooden bird", "a ribbon from the peddler", "a smooth blue stone from the river", "a crown of daisies",
                 "a whistle cut from a reed"],
@@ -207,6 +217,10 @@ def _fill(world, kind, a, b, where, rng):
     from . import wonders
     topics += [w["name"] for w in wonders.state(city).get("open", [])][-3:]
     topics += [p["name"] for p in F.places(world).values() if p.get("risen")][-2:]
+    L = F.land(world)
+    topics += [f"whether {p['name']} will ever get finished" for p in L["projects"]][:2]
+    topics += [f"who's been skiving off at {b['name']}" for b in L["buildings"] if b.get("disrepair")][:1]
+    topics += [f"how much gold Aldric is sitting on"]
     act = np.where(city.citizens.active())[0]
     if len(act) > 2:
         o = city.citizens.handles[int(act[rng.randrange(len(act))])]
@@ -255,7 +269,8 @@ def tick(world):
         b = doing(world, i, m)
         if b["what"] == "sleep":
             continue
-        place = b["where"] if b["where"] != "home" else "home:" + str(F.land(world).get("homes", {}).get(h, "camp"))
+        hs = F.land(world)["houses"].get(h)
+        place = b["where"] if b["where"] != "home" else "home:" + str(hs["n"] // 4 if hs else "-")
         if b["where"] == "visit":
             place = "visit:" + "|".join(sorted((h, b["with"] or "")))
         groups.setdefault((b["what"], place), []).append(int(i))
@@ -288,7 +303,7 @@ def meet(world, a, b, what, where, rng=None, t=None):
     bd = bonds(world).setdefault(_key(a, b), {"s": 0, "n": 0, "stage": None})
     temper = float(c.temper[c.index[a]]) if a in c.index else 0.0
     kind, d, anim, label, lines = _choose(world, BLOCK_KIND.get(what, ["meal"]), bd["s"], temper, rng)
-    work_place = where if where in F.places(world) else "*"
+    work_place = _work_kind(world, where)
     vals = _fill(world, kind, a, b, work_place, rng)
     text = rng.choice(lines).format(a="@" + a, b="@" + b, **vals)
     bd["s"] += d
@@ -299,11 +314,6 @@ def meet(world, a, b, what, where, rng=None, t=None):
         c.mood[c.index[a]] = float(np.clip(c.mood[c.index[a]] + d * 0.01, 0, 1))
     if b in c.index:
         c.mood[c.index[b]] = float(np.clip(c.mood[c.index[b]] + d * 0.015, 0, 1))
-    if kind == "teach":                                   # a tip can be the one that makes a craft stick
-        from . import intents
-        skill = {"woods": "woodcutting", "hill": "masonry", "river": "fishing", "field": "farming"}.get(work_place)
-        if skill:
-            intents._practise(world, b, skill)
     city.living["enc_n"] = city.living.get("enc_n", 0) + 1
     e = {"n": city.living["enc_n"], "t": world.clock if t is None else t, "a": a, "b": b, "kind": kind, "anim": anim, "label": label, "text": text,
          "what": what, "where": where, "d": d}
@@ -314,8 +324,29 @@ def meet(world, a, b, what, where, rng=None, t=None):
     return e
 
 
+def _work_kind(world, where):
+    """'b:b3' -> 'farm' (what kind of work), 'p:p4' -> 'build', a place stays a place."""
+    if where.startswith("b:"):
+        b = F.building(world, where[2:])
+        return b["kind"] if b else "*"
+    if where.startswith("p:"):
+        return "build"
+    return where if where in F.places(world) else "*"
+
+
+def _at(world, where):
+    if where.startswith("b:"):
+        b = F.building(world, where[2:])
+        return "at " + F.roles_the(F.bare(b["name"])) if b else "at work"
+    if where.startswith("p:"):
+        p = next((p for p in F.land(world)["projects"] if p["id"] == where[2:]), None)
+        return f"on the building site of {p['name']}" if p else "on a building site"
+    return AT.get(where, "by the fire")
+
+
 AT = {"woods": "in the woods", "hill": "up on the hill", "river": "down by the river", "field": "out in the field",
-      "road": "on the old road", "commons": "by the fire", "home": "outside their door", "visit": "on a doorstep"}
+      "road": "on the old road", "commons": "by the fire", "square": "in the square", "home": "outside their door",
+      "visit": "on a doorstep"}
 CAP = {"friends": 3, "close": 1, "rivals": 2, "enemies": 1}      # a day: the rest wait their turn (tomorrow)
 
 
@@ -323,7 +354,7 @@ def _story(world, a, b, bd, text, where="commons"):
     """When the little things add up: friends, best friends, a feud, a fight."""
     s, stage, rng = bd["s"], bd.get("stage"), world.city.rng
     A, B = "@" + a, "@" + b
-    at = AT.get(where, "by the fire")
+    at = _at(world, where)
     small = text[0].lower() + text[1:]
     nxt = ("close" if s >= 12 and stage == "friends" else "friends" if s >= 5 and not stage else
            "enemies" if s <= -8 and stage == "rivals" else "rivals" if s <= -4 and not stage else None)
