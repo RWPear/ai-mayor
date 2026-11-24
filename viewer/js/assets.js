@@ -9,6 +9,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 export const USE_KIT = new URLSearchParams(location.search).get("assets") !== "off";
+const KIT_PEOPLE = new URLSearchParams(location.search).get("people") === "kit";     // default: pips (people.js)
 const BASE = "assets/kaykit/";
 export const A = { ready: false, chars: false, world: {}, people: {}, clips: {}, tools: {} };
 
@@ -27,13 +28,14 @@ export async function loadAssets(progress = () => {}) {
   const load = (url) => new Promise((res) => loader.load(url, res, undefined, () => res(null)));
   const names = [...COLORED.flatMap((n) => [`building_${n}_blue`, `building_${n}_red`]), ...NEUTRAL];
   let done = 0;
-  const total = names.length + PEOPLE.length + TOOLS.length + 1;
+  const people = KIT_PEOPLE ? PEOPLE : [];
+  const total = names.length + people.length + TOOLS.length + 1;
   const tick = () => progress(++done / total);
   await Promise.all([
     ...names.map((n) => load(`${BASE}world/${n}.gltf`).then((g) => { if (g) A.world[n] = prep(g.scene); tick(); })),
-    ...PEOPLE.map((n) => load(`${BASE}chars/${n}.glb`).then((g) => { if (g) A.people[n] = prep(g.scene, true); tick(); })),
+    ...people.map((n) => load(`${BASE}chars/${n}.glb`).then((g) => { if (g) A.people[n] = prep(g.scene, true); tick(); })),
     ...TOOLS.map((n) => load(`${BASE}tools/${n}.gltf`).then((g) => { if (g) A.tools[n] = prep(g.scene); tick(); })),
-    load(`${BASE}chars/animations.glb`).then((g) => { if (g) for (const c of g.animations) A.clips[c.name] = c; tick(); }),
+    KIT_PEOPLE ? load(`${BASE}chars/animations.glb`).then((g) => { if (g) for (const c of g.animations) A.clips[c.name] = c; tick(); }) : tick(),
   ]);
   A.ready = Object.keys(A.world).length > 20;
   A.chars = Object.keys(A.people).length >= 3 && Object.keys(A.clips).length >= 5;

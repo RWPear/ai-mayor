@@ -665,7 +665,8 @@ def process(world, free, llm=None, ai_people=0):
             r["outcome"] = _rule_tell(r)
             r["reply"] = _rule_reply(r)
             if r.get("arrived"):
-                r["reply"] = f"Welcome to Emberfall: you {r['arrived']}. " + (r["reply"] if r["reply"] and "only just arrived" not in r["reply"] else "")
+                you = re.sub(r"\btheirs\b", "yours", re.sub(r"\btheir\b", "your", re.sub(r"\bthey\b", "you", r["arrived"])))
+                r["reply"] = f"Welcome to Emberfall: you {you}. " + (r["reply"] if r["reply"] and "only just arrived" not in r["reply"] else "")
             r["drama"] = r["drama_floor"]
         short, full = note.get(r["user"], ("", ""))
         if not r.get("reply"):              # default: they always hear something back

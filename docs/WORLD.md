@@ -30,11 +30,17 @@ to see what it is. Click a line in the feed to jump there.
 
 ## What you see
 
-**The models:** buildings, building stages and scaffolding, ruins, tents, store piles and the people come from
-two free KayKit packs by Kay Lousberg (CC0 - free for any use; www.kaylousberg.com): the *Medieval Hexagon
-Pack* and *Character Pack: Adventures*, in `viewer/assets/kaykit/` (about 10 MB, with their licences). The
-people are rigged and animated (walk, chop, pick up, sit, lie down, cheer...); the crowd uses the same people
-baked into a few poses so hundreds can be drawn at once. A house is picked by what it's called (a smithy,
+**The models:** buildings, building stages and scaffolding, ruins, tents and store piles come from the free
+KayKit *Medieval Hexagon Pack* by Kay Lousberg (CC0 - free for any use; www.kaylousberg.com), in
+`viewer/assets/kaykit/` with its licence.
+
+**The people are pips** (`viewer/js/people.js`): little faceted gumdrops in their role's colour, a shade
+different each, with two bead eyes, floating nub hands, stubby feet and a hat that says what they do (a straw
+hat for farmers, a helmet for guards, a hood for thieves and monks, a pointy hat for scholars, a tuft of hair
+for anyone without a trade). They hop when they walk and squash when they land, swing tools, stoop to dig,
+sit by the fire and blink. Aldric is a slightly bigger royal-blue pip with a moustache and a battered hat
+(a crown once he's crowned). The crowd is the same pips drawn instanced, so hundreds cost a few draw calls.
+`?people=kit` brings back the KayKit humans (*Character Pack: Adventures*, still in the repo). A house is picked by what it's called (a smithy,
 a tavern, a mill, a chapel...) and then by its shape, scaled to its lot; people's own builds use red roofs,
 the king's blue. The shack, fire pits, walls, roads and bridges are still hand-built. `?assets=off` shows
 the hand-built kit for everything.
