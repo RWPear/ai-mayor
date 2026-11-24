@@ -90,6 +90,15 @@ to, and the tent camp appears the first time people have nowhere to sleep.
   - **any time the peddler's cart is on the road:** trade, buying tools, nails, seed potatoes or grain, or
     selling materials for gold
 
+## Nobody has a trade yet
+
+Out here there are no castle trades, guards, court or market. A settler knows a craft (brewing, masonry,
+baking...) if they chose a role that has it, or after trying it 3 times (good or bad). Until then a first
+try works half the time; otherwise it's a clumsy mishap that hurts nothing but their pride. Knowing a craft
+means something good comes of it - not coins: the only money is Aldric's thin purse and the peddler's.
+Being caught or picking a fight means a night in the stocks by the shack; going for Aldric means he sits on
+you until you calm down.
+
 ## Their own builds
 
 People can build their own small things, with his leave:

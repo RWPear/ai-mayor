@@ -17,15 +17,10 @@ def test_a_new_kingdom_opens_at_dawn_and_publishes_a_scene(tmp_path):
 
 def test_commenting_as_a_new_handle_follows_and_gets_a_reply_to_approve(tmp_path):
     p = _play(tmp_path)
-    assert p.comment("reid_tester", "I chop wood all morning")["ok"]
+    assert p.comment("reid_tester", "I want to start a vegetable garden behind my house")["ok"]
     assert not p.comment("", "hello")["ok"]
     p._drain()
     assert "reid_tester" in p.city.citizens.index
-    p.control({"action": "arrive"})
-    with p.lock:
-        p._controls()
-    p.comment("reid_tester", "I want to start a vegetable garden behind my house")
-    p._drain()
     for _ in range(4):
         with p.lock:
             p._tick()
@@ -108,3 +103,74 @@ def test_the_bard_gets_the_world_and_writes_the_reply(tmp_path):
     r = intents.process(p.world, {"bil": "I chop wood all morning"}, llm=Fake(), ai_people=5)
     assert "bard" in seen["system"] and "THE WORLD" in seen["user"]
     assert r[0]["reply"].startswith("The log split clean")
+
+
+def test_after_the_move_they_can_keep_talking_a_few_times(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    p.comment("tal", "I chop wood all morning"); p._drain()
+    for _ in range(3):
+        with p.lock:
+            p._tick()
+    assert "tal" in p.world.city.living["acted_today"]
+    for k in range(5):                               # one an hour: 5 comments, TALK_PER_DAY answers
+        p.comment("tal", f"hey Aldric, what's for supper? ({k})"); p._drain()
+        for _ in range(2):
+            with p.lock:
+                p._tick()
+    talk = [r for r in p.world.city.living.get("stories", {}).get("tal", []) if r["said"].startswith("hey")]
+    assert len(talk) == intents.TALK_PER_DAY
+
+
+def test_talk_gets_the_world_and_their_story(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    p.comment("tal", "x"); p._drain()
+    intents.remember(p.world, "tal", outcome="@tal fished and caught a boot", reply="The boot fits.", said="I fish")
+    seen = {}
+
+    class Fake:
+        def json(self, system, user, schema, **kw):
+            seen["user"] = user
+            return {"results": [{"handle": "tal", "reply": "Aldric laughs. 'Keep the boot.'", "abuse": False}]}
+    coins = p.world.city.treasury
+    out = intents.talk(p.world, [("tal", "does anyone want a boot?")], Fake(), 5)
+    assert out[0]["reply"].startswith("Aldric laughs") and "caught a boot" in seen["user"] and "THE WORLD" in seen["user"]
+    assert p.world.city.treasury == coins
+
+
+def test_a_question_is_talk_not_a_brew_or_a_fight(tmp_path):
+    from city.living import intents
+    assert intents.rule_read("who do I have to kill around here to get a fresh brew?", False)[0] in ("talk", "attack")
+    p = _play(tmp_path)
+    p.comment("q", "x"); p._drain()
+    r = {"user": "q", "text": "what's that smell?", "action": "talk", "target": "", "item": "", "needs": []}
+    intents.resolve(p.world, r, {})
+    assert "talking" in r["facts"] and "gold" not in r["facts"]
+
+
+def test_settlers_learn_a_craft_by_doing_it_not_by_a_random_trade(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    p.comment("brew", "x"); p._drain()
+    assert not intents.knows(p.world, "brew", "brewing")
+    learned = [intents._practise(p.world, "brew", "brewing") for _ in range(intents.PRACTICE)]
+    assert learned[-1] and not any(learned[:-1]) and intents.knows(p.world, "brew", "brewing")
+    gold = float(p.city.citizens.wealth[p.city.citizens.index["brew"]])
+    r = {"user": "brew", "text": "I brew some ale", "action": "work", "target": "", "item": "", "needs": ["brewing"]}
+    intents.resolve(p.world, r, {})
+    assert r.get("skilled") and "gold" not in r["facts"]
+    assert float(p.city.citizens.wealth[p.city.citizens.index["brew"]]) == gold
+
+
+def test_no_guards_or_dungeons_on_the_frontier(tmp_path):
+    from city.living import intents
+    p = _play(tmp_path)
+    for h in ("thief", "mark"):
+        p.comment(h, "x")
+    p._drain()
+    for _ in range(20):
+        r = {"user": "thief", "text": "I rob @mark", "action": "steal", "target": "mark", "item": "", "needs": []}
+        intents.resolve(p.world, r, {})
+        text = " ".join(str(r.get(k, "")) for k in ("facts", "reply_rule", "to_target")).lower()
+        assert "guard" not in text and "dungeon" not in text and "castle" not in text

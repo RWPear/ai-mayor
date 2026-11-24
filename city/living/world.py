@@ -60,7 +60,7 @@ class World:
         self.decisions = collections.deque(maxlen=300)   # what each mind chose, and how (for the live view)
         self._dn = itertools.count()
         self.pending = []                 # comments that arrived but haven't been played out yet
-        self._hour_free, self._hour_story = {}, {}
+        self._hour_free, self._hour_story, self._hour_talk = {}, {}, []
         if city.living is None:
             self._new()
         self._upgrade()
@@ -543,6 +543,14 @@ class World:
         self.stats["crowd_moves"] = self.stats.get("crowd_moves", 0) + len(out)
         return out
 
+    def process_talk(self, talk):
+        """Comments after their move: conversation, answered in the world. Nothing is gained or lost."""
+        if not talk:
+            return []
+        b = self._budget_hour()
+        ai_people = int(max(0, b["left"])) * 8 if self.crowd_llm else 0
+        return intents.talk(self, talk, self.crowd_llm, ai_people)
+
     def process_stories(self, story, final=False):
         """Keyword + a story around it: the reply builds on the story (within what's left of the budget)."""
         if not story or not self.crowd_llm:
@@ -559,6 +567,19 @@ class World:
         due = [cm for cm in due if not intents.muted(self, str(cm.get("username", "")).lower())]
         for cm in due:
             self.note_comment(cm)
+        # one move a day; after that (or a second comment in the same hour) they're talking, in the world
+        c = self.city.citizens
+        busy = set(self.city.living.get("acted_today", [])) | set(self._hour_free) | {u for u, _ in self._hour_talk}
+        moves = []
+        for cm in due:
+            u = str(cm.get("username", "")).strip().lstrip("@").lower()
+            text = str(cm.get("text", "")).strip()
+            if u in busy and u in c.index and c.status[c.index[u]] == 0 and text:
+                self._hour_talk.append((u, text))
+            else:
+                moves.append(cm)
+                busy.add(u)
+        due = moves
         free, story, flagged, jobs = {}, {}, [], {}
         actions, _, _ = packs.parse(due, self.city.pack or {"commands": {}}, jobs, free, story, flagged)
         for f in flagged:
@@ -587,6 +608,8 @@ class World:
         left.update({u: t for u, t in self._hour_free.items() if u not in acted})
         self._hour_free = {}
         self.process_crowd(left, final=True)
+        ht, self._hour_talk = self._hour_talk, []
+        self.process_talk(ht)
         told = {x["to"] for x in self.city.living.get("outbox", []) if x["kind"] == "your_story"}
         rest = {u: t for u, t in {**(story or {}), **self._hour_story}.items() if u not in told}
         self._hour_story = {}
@@ -604,6 +627,8 @@ class World:
             hs, self._hour_story = self._hour_story, {}
             self.process_crowd(hf)
             self.process_stories(hs)
+            ht, self._hour_talk = self._hour_talk, []
+            self.process_talk(ht)
             case = life.visitors(self) if self.city.rng.random() < 0.35 else None
             if case:
                 self.moment("world", f"At the castle gate: {case['text']}.", 0, public=False)

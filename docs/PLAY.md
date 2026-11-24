@@ -31,6 +31,16 @@ what they said. Comments play out on the next tick, and own-words moves ("I chop
 morning", "I want to start a garden behind my house") within the game hour. The **Ideas** list has some to
 try.
 
+**One move a day, then talk.** Each person's first real attempt of the day is their move: it changes
+the world (chopping, building, brewing, stealing). A question or a joke ("who do I have to kill to get a
+drink?") isn't a move - it's answered in the world and they can still make their move after. Once they've
+moved, further comments are conversation: Aldric or a neighbour answers in the scene, nothing is gained or
+lost, and trying to do something big gets set up for tomorrow. Up to 3 talk replies per person per day
+(`TALK_PER_DAY` in `city/living/intents.py`); more comments than that still count, but get no reply.
+
+**The world remembers.** Each person's last few moves, what they said, and what they were told go to the
+narrator, so threads carry on (the goat that follows you, Aldric's unanswered question).
+
 With `frontier_arrivals: weekly` (the old way), newcomers wait on the road for arrival day, and **Bring
 the road in** brings them in now. With the default, that button is hidden.
 
