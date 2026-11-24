@@ -138,6 +138,10 @@ Their role is who they are (a thief, a beggar, a monk) - let it colour the scene
   chronicle.
 - reply: what they'll read as a reply to their comment: second person ("you..."), continuing their story. One
   sentence for a short comment; two or three for someone who wrote a real story. No recap, no "you decided to".
+  The reply is the ONLY thing they will see, so it must say plainly what happened to them, including every
+  consequence in the RESULT (hurt, locked up, coins or things gained or lost, a bed or a tent). Never refer to
+  something they haven't been told as if they know it ("despite the explosion"). No filler openers ("You're still
+  here", "Well,", "Ah,"). Don't add injuries, losses or gains that aren't in the RESULT.
 - drama: 0 ordinary, 1 interesting, 2 bold or funny, 3 the whole kingdom will talk.
 Someone who "only just arrived in Emberfall" is new: weave their arrival in (where they're sleeping, the first thing
 they saw) before what they did - a welcome, not a recap. Make every reply specific to this person and this place.
@@ -487,7 +491,8 @@ def _skill_check(world, r):
             return True
         return False
     s = missing[0]
-    if s not in trades.NOBODY and rng.random() < 0.2:         # beginner's luck
+    frontier = world.frontier                                 # out here nobody has a trade yet: everyone's learning
+    if s not in trades.NOBODY and rng.random() < (0.5 if frontier else 0.2):         # beginner's luck
         r["luck"] = True
         r["facts_note"] = f"had never done {trades.SKILL_LABEL.get(s, s)} before, but by sheer luck it sort of worked"
         r["reply_rule"] = (f"You'd never tried your hand at {trades.SKILL_LABEL.get(s, s)}. By sheer dumb luck, it "
@@ -495,6 +500,8 @@ def _skill_check(world, r):
         r["drama_floor"] = 1
         return False
     mishap, cons = trades.SKILLS[s][1], trades.SKILLS[s][2]
+    if frontier and cons == "hurt":
+        cons = "bruised"                                      # a clumsy first try, not a day in bed
     jail = "the dungeon" if city.living["town"]["rooms"].get("dungeon") else "the stocks in the square"
     lead = ("got in without a sound - that part they know - but then " if "lockpicking" in have
             else "the first part went fine, but then " if have else "")
@@ -507,6 +514,9 @@ def _skill_check(world, r):
         set_condition(city, u, "wounded", 1, f"hurt trying {what}")
         r["facts"] += "; WOUNDED for a day"
         reply += ". You'll be nursing that for a day."
+    elif cons == "bruised":
+        r["facts"] += "; only their pride is really hurt - they can try again tomorrow"
+        reply += ". Only your pride's really hurt. Try again tomorrow - everyone out here is learning."
     elif cons == "caught":
         set_condition(city, u, "jailed", 1, "caught sneaking in")
         life.add_case(city, "crime", u, f"@{u} was caught sneaking where they shouldn't be")
