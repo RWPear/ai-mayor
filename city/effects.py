@@ -133,10 +133,10 @@ def apply(city, effects, ward=None, ctx=None, daily=False):
         if key in ("text", "next", "progress") or val is None:
             continue
         head, _, target = key.partition(".")
-        if head == "treasury_pc":
-            city.treasury += float(val) * pop
+        if head == "treasury_pc":           # (scaled down: this is one man's purse, not a kingdom's treasury)
+            city.treasury = max(0.0, city.treasury + float(val) * min(pop, 20))
         elif head == "treasury":
-            city.treasury += float(val)
+            city.treasury = max(0.0, city.treasury + float(val))
         elif head == "economy":
             if daily and ctx is not None:
                 ctx.economy_offset += float(val)

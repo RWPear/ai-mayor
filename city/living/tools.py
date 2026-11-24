@@ -227,51 +227,6 @@ def _credit_ideas(world, text):
     return out
 
 
-def start_work(world, me, args):
-    """His own idea, where he's standing. Nothing is suggested - and it might not work."""
-    t = _town(world)
-    pid = me.get("location")
-    name = str(args.get("name") or "").strip()[:90]
-    # a project at a ruined room rebuilds it if that's what he means (or if he doesn't say)
-    ruin = bool(pid in T.ROOMS and not t["rooms"].get(pid) and (
-        not name or re.search(r"rebuil|restor|repair|fix|renovat|room|tower|hall|dungeon|roof|walls", name.lower())))
-    if ruin and not name:
-        name = f"rebuilding {T.ROOMS[pid]['name']}"
-    if not name:
-        return None
-    if any(w["place"] == pid for w in t["works"]):
-        return None                                   # one project per place at a time
-    size = args.get("size") if args.get("size") in T.SIZES else "small"
-    flavor = args.get("purpose") if args.get("purpose") in BUILD_FLAVORS else "nothing"
-    wid = f"w{len(t['done']) + len(t['works']) + len(t.get('failed', [])) + 1}_{pid}"
-    spec = {"id": wid, "name": name, "size": size, "flavor": flavor, "room": ruin,
-            "feature": "room" if ruin else re.sub(r"[^a-z]+", "_", name.lower())[:30]}
-    work, cost = life.start_work(world, spec, pid)
-    if not work:
-        return world.moment("king", f"The king wanted {name}, but the treasury can't pay {cost:,.0f} gold.",
-                            1, public=False, place=pid)
-    world.notify(f"The king started his own project at {T.PLACES[pid]['name']}: {name}")
-    _credit_ideas(world, name)
-    return world.moment("king", f"The king ordered {name} ({cost:,.0f} gold, about {work['days']} days of work).",
-                        2, public=True, place=pid)
-
-
-def work_on(world, me, args):
-    t = _town(world)
-    here = [w for w in t["works"] if w["place"] == me.get("location")]
-    if not here:
-        return None
-    w = here[0]
-    finished = life.advance_works(world, 0, boost=w["id"], by=0.12)
-    world.announce_works(finished)
-    life.satisfy(me, "fun", 0.2)
-    life.satisfy(me, "energy", -0.15)
-    if finished:
-        return None
-    return world.moment("king", f"The king rolled up his sleeves and worked on {w['name']} himself "
-                                f"({min(100, w['progress'] * 100):.0f}% done).", 1, public=True, place=w["place"])
-
-
 def hold_court(world, me, args):
     """At the throne room: rule on a case from the docket (petitioners, criminals, visitors)."""
     from .intents import set_condition
@@ -293,7 +248,7 @@ def hold_court(world, me, args):
             c.loyalty[i] = float(np.clip(c.loyalty[i] + 0.1, 0, 1))
             c.mood[i] = float(np.clip(c.mood[i] + 0.08, 0, 1))
             if verdict == "reward":
-                gold = 20 + 30 * city.rng.random()
+                gold = min(20 + 30 * city.rng.random(), city.treasury)
                 city.treasury -= gold
                 c.wealth[i] += gold
                 effect = f" and {gold:.0f} gold"
@@ -334,22 +289,6 @@ def hold_court(world, me, args):
     return world.moment("king", f"At court: {case['text']}. The king's verdict: {verdict.upper()}{effect}."
                         + (f' "{words}"' if words else ""), 2, public=True, place=me.get("location"),
                         handles=[case["who"]])
-
-
-def royal_feast(world, me, args):
-    """Unlocked by the great hall: a feast for the capital (or a hold)."""
-    city = world.city
-    hold = args.get("hold")
-    wi = world.ward_index(hold) if hold else None
-    cost = 1.5 * max(1, city.population())
-    if city.treasury < cost:
-        return None
-    city.treasury -= cost
-    effects.apply(city, {"mood.hold" if wi is not None else "mood": 0.05, "loyalty": 0.01}, wi)
-    life.satisfy(me, "company", 0.5)
-    life.satisfy(me, "hunger", 0.8)
-    where = city.wards[wi]["name"] if wi is not None else "the great hall"
-    return world.moment("king", f"The king threw a feast in {where} ({cost:,.0f} gold).", 2, public=True)
 
 
 def proclaim(world, me, args):
@@ -417,56 +356,6 @@ def decree(world, me, args):
                         + (f" He wants {side}." if side in (a_w, b_w) else ""), 2, public=True)
 
 
-def spend(world, me, args):
-    city = world.city
-    what = str(args.get("project") or args.get("what") or "").lower()
-    pop = max(1, city.population())
-    from ..sim import available_projects
-    proj = next((p for p in available_projects(city) if p["id"] == what or p["name"].lower() == what), None)
-    if not proj or city.treasury < proj["cost_pc"] * pop:
-        return None
-    from ..mayor import apply_decision
-    lines, _ = apply_decision(city, {"project": proj["id"]})
-    return world.moment("king", lines[0] if lines else f"The king ordered {proj['name']}.", 1, public=True) \
-        if lines else None
-
-
-def spy(world, me, args):
-    """Unlocked by watchtowers: learn what the warlord is up to (or how a hold really feels)."""
-    target = str(args.get("target") or "north").lower()
-    city = world.city
-    if "north" in target or "camp" in target or "warlord" in target:
-        c = warcamp.camp(city)
-        seen = {"warriors": int(c["warriors"] * city.rng.uniform(0.8, 1.2)), "food": round(c["food"]),
-                "morale": round(c["morale"], 1), "day": city.day}
-        me.setdefault("intel", {})["north"] = seen
-        return world.moment("king", f"The king's spies counted about {seen['warriors']} warriors in "
-                                    f"{c['name']}.", 1, public=False)
-    wi = world.ward_index(target)
-    if wi is None:
-        return None
-    w = city.ward_stats()[wi]
-    me.setdefault("intel", {})[w["name"]] = {"mood": round(w["mood"], 2), "unrest": round(w["unrest"] or 0, 2)}
-    return world.moment("king", f"The king's spies reported on {w['name']}: the mood is "
-                                f"{'sour' if w['mood'] < 0.45 else 'fine'}.", 0, public=False)
-
-
-def garrison(world, me, args):
-    """Unlocked after the first raid: station soldiers in a hold for a week. Raids there are much harder."""
-    city = world.city
-    wi = world.ward_index(args.get("hold"))
-    cost = 2 * max(1, city.population())
-    if wi is None or city.treasury < cost or city.wards[wi].get("garrison_until", -1) >= city.day:
-        return None
-    city.treasury -= cost
-    city.wards[wi]["garrison_until"] = city.day + 7
-    effects.apply(city, {"mood.hold": 0.03}, wi)
-    return world.moment("king", f"The king stationed soldiers in {city.wards[wi]['name']} for a week.", 1, public=True)
-
-
-# ---------------------------------------------------------------------------- warlord
-
-# ---------------------------------------------------------------------------- warlord
 def scout(world, me, args):
     city = world.city
     wi = world.ward_index(args.get("hold"))
@@ -589,28 +478,7 @@ ARG = {"place": "where to walk (one of the Places)",
        "project": "a building project id from the list", "target": "'north' (the war camp) or a hold",
        "hold": "a hold's name", "warriors": "how many warriors to send"}
 
-TOOLS = {
-    "king": {
-        "walk":       (walk, "walk somewhere in the castle or town (the tavern means going in disguise)", ["place"], None),
-        "talk":       (talk, "talk to someone here: a member of your court or a subject (@handle)", ["person", "text"], None),
-        "do":         (do, "do anything at all, in your own words: go for a run, sit and read, fish, bake, practise "
-                           "the sword, nap in the garden... (the world decides what comes of it)", ["what"], None),
-        "start_work": (start_work, "start a project of your own right where you are (it costs gold and might fail)",
-                       ["name", "size", "purpose"], None),
-        "work_on":    (work_on, "roll up your sleeves and help build the project where you are", [], None),
-        "want":       (want, "wish for something that isn't here (the world works out how you might get it)",
-                       ["thing", "why"], None),
-        "hold_court": (hold_court, "in the throne room: rule on the next case on the docket", ["case", "verdict", "words"], None),
-        "proclaim":   (proclaim, "make a public proclamation to the kingdom", ["text"], None),
-        "summon":     (summon, "summon a subject (a real person) to the castle", ["handle", "why"], None),
-        "decree":     (decree, "invent a new decree for the people to vote on tomorrow (one a day)",
-                       ["question", "a_word", "a_text", "a_flavor", "b_word", "b_text", "b_flavor", "back"], None),
-        "spend":      (spend, "pay for one of the kingdom's building projects", ["project"], None),
-        "spy":        (spy, "send spies north to the war camp, or into a hold", ["target"], "room('spymaster_tower')"),
-        "garrison":   (garrison, "station soldiers in a hold for a week (raids there get much harder)", ["hold"],
-                       "room('war_room')"),
-        "feast":      (royal_feast, "throw a feast for the capital or a hold", ["hold"], "room('great_hall')"),
-    },
+TOOLS = {                    # the king's powers are in frontier_tools (he borrows walk, talk, do... from here)
     "warlord": {
         "scout":     (scout, "send scouts to study a hold's defenses", ["hold"], None),
         "raid":      (raid, "raid a hold (only one raid at a time)", ["hold", "warriors"], "day >= camp_arrived + 1"),
@@ -627,7 +495,7 @@ TOOLS = {
 
 def unlocked(world, who):
     """The powers this mind has (unlocks are announced as they happen)."""
-    if who == "king" and world.frontier:
+    if who == "king":
         from . import frontier_tools
         return frontier_tools.unlocked(world)
     out = {}
@@ -640,8 +508,8 @@ def unlocked(world, who):
 
 
 # how long before a tool makes sense again (minutes) - stops letter spam and speech loops
-COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "spy": 360, "feast": 1440, "garrison": 120,
-                     "plan": 90, "organize": 240, "appoint": 720, "trade": 30},
+COOLDOWN = {"king": {"want": 60, "proclaim": 180, "summon": 120, "plan": 90, "organize": 240, "appoint": 720,
+                     "trade": 30},
             "warlord": {"taunt": 720, "scout": 90, "feast": 360, "sabotage": 1440, "hunt": 120}}
 
 
@@ -649,27 +517,6 @@ def _ready(world, who, name):
     city, me = world.city, world.agent(who)
     if world.clock - me.get("last_used", {}).get(name, -10 ** 9) < COOLDOWN.get(who, {}).get(name, 0):
         return False
-    t = city.living["town"]
-    loc = me.get("location")
-    pop = city.population()
-    if who == "king":
-        if name == "hold_court":
-            return loc == "throne_room" and bool(city.living.get("docket"))
-        if name == "work_on":
-            return any(w["place"] == loc for w in t["works"])
-        if name == "start_work":
-            return not any(w["place"] == loc for w in t["works"]) and city.treasury >= T.cost("small", pop)
-        if name == "decree":
-            return (not any(a["id"].startswith("decree_") for a in city.events)
-                    and city.living.get("last_decree_day", -9) < city.day)
-        if name == "spend":
-            from ..sim import available_projects
-            return any(city.treasury >= p["cost_pc"] * max(1, pop) for p in available_projects(city))
-        if name == "feast":
-            return city.treasury >= 1.5 * max(1, pop)
-        if name == "garrison":
-            return any(w.get("garrison_until", -1) < city.day for w in city.wards) and city.treasury >= 2 * max(1, pop)
-        return True
     c = warcamp.camp(city)
     busy = c.get("active_raid") or any(a["id"] in ("warlord_raid", "warlord_horde") for a in city.events)
     if name in ("raid", "march"):
@@ -683,7 +530,7 @@ def _ready(world, who, name):
 
 def available(world, who):
     """What this mind can sensibly do right now: its powers, minus what's on cooldown or makes no sense here."""
-    if who == "king" and world.frontier:
+    if who == "king":
         from . import frontier_tools
         return {n: v for n, v in unlocked(world, who).items() if frontier_tools.ready(world, n)}
     return {n: v for n, v in unlocked(world, who).items() if _ready(world, who, n)}

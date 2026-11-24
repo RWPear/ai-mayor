@@ -80,16 +80,16 @@ def test_a_thief_cannot_forge_a_sword():
     out = _play(w, "u3", "I sneak into the blacksmith's house and forge a sword")
     from city.living.intents import condition
     assert "not a blacksmith" in out[0]["text"] and "burned your hand" in out[0]["text"]
-    assert condition(city, "u3")["state"] == "wounded"
+    assert condition(city, "u3") is None                      # out here a first try only hurts your pride
 
 
-def test_your_own_trade_pays():
+def test_your_own_trade_shows_but_pays_no_coins():
     city, w = _world()
     c = city.citizens
     _play(w, "u4", "I become a rat catcher")
     gold = float(c.wealth[c.index["u4"]])
-    out = _play(w, "u4", "I set traps for rats along King's Street")
-    assert "your trade" in out[0]["text"] and float(c.wealth[c.index["u4"]]) > gold
+    out = _play(w, "u4", "I set traps for rats along the road")
+    assert "it showed" in out[0]["text"] and float(c.wealth[c.index["u4"]]) == gold
     assert int(c.counts["craft"][c.index["u4"]]) == 1
 
 
@@ -146,7 +146,6 @@ def test_the_model_maps_roles_nobody_has_had_and_everyone_shares_it():
     assert FakeLLM.calls == 1                                 # mapped once, remembered
     rec = c.role(c.index["u10"])
     assert rec["place"] == "fields" and rec["skills"] == ["hunting"]     # nobody gets magic
-    assert c.index["u10"] in w.people_here("fields", 30) or not (7 <= w.hour() < 23)
 
 
 def test_illegal_work_can_catch_up_with_you():

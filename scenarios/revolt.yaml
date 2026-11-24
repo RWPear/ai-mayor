@@ -1,9 +1,0 @@
-# Stress test: the audience turns on the king mid-season.
-kingdom: Emberfall
-days: 30
-start_followers: 150
-growth: {daily: 10}
-engagement: 0.2
-archetypes: {loyal: 0.2, worker: 0.3, activist: 0.35, shopper: 0.1, troll: 0.05}
-overrides:
-  - {days: [10, 18], command_share: {GRUMBLE: 0.6}}

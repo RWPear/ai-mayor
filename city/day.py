@@ -1,24 +1,24 @@
-"""One day of the kingdom, start to finish. Used by both the test runner and the
-live kingdom, so what you test is exactly what runs.
+"""One day of Emberfall, start to finish (the post closes; the next one opens). Used by the test runner, the
+real daily run and live play, so what you test is exactly what runs.
 
-  1. new followers move in (from an export, or the fake audience)
-  2. the post's comments are read: actions, STATUS requests, JOINs, BECOME <ANYTHING>
-  3. command effects hit the subjects who commented
-  4. events tick (help/hinder and decree votes from comments count here)
-  5. the whole kingdom simulates a day
-  6. season finale: the Reckoning (KNEEL or REVOLT)
-  7. tomorrow's post is set up: scheduled events, season-plan beats, or a storyteller event
-  8. the king decides policy (only on events the crowd has already weighed in on) and writes his journal
-  9. reports: daily markdown, episode script, STATUS replies, next post's commands
+  1. new followers walk in (a free bed, or a tent)
+  2. the post's comments are read: own-words moves (most already played out during the day), keywords,
+     STATUS, BECOME <ANYTHING>
+  3. events tick (help/hinder and votes from comments count here)
+  4. people: loyalty follows mood; anyone miserable for too long packs up and leaves
+  5. the Reckoning, once he has a crown to lose
+  6. tomorrow's post is set up: scheduled events, or a new one
+  7. the king answers events and writes his journal
 """
 import numpy as np
 
-from . import packs, plan, report, sim, storyteller
+from . import packs, report, storyteller
 from .effects import DayContext
+from .living import frontier as F
+from .living import intents
 from .roles import a_job
 
-BASICS = {"WORK": "work", "TRADE": "shop", "TRAIN": "train", "GRUMBLE": "protest"}
-FRONTIER_BASICS = {"WORK": "work", "BUILD": "volunteer", "CHEER": "support", "GRUMBLE": "protest"}   # settlers' words
+BASICS = {"WORK": "work", "BUILD": "volunteer", "CHEER": "support", "GRUMBLE": "protest"}
 
 
 def default_pack():
@@ -30,29 +30,27 @@ def election_pack():
             "commands": {"KNEEL": "vote.keep", "REVOLT": "vote.recall"}, "caption": ""}
 
 
-def next_pack(city, plan_pack=None):
-    """Tomorrow's words. The plan or the Reckoning can set them; otherwise they come from what's
-    happening (up to two events at once). The warlord's attacks always get words."""
-    sd = (city.day) % city.cfg["season_days"] + 1          # tomorrow's season day
+def reckoning_day(city, day=None):
+    """The last day of a season - but only once he has a crown to lose."""
+    d = (city.day if day is None else day) % city.cfg["season_days"] + 1
+    return d == city.cfg["season_days"] and F.land(city).get("crowned")
+
+
+def next_pack(city):
+    """Tomorrow's words: the Reckoning, or what's happening (up to two events; Skarn's attacks always get words)."""
     cat = storyteller.catalog()
     evs = [a for a in city.events if (cat.get(a["id"]) or {}).get("commands") or (cat.get(a["id"]) or {}).get("choices")]
     evs.sort(key=lambda a: (a.get("source") != "warlord", -a["started"]))
-    land = ((getattr(city, "living", None) or {}).get("town") or {}).get("land")
-    reckoning = sd == city.cfg["season_days"] and (not land or land.get("crowned"))   # no crown, nothing to vote on
-    base = plan_pack or (election_pack() if reckoning else None)
-    if base is not None:
-        war = [{**cat[a["id"]], "id": a["id"]} for a in evs if a.get("source") == "warlord"
-               and a["id"] != base.get("event")]
-        return packs.merge(base, war[:1]) if war else base
+    if reckoning_day(city):
+        war = [{**cat[a["id"]], "id": a["id"]} for a in evs if a.get("source") == "warlord"]
+        return packs.merge(election_pack(), war[:1]) if war else election_pack()
     if evs:
         return packs.from_events([{**cat[a["id"]], "id": a["id"]} for a in evs[:2]])
-    if ((getattr(city, "living", None) or {}).get("town") or {}).get("land"):
-        return {**default_pack(), "commands": dict(FRONTIER_BASICS)}
     return default_pack()
 
 
 def feature(city, actions, jobs=None):
-    """Picks 3 subjects worth mentioning: new lords, the angriest and happiest commenters, then
+    """Up to 3 people worth mentioning: someone who changed trade, the unhappiest and happiest commenters, then
     anyone. Returns (report lines, short notes the king may mention)."""
     c = city.citizens
     lines, people, picked = [], [], set()
@@ -62,18 +60,11 @@ def feature(city, actions, jobs=None):
         if i in picked or len(picked) >= 3:
             return
         picked.add(i)
-        w = city.wards[int(c.ward[i])]
-        job, rank = c.label(i), c.rank(i)
-        lines.append(f"@{c.handles[i]} ({c.names[i]}, {rank} {job} of {w['name']}) {why} - "
-                     f"now {report.mood_word(float(c.mood[i]))}")
-        people.append(f"@{c.handles[i]}, {a_job(job)} ({rank.lower()}) of {w['name']}, {why}")
+        lines.append(f"@{c.handles[i]} {why} - now {report.mood_word(float(c.mood[i]))}")
+        people.append(f"@{c.handles[i]}, {why}")
         c.log(i, city.day, why)
 
-    for w in city.wards:   # lords named today
-        i = w.get("councilor")
-        if i is not None and c.story.get(int(i)) and c.story[int(i)][-1].startswith(f"day {city.day}: was named"):
-            add(i, f"was named Lord of {w['name']}")
-    for u, job in list((jobs or {}).items())[:1]:   # someone who changed trade today
+    for u, job in list((jobs or {}).items())[:1]:
         if u in c.index:
             add(c.index[u], f"became {a_job(job)}")
     commenters = np.array([c.index[u] for u in actions if u in c.index], dtype=np.int64)
@@ -90,19 +81,55 @@ def feature(city, actions, jobs=None):
     return lines, people
 
 
+def people(city, ctx):
+    """Loyalty drifts toward mood (CHEER and GRUMBLE nudge it); anyone miserable for days on end leaves.
+    (Mood itself comes from the island: food, rough nights, what happens to them.)"""
+    cfg, c, f = city.cfg, city.citizens, ctx.flags
+    a = c.active()
+    notes = []
+    if not a.any():
+        return {"notes": notes, "left": 0}
+    nudge = 0.05 * f["support"] - 0.05 * f["oppose"] - 0.03 * f["protest"] - cfg["approval_fatigue"]
+    c.loyalty = np.where(a, np.clip(c.loyalty + (c.mood - c.loyalty) * cfg["loyalty_drift"] + nudge, 0, 1),
+                         c.loyalty).astype(np.float32)
+    c.low_days = np.where(a & (c.mood < cfg["leave_mood"]), c.low_days + 1, 0).astype(np.int16)
+    leaving = np.where(a & (c.low_days >= cfg["leave_days"]))[0]
+    for i in leaving:
+        c.status[i] = 1
+        c.log(i, city.day, "gave up and left Emberfall")
+    if len(leaving):
+        notes.append(f"{len(leaving)} {'person' if len(leaving) == 1 else 'people'} packed up and left Emberfall.")
+    return {"notes": notes, "left": int(len(leaving))}
+
+
+def reckoning(city, actions, pack, ctx):
+    """KNEEL or REVOLT. People who stay quiet vote too, but each counts for little."""
+    cfg, c = city.cfg, city.citizens
+    a = c.active()
+    silent = a.copy()
+    for u, w in actions.items():
+        i = c.index.get(u)
+        if i is not None and pack["commands"].get(w, "").startswith("vote."):
+            silent[i] = False
+    w = cfg["silent_vote_weight"]
+    recall = ctx.election_votes["recall"] + int((c.loyalty[silent] < 0.45).sum()) * w
+    total = max(1, ctx.election_votes["keep"] + ctx.election_votes["recall"] + int(silent.sum()) * w)
+    e = {"keep_votes": ctx.election_votes["keep"], "recall_votes": ctx.election_votes["recall"],
+         "silent": int(silent.sum()), "recall_share": recall / total, "keep_share": 1 - recall / total}
+    e["recalled"] = e["recall_share"] > cfg["recall_threshold"]
+    if e["recalled"]:
+        city.mayor["recalled_day"] = city.day
+        city.mayor["term"] = city.mayor.get("term", 1) + 1
+        c.loyalty[a] = 0.55                       # a fresh start for whoever comes next
+    return e
+
+
 def pack_for_today(city):
-    """The pack for the post about to be judged. On the very first day, applies the plan's day-1 beats."""
-    if city.day == 0 and city.plan and not city.plan.get("done"):
-        p, _ = plan.prepare(city, 1)
-        if p:
-            city.pack = p
     return city.pack or default_pack()
 
 
 def run_day(city, mayor, followers, comments, pack=None, world=None):
-    """world: the living world (city/living/world.py), if this kingdom has one - then comments in people's
-    own words get interpreted, and the post comes with a chronicle of the last 24 hours."""
-    storyteller.catalog(reload=True)  # pick up edits to content/events.yaml
+    storyteller.catalog(reload=True)              # pick up edits to content/events.yaml
     pack = pack or pack_for_today(city)
     city.day += 1
     cfg = city.cfg
@@ -111,179 +138,103 @@ def run_day(city, mayor, followers, comments, pack=None, world=None):
         city.season += 1
     c = city.citizens
 
-    # 1-2. people
-    jobs, free = {}, ({} if world else None)
-    story, flagged = ({}, []) if world else (None, None)
-    if world is not None:
-        from .living.intents import muted
-        comments = [cm for cm in comments if not muted(world, str(cm.get("username", "")).lower())]
+    jobs, free, story, flagged = {}, {}, {}, []
+    comments = [cm for cm in comments if not intents.muted(world, str(cm.get("username", "")).lower())]
     closed = []
-    if world is not None and city.living.get("posts"):     # every post stays live: old posts' words still count
-        pack, closed_words = packs.with_old_posts(pack, city.living["posts"], city.day,
-                                                  {a["id"] for a in city.events})
+    if city.living.get("posts"):                  # every post stays live: old posts' words still count
+        pack, closed_words = packs.with_old_posts(pack, city.living["posts"], city.day, {a["id"] for a in city.events})
         closed = [cm["username"].lower() for cm in comments if cm.get("post") and int(cm["post"]) < city.day
                   and any(f" {w} " in f" {str(cm.get('text', '')).upper()} " for w in closed_words)]
     actions, status_users, joins = packs.parse(comments, pack, jobs, free, story, flagged)
-    if world is not None:
-        for cm in comments:
-            world.note_comment(cm)
+    for cm in comments:
+        world.note_comment(cm)
     before = city.population()
-    n_before = len(c.handles)
     new1 = c.add_many(list(followers), city.day, city.ward_for, revive=False)
     new2 = c.add_many(sorted(joins), city.day, city.ward_for, revive=True)
-    if world is not None and world.frontier:   # on the frontier, newcomers set off on the road (arrive weekly)
-        from .living import frontier as _frontier
-        _frontier.join_road(world, np.concatenate([np.asarray(new1, np.int64), np.asarray(new2, np.int64)]))
-    elif world is not None:        # every newcomer gets a house - inside the walls if there's room
-        from .living import town as _town
-        _town.settle(world, n_before)
+    F.join_road(world, np.concatenate([np.asarray(new1, np.int64), np.asarray(new2, np.int64)]))
     joined = city.population() - before
-    from . import trades
-    for u, label in jobs.items():      # BECOME <ANYTHING>
-        i = c.index.get(u)
-        if i is None:
-            continue
-        if world is not None:          # usually already done when the comment came in; then this is a no-op
+    for u, label in jobs.items():                 # BECOME <ANYTHING> (usually already done when the comment came in)
+        if u in c.index:
             world.take_role(u, "become", label, day=city.day, quiet_same=True)
-        else:
-            trades.take(city, i, "become", label, city.day)
     ctx = DayContext(city)
     ctx.actions = actions
 
-    # 3. commands (and, in the living world, people's own words)
     tallies = packs.apply(city, ctx, actions, pack)
-    if world is not None:
-        from .living import intents
-        world.finish_crowd(free, story, flagged)   # most own-words moves were already played out during the day
-        tallies.update(intents.finish_day(world, ctx, pack))
+    world.finish_crowd(free, story, flagged)      # most own-words moves were already played out during the day
+    tallies.update(intents.finish_day(world, ctx, pack))
     for u in status_users:
-        i = c.index.get(u)
-        if i is not None:
-            ctx.status_requests.append(i)
+        if u in c.index:
+            ctx.status_requests.append(c.index[u])
 
-    # 4. events
     ended = storyteller.tick(city, ctx)
+    folk = people(city, ctx)
+    election = reckoning(city, actions, pack, ctx) if reckoning_day(city, city.day - 1) else None
+    if election:
+        folk["notes"].append("THE RECKONING: " + ("the king has been overthrown! Whoever takes his place starts "
+                                                   "fresh." if election["recalled"] else "the king keeps his crown."))
 
-    # 5. simulate
-    sim_report = sim.simulate(city, ctx)
-
-    # 6. recall vote on the season finale
-    election = None
-    land = ((city.living or {}).get("town") or {}).get("land") if world is not None else None
-    if season_day == cfg["season_days"] and (not land or land.get("crowned")):
-        a = c.active()
-        silent = a.copy()
-        voted = 0
-        for u, w in actions.items():
-            i = c.index.get(u)
-            if i is not None and pack["commands"].get(w, "").startswith("vote."):
-                silent[i] = False
-                voted += 1
-        w = cfg["silent_vote_weight"]
-        silent_recall = int((c.loyalty[silent] < 0.45).sum()) * w
-        recall = ctx.election_votes["recall"] + silent_recall
-        total = max(1, ctx.election_votes["keep"] + ctx.election_votes["recall"] + int(silent.sum()) * w)
-        election = {"keep_votes": ctx.election_votes["keep"], "recall_votes": ctx.election_votes["recall"],
-                    "silent": int(silent.sum()), "recall_share": recall / total, "keep_share": 1 - recall / total}
-        election["recalled"] = election["recall_share"] > cfg["recall_threshold"]
-        if election["recalled"]:
-            city.mayor["recalled_day"] = city.day
-            city.mayor["term"] = city.mayor.get("term", 1) + 1
-            c.loyalty[a] = 0.55  # fresh start for whoever comes next
-        sim_report["notes"].append("THE RECKONING: " + ("the king has been overthrown! Whoever takes the throne "
-                                                         "starts fresh (loyalty resets to 55%)." if election["recalled"]
-                                                         else "the king keeps his crown."))
-
-    # 7. tomorrow's post: things you scheduled, then the season plan, then (maybe) the storyteller
     started = storyteller.start_due(city)
-    plan_pack, plan_started = plan.prepare(city, city.day + 1) if city.plan else (None, [])
-    started += plan_started
     if not started:
-        s = storyteller.maybe_start_event(city, quiet=plan.quiet(city) if city.plan else False)
+        s = storyteller.maybe_start_event(city)
         if s:
             started.append(s)
 
-    # 8. mayor
     log_before = len(city.event_log)
     decision = mayor.decide(city)
-    if world is not None and world.frontier:     # on the frontier, Aldric builds things himself - no royal treasury
-        decision.pop("project", None)
-        decision.pop("speech", None)
     from .mayor import apply_decision
-    lines, speech = apply_decision(city, decision)
-    # events the mayor settled outright today count as ended today too
+    lines = apply_decision(city, decision)
     for e in city.event_log[log_before:]:
         if e.get("result") == "mayor":
             e["outcome"] = f'{e["title"]}: {e.get("option_text", "").rstrip(".")}.'
             ended.append(e)
-    if speech:
-        city.mayor.setdefault("speeches", []).append({"day": city.day, "text": speech})
-        city.mayor["speeches"] = city.mayor["speeches"][-30:]
 
-    # featured residents: the most interesting people today, not just random commenters
-    featured, people = feature(city, actions, jobs)
+    featured, notes_people = feature(city, actions, jobs)
     stats = {"population": city.population(), "approval": round(city.approval(), 3),
-             "treasury": round(city.treasury, 1), "tax_rate": round(city.tax_rate, 3),
-             "economy": sim_report.get("economy", city.economy), "tension": round(storyteller.tension(city), 3),
-             "services": {k: round(v, 3) for k, v in city.quality.items()}, "factions": city.faction_moods(),
-             "wards": len(city.wards)}
-    if world is not None:   # what the crowd decided today is part of the story of the last 24 hours
-        for e in ended:
-            if e.get("result") == "helped":   # the people who did it hear about it, and the first few get named
-                heroes = list(dict.fromkeys(ctx.helpers.get(e["id"], [])))
-                for k, i in enumerate(heroes):
-                    world.reply(c.handles[i], f"⚔️ You helped: {e['outcome']}", "helped",
-                                credit=f"helped: {e['title'][:60]}" if k < 3 else None)
-            big = e.get("source") == "warlord" or e["id"].startswith("decree_") or e.get("result") not in ("timed_out",)
-            world.moment("world", e["outcome"], 3 if e.get("source") == "warlord" else (2 if big else 1),
-                         public=True, hold=city.wards[e["ward"]]["name"] if e.get("ward") is not None else "")
-    if world is not None:          # default replies: a first-time welcome, and "counted" for a keyword
-        bad = {f["user"] for f in flagged or []}
-        today = [str(cm.get("username", "")).strip().lstrip("@").lower() for cm in comments]
-        heard = {x["to"] for x in city.living.get("outbox", []) if x.get("day") in (city.day, city.day + 1)}
-        world.welcome([u for u in today if u not in bad and u not in heard])
-        world.counted({u: w for u, w in actions.items() if u not in bad}, tallies)
-    if world is not None and world.frontier:
-        from .living import frontier as _frontier
-        _frontier.after_post(world)
-    chron = world.chronicle() if world is not None else None
+             "treasury": round(city.treasury, 1), "tension": round(storyteller.tension(city), 3)}
+    for e in ended:                               # what the crowd decided today is part of the story
+        if e.get("result") == "helped":           # the people who did it hear about it; the first few get named
+            heroes = list(dict.fromkeys(ctx.helpers.get(e["id"], [])))
+            for k, i in enumerate(heroes):
+                world.reply(c.handles[i], f"⚔️ You helped: {e['outcome']}", "helped",
+                            credit=f"helped: {e['title'][:60]}" if k < 3 else None)
+        big = e.get("source") == "warlord" or e["id"].startswith("decree_") or e.get("result") not in ("timed_out",)
+        world.moment("world", e["outcome"], 3 if e.get("source") == "warlord" else (2 if big else 1), public=True,
+                     hold=city.wards[e["ward"]]["name"] if e.get("ward") is not None else "")
+    bad = {f["user"] for f in flagged or []}      # default replies: a first-time welcome, "counted" for a keyword
+    today = [str(cm.get("username", "")).strip().lstrip("@").lower() for cm in comments]
+    heard = {x["to"] for x in city.living.get("outbox", []) if x.get("day") in (city.day, city.day + 1)}
+    world.welcome([u for u in today if u not in bad and u not in heard])
+    world.counted({u: w for u, w in actions.items() if u not in bad}, tallies)
+    F.after_post(world)
+    chron = world.chronicle()
     summary = (lines + [e["outcome"] for e in ended] + [s["title"] for s in started]
-               + ([m["text"] for m in chron["top"]] if chron else [])
-               + sim_report["notes"] + [f"Loyalty to the king is {stats['approval']:.0%}."])
-    diary = mayor.diary(city, summary, people)
+               + [m["text"] for m in chron["top"]] + folk["notes"])
+    diary = mayor.diary(city, summary, notes_people)
     city.mayor.setdefault("journal", []).append({"day": city.day, "diary": diary, "approval": stats["approval"]})
     city.mayor["journal"] = city.mayor["journal"][-30:]
-    city.history.append({"day": city.day, **{k: stats[k] for k in ("population", "approval", "treasury",
-                                                                     "tax_rate", "tension")},
-                         "events": len(city.events), "joined": joined, "left": sim_report.get("left", 0)})
+    city.history.append({"day": city.day, **stats, "events": len(city.events), "joined": joined,
+                         "left": folk["left"]})
     city.history = city.history[-400:]
-    city.pack = next_pack(city, plan_pack)
-    if world is not None:                                  # remember every post's words
-        posts = city.living.setdefault("posts", {})
-        posts[str(city.day + 1)] = city.pack
-        for k in sorted(posts, key=int)[:-60]:
-            del posts[k]
+    city.pack = next_pack(city)
+    posts = city.living.setdefault("posts", {})   # remember every post's words
+    posts[str(city.day + 1)] = city.pack
+    for k in sorted(posts, key=int)[:-60]:
+        del posts[k]
 
-    result = {"city": city.name, "day": city.day, "season": city.season, "season_day": season_day,
-              "joined": joined, "tallies": tallies, "stats": stats, "sim": sim_report,
-              "events_started": started, "events_ended": ended,
-              "announce": list((city.plan or {}).get("announce", [])), "scheduled": list(city.scheduled),
-              "events_active": list(city.events), "decision_lines": lines, "speech": speech,
-              "decided_by": decision.get("_by", mayor.name), "thought": decision.get("thought", ""),
-              "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,
-              "chronicle": chron,
-              "frontier": (__import__("city.living.frontier", fromlist=["summary"]).summary(world)
-                           if world is not None and world.frontier else None),
-              "scene": (__import__("city.living.scene", fromlist=["export"]).export(world)
-                        if world is not None and world.frontier else None),
-              "credits": (city.living.get("credits_today", []) if world else []),
-              "wanted": (__import__("city.living.things", fromlist=["wanted"]).wanted(city) if world else []),
-              "outbox": (city.living.get("outbox", []) if world else []),
-              "moderation": ([m for m in city.living.get("moderation", []) if m["day"] == city.day] if world else []),
-              "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)) if world else [],
-              "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}
-                                 for i in dict.fromkeys(ctx.status_requests)]
-              + [{"username": u, "reply": "That one's over - but today's post is live, and you can always tell your "
-                                          "character what to do in your own words."} for u in dict.fromkeys(closed)
-                 if u not in actions]}
-    return result
+    from .living import scene, things
+    return {"city": city.name, "day": city.day, "season": city.season, "season_day": season_day,
+            "joined": joined, "tallies": tallies, "stats": stats, "sim": {"notes": folk["notes"], "left": folk["left"]},
+            "events_started": started, "events_ended": ended, "scheduled": list(city.scheduled),
+            "events_active": list(city.events), "decision_lines": lines,
+            "decided_by": decision.get("_by", mayor.name), "thought": decision.get("thought", ""),
+            "diary": diary, "featured": featured, "election": election, "next_pack": city.pack,
+            "chronicle": chron, "frontier": F.summary(world), "scene": scene.export(world),
+            "credits": city.living.get("credits_today", []), "wanted": things.wanted(city),
+            "outbox": city.living.get("outbox", []),
+            "moderation": [m for m in city.living.get("moderation", []) if m["day"] == city.day],
+            "moments": world.moments_since(city.living.get("last_post_clock", -10 ** 9)),
+            "status_replies": [{"username": c.handles[i], "reply": report.status_card(city, i)}
+                               for i in dict.fromkeys(ctx.status_requests)]
+            + [{"username": u, "reply": "That one's over - but today's post is live, and you can always tell your "
+                                        "character what to do in your own words."} for u in dict.fromkeys(closed)
+               if u not in actions]}

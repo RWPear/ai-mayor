@@ -113,11 +113,8 @@ def target(city):
     return cfg["tension_target_start"] + (cfg["tension_target_end"] - cfg["tension_target_start"]) * frac
 
 
-def maybe_start_event(city, quiet=False):
-    """Random events. quiet=True when the season plan has something coming up soon."""
-    mode = (city.plan or {}).get("storyteller", "on")
-    if mode == "off" or (mode == "fill" and quiet):
-        return None
+def maybe_start_event(city):
+    """Random events from content/events.yaml (when the director isn't inventing them)."""
     if (getattr(city, "living", None) or {}).get("director"):
         return None          # the living world's director invents events instead of drawing from the list
     land = ((getattr(city, "living", None) or {}).get("town") or {}).get("land")
@@ -361,10 +358,10 @@ def choose_option(city, active, option_id):
     if not opt or not can_respond(city, active):
         return None
     pop = max(1, city.population())
-    cost = float(opt.get("cost_pc", 0)) * pop
-    if cost > 0 and city.treasury - cost < -city.cfg["debt_limit_pc"] * pop:
-        return None  # can't afford it
-    city.treasury -= cost
+    cost = float(opt.get("cost_pc", 0)) * min(pop, 20)
+    if cost > 0 and city.treasury < cost:
+        return None  # can't afford it (his purse never goes into debt)
+    city.treasury = max(0.0, city.treasury - cost)
     effects.apply(city, opt.get("effects"), active["ward"])
     prog = (opt.get("effects") or {}).get("progress")
     if prog:

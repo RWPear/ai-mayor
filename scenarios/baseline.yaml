@@ -1,7 +1,0 @@
-# A normal first month: a small, steady audience.
-kingdom: Emberfall
-days: 30
-start_followers: 60
-growth: {daily: 6}
-engagement: 0.15          # share of followers who comment on a given day
-archetypes: {loyal: 0.3, worker: 0.3, activist: 0.2, shopper: 0.15, troll: 0.05}

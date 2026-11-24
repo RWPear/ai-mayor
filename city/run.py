@@ -1,14 +1,14 @@
 """Command line. `./kingdom ...` is a shortcut for `.venv/bin/python -m city.run ...`.
 
-TEST KINGDOM - run a whole scenario with a fake audience:
-    ./kingdom test --scenario scenarios/season1.yaml              (newest run is always runs/latest)
-    ./kingdom test --scenario scenarios/viral.yaml --king llm --days 10
+PLAY IT LIVE in your browser - comment as anyone, approve replies:
+    ./kingdom play --fresh --king llm
 
-PLANNING:
-    ./kingdom plan --plan seasons/season1.yaml         the season calendar (what to prep)
-    ./kingdom check                                    validate content, packs and plans
+TEST RUN - a whole scenario with a made-up audience:
+    ./kingdom test --scenario scenarios/frontier.yaml              (newest run is always runs/latest)
+    ./kingdom test --scenario scenarios/frontier_viral.yaml --king llm --days 10
 
-LIVE KINGDOM - run exactly one day with real inputs:
+THE REAL THING - real time, or one day at a time with real inputs:
+    ./kingdom live --state data/live --inbox inbox
     ./kingdom day --state data/live --followers ~/exports/instagram.zip --comments comments.json
     ./kingdom status --state data/live --user somehandle
 
@@ -27,11 +27,10 @@ from pathlib import Path
 
 import yaml
 
-from . import checker, config, plan, report, storyteller
-from .day import next_pack, pack_for_today, run_day
+from . import config, report, storyteller
+from .day import pack_for_today
 from .mayor import make
 from .model import City
-from .packs import load as load_pack
 from .sources.fake import FakeAudience
 from .sources.instagram_export import read_comments, read_followers
 
@@ -42,34 +41,27 @@ def cmd_test(args):
     cfg.update(scen.get("balance") or {})
     days = args.days or scen.get("days", 30)
     city = City(cfg, scen.get("kingdom", scen.get("city", "Emberfall")), seed=args.seed)
-    if args.plan or scen.get("plan"):
-        plan.attach(city, args.plan or scen["plan"])
     for e in scen.get("events") or []:   # events you schedule by hand in a scenario
         storyteller.schedule(city, e["event"], e["day"], e.get("hold", e.get("ward")), source="scenario")
     audience = FakeAudience(scen, seed=args.seed)
     mayor = make(args.mayor)
-    world = make_world(city, args.mayor) if (args.living or scen.get("living")) else None
+    world = make_world(city, args.mayor)
     out = Path(args.out or f"runs/{Path(args.scenario).stem}-{int(time.time())}")
-    forced = {int(d): load_pack(p) for d, p in (scen.get("packs") or {}).items()}
-    print(f"{'day':>4} {'pop':>7} {'joined':>6} {'loyal':>6} {'gold':>12} {'tax':>5} {'tension':>7}  happenings")
+    print(f"{'day':>4} {'pop':>7} {'joined':>6} {'loyal':>6} {'gold':>8} {'tension':>7}  happenings")
     t0 = time.time()
     for _ in range(days):
         d = city.day + 1
-        pack = forced.get(d) or pack_for_today(city)
+        pack = pack_for_today(city)
         followers = audience.followers_on(d)
         comments = audience.comments_on(d, pack, city)
-        if world:   # comments trickle in through the day while the king and the warlord live their lives
-            r = world.post(mayor, followers, comments, pack)
-        else:
-            r = run_day(city, mayor, followers, comments, pack)
+        r = world.post(mayor, followers, comments, pack)   # comments trickle in through the day
         s = r["stats"]
         first = [report.headline(r)] if r.get("election") else []
-        if world and r.get("chronicle"):
-            first += [m["text"] for m in r["chronicle"]["top"] if m["drama"] >= 2][:2]
+        first += [m["text"] for m in r["chronicle"]["top"] if m["drama"] >= 2][:2]
         what = "; ".join((first + [f"NEW {e['title']}" for e in r["events_started"]] +
                           [f"END {e['outcome'][:60]}" for e in r["events_ended"]] + r["sim"]["notes"])[:3])
-        print(f"{r['day']:>4} {s['population']:>7} {r['joined']:>6} {s['approval']:>6.0%} {s['treasury']:>12,.0f} "
-              f"{s['tax_rate']:>5.0%} {s['tension']:>7.2f}  {what[:140]}")
+        print(f"{r['day']:>4} {s['population']:>7} {r['joined']:>6} {s['approval']:>6.0%} {s['treasury']:>8,.0f} "
+              f"{s['tension']:>7.2f}  {what[:140]}")
         if args.reports:
             report.save(city, r, out / "days")
     city.save(out / "state")
@@ -81,11 +73,10 @@ def cmd_test(args):
     except OSError:
         pass
     final = city.history[-1]
-    print(f"\n{days} days in {time.time() - t0:.1f}s · holds: {len(city.wards)} · milestones: {city.milestones}")
-    print(f"final loyalty {final['approval']:.0%}, treasury {final['treasury']:,.0f} gold, "
-          f"events run: {len(city.event_log)}, projects: {[p['name'] for p in city.projects]}")
+    print(f"\n{days} days in {time.time() - t0:.1f}s · final loyalty {final['approval']:.0%}, purse "
+          f"{final['treasury']:,.0f} gold, events run: {len(city.event_log)}")
     print(f"saved to {out}  (also {latest})  try: ./kingdom event list --state {latest}/state")
-    if world:
+    if True:
         camp = city.living["warcamp"]
         print(f"war camp: {camp['warriors']} warriors, {camp['food']:.0f} food, morale {camp['morale']:.2f}, "
               f"raids won {camp['raids_won']} / lost {camp['raids_lost']}")
@@ -127,8 +118,6 @@ def cmd_live(args):
     cfg = config.load()
     state = Path(args.state)
     city = City.load(state, cfg) if (state / "city.json").exists() else City(cfg, args.name)
-    if args.plan:
-        plan.attach(city, args.plan)
     world = make_world(city, args.mayor)
     mayor = make(args.mayor)
     inbox = Path(args.inbox)
@@ -174,12 +163,10 @@ def cmd_day(args):
     cfg = config.load()
     state = Path(args.state)
     city = City.load(state, cfg) if (state / "city.json").exists() else City(cfg, args.name)
-    if args.plan:
-        plan.attach(city, args.plan)
     followers = read_followers(args.followers) if args.followers else []
     comments = read_comments(args.comments) if args.comments else []
-    pack = load_pack(args.pack) if args.pack else None
-    r = run_day(city, make(args.mayor), followers, comments, pack)
+    world = make_world(city, args.mayor)
+    r = world.post(make(args.mayor), followers, comments)
     city.save(state)
     report.save(city, r, state / "days")
     print(report.markdown(city, r))
@@ -191,35 +178,6 @@ def cmd_status(args):
     print(report.status_card(city, i) if i is not None else "not a subject")
 
 
-def cmd_plan(args):
-    cfg = config.load()
-    if args.state and (Path(args.state) / "city.json").exists():
-        city = City.load(Path(args.state), cfg)
-    else:
-        city = City(cfg)
-    if args.plan:
-        plan.attach(city, args.plan)
-    if not city.plan:
-        print("No plan attached. Use --plan seasons/season1.yaml (or a folder of seasonN.yaml files).")
-        return
-    data, rows = plan.calendar(city, args.season)
-    print(f"SEASON {args.season or city.season}: {data.get('title', '')}")
-    if data.get("theme"):
-        print(f"  {data['theme']}")
-    print(f"  storyteller between beats: {data.get('storyteller', 'fill')}\n")
-    for r in rows:
-        ev = r["event"] or "-"
-        cond = f"  IF {r['if']} ELSE {r['else'] or 'nothing'}" if r["if"] else ""
-        print(f"Day {r['day']:>2}  {ev}{cond}")
-        if r["commands"] or (r["pack"] and r["pack"] != "auto"):
-            print(f"        commands: {r['commands'] or r['pack']}")
-        for k in ("announce", "agenda", "note"):
-            if r[k]:
-                print(f"        {k}: {r[k]}")
-    if city.scheduled:
-        print("\nAlso scheduled: " + ", ".join(f"{s['event']} (day {s['day']})" for s in city.scheduled))
-
-
 def cmd_event(args):
     cfg = config.load()
     state = Path(args.state) if args.state else None
@@ -228,8 +186,8 @@ def cmd_event(args):
         for e in cat.values():
             words = e.get("choices") or e.get("commands") or {}
             kind = "vote" if e.get("choices") else "event"
-            plan_only = " (season plans only)" if e.get("planned_only") else ""
-            print(f"{e['id']:<20} {kind:<5} {e['title']}  [{', '.join(str(w).upper() for w in words)}]{plan_only}")
+
+            print(f"{e['id']:<20} {kind:<5} {e['title']}  [{', '.join(str(w).upper() for w in words)}]")
         return
     city = City.load(state, cfg)
     if args.action == "list":
@@ -266,18 +224,6 @@ def cmd_event(args):
         city.scheduled = [s for s in city.scheduled if s["event"] != args.id]
         print(f"Removed {before - len(city.scheduled)} scheduled '{args.id}'.")
     city.save(state)
-
-
-def cmd_check(args):
-    problems, summary = checker.check_all(args.plan)
-    for line in summary:
-        print(line)
-    if problems:
-        print(f"\n{len(problems)} problem(s):")
-        for p in problems:
-            print("  - " + p)
-        raise SystemExit(1)
-    print("\nAll good.")
 
 
 def cmd_view(args):
@@ -331,35 +277,26 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("test", help="run a scenario with a fake audience")
     t.add_argument("--scenario", required=True)
-    t.add_argument("--plan", help="season plan file or folder (overrides the scenario's)")
     t.add_argument("--days", type=int)
     t.add_argument("--king", "--mayor", dest="mayor", default="rules", choices=["rules", "llm"])
     t.add_argument("--seed", type=int, default=1)
     t.add_argument("--out")
     t.add_argument("--reports", action="store_true", help="write a report + episode script for every day")
-    t.add_argument("--living", action="store_true", help="run the living world between posts (king + warlord)")
     lv = sub.add_parser("live", help="the live kingdom in real time (ticks forever)")
     lv.add_argument("--state", required=True)
     lv.add_argument("--name", default="Emberfall")
-    lv.add_argument("--plan", help="attach a season plan (only needed once)")
     lv.add_argument("--inbox", default="inbox", help="where each day's comments (and follower export) are dropped")
     lv.add_argument("--king", "--mayor", dest="mayor", default="llm", choices=["rules", "llm"])
     lv.add_argument("--speed", type=float, default=1.0, help="1 = real time, 60 = an hour a minute, 0 = no waiting")
     d = sub.add_parser("day", help="run one real day")
     d.add_argument("--state", required=True)
     d.add_argument("--name", default="Emberfall")
-    d.add_argument("--plan", help="attach a season plan (only needed once)")
     d.add_argument("--followers")
     d.add_argument("--comments")
-    d.add_argument("--pack")
     d.add_argument("--king", "--mayor", dest="mayor", default="llm", choices=["rules", "llm"])
     s = sub.add_parser("status", help="print a subject card")
     s.add_argument("--state", required=True)
     s.add_argument("--user", required=True)
-    pl = sub.add_parser("plan", help="show a season's calendar")
-    pl.add_argument("--plan")
-    pl.add_argument("--state")
-    pl.add_argument("--season", type=int)
     e = sub.add_parser("event", help="list/start/schedule/end events by hand")
     e.add_argument("action", choices=["list", "start", "schedule", "end", "cancel"])
     e.add_argument("id", nargs="?")
@@ -397,11 +334,8 @@ def main():
     v.add_argument("--first", type=int, help="first day to include")
     v.add_argument("--last", type=int, help="last day to include")
     v.add_argument("--out", help="default: the run's world/ folder")
-    c = sub.add_parser("check", help="validate events, projects, milestones, packs and plans")
-    c.add_argument("--plan", default="seasons")
     args = p.parse_args()
-    {"test": cmd_test, "day": cmd_day, "status": cmd_status, "plan": cmd_plan, "event": cmd_event,
-     "check": cmd_check, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record, "play": cmd_play}[args.cmd](args)
+    {"test": cmd_test, "day": cmd_day, "status": cmd_status, "event": cmd_event, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record, "play": cmd_play}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,0 @@
-# A video blows up on day 8 and the kingdom goes from 80 to ~10,000 people.
-kingdom: Emberfall
-days: 30
-start_followers: 80
-growth: {daily: 40, viral: [{day: 8, add: 6000}, {day: 9, add: 2500}, {day: 15, add: 1000}]}
-engagement: 0.06

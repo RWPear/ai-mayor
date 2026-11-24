@@ -263,7 +263,7 @@ def _commission(world, name, days):
     job = next((j for pat, j in MAKERS if re.search(pat, name)), "blacksmith")
     pool = np.where(c.active() & (c.job == JOB_NAMES.index(job)))[0]
     maker = c.handles[int(city.rng.choice(pool.tolist()))] if len(pool) else None
-    cost = round(30 + 20 * days)
+    cost = min(round(30 + 20 * days), int(city.treasury))
     city.treasury -= cost
     if maker:
         world.reply(maker, f"🔨 The king has commissioned your character to make: {name}. You have {days} days. "
@@ -313,7 +313,7 @@ def _fulfil(world, item, giver, king=None):
             if giver:
                 world.reply(giver, f"👑 The king had been wanting {_label(w)} - and you brought it. He won't forget.",
                             "want_fulfilled", credit=f"brought the king the {_norm(_label(w))} he wanted")
-                world.city.treasury -= 20
+                world.city.treasury = max(0.0, world.city.treasury - 20)
                 c = world.city.citizens
                 if giver in c.index:
                     c.wealth[c.index[giver]] += 20
