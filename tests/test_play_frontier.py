@@ -214,3 +214,29 @@ def test_wonders_cost_something_every_day(tmp_path):
     F.land(p.world)["stock"]["food"] = 10
     wonders.daily(p.world)
     assert F.land(p.world)["stock"]["food"] == 8 and w in wonders.state(p.world.city)["open"]
+
+
+def test_the_hosted_comment_model_is_optional_and_falls_back(monkeypatch):
+    import json as _json
+    from city import llm
+    monkeypatch.delenv("COMMENT_MODEL", raising=False)
+    assert type(llm.comment_llm()) is llm.LLM                           # nothing set: all local
+    monkeypatch.setenv("COMMENT_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    api = llm.comment_llm()
+    assert isinstance(api, llm.APILLM) and api.anthropic
+
+    class R:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"stop_reason": "tool_use", "content": [{"type": "tool_use", "input": {"reply": "hi"}}]}
+    sent = {}
+    monkeypatch.setattr(llm.httpx, "post", lambda url, json, timeout, headers: sent.update(url=url, body=json) or R())
+    out = api.json("sys", "user", {"type": "object", "properties": {"reply": {"type": "string"}}})
+    assert out == {"reply": "hi"} and sent["url"].endswith("/messages") and sent["body"]["tool_choice"]["name"] == "answer"
+
+    def boom(*a, **k):
+        raise RuntimeError("down")
+    monkeypatch.setattr(llm.httpx, "post", boom)
+    monkeypatch.setattr(api.local, "_chat", lambda *a, **k: (_json.dumps({"reply": "local"}), "stop"))
+    assert api.json("sys", "user", {"type": "object"}) == {"reply": "local"}   # the API is down: local answers

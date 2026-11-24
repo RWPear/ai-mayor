@@ -1,10 +1,18 @@
-"""One small Ollama client shared by every mind in the kingdom (king, warlord, subjects).
+"""One small model client shared by every mind in Emberfall (king, warlord, the people, the narrator).
 
-Environment:
-  OLLAMA_URL          default http://localhost:11434
-  OLLAMA_MODEL        the main model (king, warlord)        default qwen3:14b
-  OLLAMA_CROWD_MODEL  model for subjects' intents (cheaper)  default: same as OLLAMA_MODEL
-  OLLAMA_NUM_CTX      context size                           default 6144
+Local (Ollama) by default. Settings go in .env next to ./kingdom (never in git):
+  OLLAMA_URL          default: found automatically (this machine, localhost or its network address)
+  OLLAMA_MODEL        the main model (king, warlord)                  default qwen3:14b
+  OLLAMA_CROWD_MODEL  model for the people's comments                 default: same as OLLAMA_MODEL
+  OLLAMA_NUM_CTX      context size                                    default 6144
+
+Optional: a hosted model for the comments (reading them, writing replies, talk, the world's narration) - the
+part people actually read. Aldric's own thinking stays local. Off unless COMMENT_MODEL is set:
+  COMMENT_MODEL       e.g. claude-sonnet-5-5 (Anthropic) or any OpenAI-compatible model name
+  ANTHROPIC_API_KEY   for claude-* models
+  OPENAI_API_KEY      for anything else, with OPENAI_BASE_URL (default https://api.openai.com/v1; OpenRouter,
+                      Groq and others work too)
+  COMMENT_MAX_CALLS   a day's budget of hosted calls before it falls back to the local model (default 1500)
 """
 import collections
 import itertools
@@ -150,3 +158,73 @@ class LLM:
                                           " twice - the game falls back to rules for this one") + f" ({e})")
                 if attempt == 2:
                     raise
+
+
+class APILLM(LLM):
+    """A hosted model with the same interface (chat / json). Claude models go to the Anthropic API; anything else to
+    an OpenAI-compatible API. If it fails or the day's budget is spent, the local model answers instead."""
+
+    def __init__(self, model):
+        self.model = model
+        self.calls = 0
+        self.anthropic = model.startswith("claude")
+        self.key = os.environ.get("ANTHROPIC_API_KEY" if self.anthropic else "OPENAI_API_KEY", "")
+        self.base = ("https://api.anthropic.com/v1" if self.anthropic
+                     else os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+        self.max_calls = int(os.environ.get("COMMENT_MAX_CALLS", "1500"))
+        self.today = (time.strftime("%Y-%m-%d"), 0)
+        self.local = LLM(crowd=True)
+
+    def _chat(self, system, user, schema=None, max_tokens=900, temperature=0.8):
+        day, n = self.today
+        if day != time.strftime("%Y-%m-%d"):
+            day, n = time.strftime("%Y-%m-%d"), 0
+        if n >= self.max_calls or not self.key:     # out of budget (or no key): the local model answers
+            return self.local._chat(system, user, schema, max_tokens, temperature)
+        self.today = (day, n + 1)
+        try:
+            out = self._anthropic(system, user, schema, max_tokens, temperature) if self.anthropic else \
+                self._openai(system, user, schema, max_tokens, temperature)
+            self.calls += 1
+            return out
+        except Exception:
+            return self.local._chat(system, user, schema, max_tokens, temperature)
+
+    def _anthropic(self, system, user, schema, max_tokens, temperature):
+        body = {"model": self.model, "max_tokens": min(max_tokens, 8000), "temperature": min(1.0, temperature),
+                "system": system, "messages": [{"role": "user", "content": user}]}
+        if schema:                                  # a forced tool call always comes back as valid JSON
+            body["tools"] = [{"name": "answer", "description": "Your answer.", "input_schema": schema}]
+            body["tool_choice"] = {"type": "tool", "name": "answer"}
+        r = httpx.post(f"{self.base}/messages", json=body, timeout=120,
+                       headers={"x-api-key": self.key, "anthropic-version": "2023-06-01"})
+        r.raise_for_status()
+        j = r.json()
+        why = "length" if j.get("stop_reason") == "max_tokens" else "stop"
+        for block in j.get("content", []):
+            if schema and block.get("type") == "tool_use":
+                return json.dumps(block.get("input", {})), why
+        return "".join(b.get("text", "") for b in j.get("content", []) if b.get("type") == "text").strip(), why
+
+    def _openai(self, system, user, schema, max_tokens, temperature):
+        body = {"model": self.model, "max_tokens": max_tokens, "temperature": temperature,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if schema:
+            body["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema}}
+        r = httpx.post(f"{self.base}/chat/completions", json=body, timeout=120,
+                       headers={"Authorization": f"Bearer {self.key}"})
+        r.raise_for_status()
+        ch = r.json()["choices"][0]
+        return (ch["message"].get("content") or "").strip(), ("length" if ch.get("finish_reason") == "length" else "stop")
+
+
+def comment_llm():
+    """The model for the comments: the hosted one if COMMENT_MODEL is set (and has a key), else the local one."""
+    m = os.environ.get("COMMENT_MODEL", "").strip()
+    if m:
+        api = APILLM(m)
+        if api.key:
+            return api
+        print(f"!!! COMMENT_MODEL is {m}, but there's no {'ANTHROPIC_API_KEY' if api.anthropic else 'OPENAI_API_KEY'}"
+              f" in .env - the comments stay on the local model.")
+    return LLM(crowd=True)
