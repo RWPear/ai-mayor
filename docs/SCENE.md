@@ -41,6 +41,8 @@ its cameras and the recorders that turn a run into timelapses.
 | `weather` | `[{t, weather}]`: the weather in effect from `t` |
 | `actors` | `king`, `court`, `settlers`, `crowd` (below) |
 | `events` | every moment in these 24 hours: `{t, time, who, place, pos, text, drama 0-3, public, kind, handles}` |
+| `routine` | `{day: [{from, what, where}], commons: [x, z]}`: the shape of everyone's day (minutes after midnight) and where the fire is |
+| `encounters` | the little things between people: `{t, a, b, kind, anim, label, text, what}` - `a` and `b` are handles; for about 24 minutes from `t` they face each other and do `anim` (talk, eat, sing, dance, work, sit) with `label` in a bubble |
 | `shots` | the post's three best moments: `{t, target [x, z], distance, text}` (the camera's to-do list) |
 | `today` | `built` (names finished today), `arrived` |
 
@@ -98,16 +100,18 @@ Animations so far:
 court.
 
 **Settlers**:
-- Everyone in today's story, the appointed officers, and about 20 others:
+- Everyone in today's story and today's encounters, the appointed officers, and others up to 120:
   `{handle, name, role, home {building | tent}, home_pos, work, work_pos, mood, condition, schedule}`.
-- The schedule is simple for now: at work 07-19, at home 19-07.
-- `condition` is `wounded` (lying down) or `jailed` (not shown).
+- `schedule` is their day: `[{from, to, what, where, pos, with}]` - `what` is up / breakfast / work / lunch /
+  work / free / supper / sleep, `where` a place id, `home`, `commons`, `visit` (with: a friend) or `own` (their
+  own build), `pos` where that is. Each person's is shifted up to 15 minutes either way.
+- `condition` is `wounded` or `jailed` (not shown either way).
 
 **Crowd**: `day {place: count}` and `night {homes, camp}`, for drawing everyone else as background figures.
 
 ## What's still simple (and where it would grow)
 
-- Settler schedules are coarse (work/home). Their own-words moves are in `events` with `handles`. A later
+- Settlers' own-words moves are in `events` with `handles` (they stop and talk where it happened). A later
   version can turn "@a robbed @b" into a walk and a chase.
 - The warlord lives off the map (the north). His moments are in `events`; raids could get a march path.
 - The castle start (`start: kingdom`) has no coordinates; the scene file is frontier-only.

@@ -71,6 +71,7 @@ class Play:
         self.seen_out = 0
         self.log = []                       # what happened: moments, in order
         self.n_moments = len(self.city.living.get("moments", []))
+        self.enc_seen = self.city.living.get("enc_n", 0)
         self.cache = {"scene": b"null", "state": b"{}"}
         self.error = None
         self.pending_control = []
@@ -246,6 +247,11 @@ class Play:
             self.log.append({"n": len(self.log), "time": m.get("time"), "who": m.get("who"), "public": m.get("public"),
                              "drama": m.get("drama", 1), "text": m.get("text"), "place": m.get("place")})
         self.n_moments = len(lv.get("moments", []))
+        for e in lv.get("encounters", []):                 # the little things (people bumping into each other)
+            if e.get("n", 0) > self.enc_seen:
+                self.log.append({"n": len(self.log), "time": self.world.now_str(e["t"]), "who": "world", "public": True,
+                                 "drama": 0, "small": True, "text": e["text"]})
+        self.enc_seen = lv.get("enc_n", 0)
         out = lv.get("outbox", [])
         with self.rlock:
             for x in out[self.seen_out:]:      # the same dict: later news folded into it shows up here too
@@ -253,7 +259,7 @@ class Play:
                 x.setdefault("status", "pending")
                 self.replies.append(x)
         self.seen_out = len(out)
-        del self.log[:-1500]
+        del self.log[:-3000]
         self.version += 1
 
     def _publish(self):

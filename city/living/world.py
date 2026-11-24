@@ -706,6 +706,8 @@ class World:
             F.arrive(self)
         if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
             F.labor(self, 0.25)
+        from . import routine                    # everyone's day, and the little things in it
+        routine.tick(self)
         if t == 20 * 60:
             F.meals(self)
         if t == 21 * 60:                         # evenings: people's own builds

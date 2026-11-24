@@ -56,6 +56,7 @@ stays local. It falls back to the local model if the API fails or `COMMENT_MAX_C
 
 ```bash
 ./kingdom play --fresh --king llm                                # live, in the browser (docs/PLAY.md)
+./kingdom demo                                                   # a 50-person kingdom ten days in, live
 ./kingdom test --scenario scenarios/frontier.yaml --reports      # a month with a made-up audience, in seconds
 ./kingdom test --scenario scenarios/frontier_viral.yaml          # ...and the account blowing up
 ./kingdom serve                                                  # walk around the last test run in 3D
@@ -74,6 +75,7 @@ Tuning lives in `content/balance.yaml`; island events in `content/events.yaml`; 
 kingdom              ./kingdom <command>  ==  .venv/bin/python -m city.run <command>
 city/run.py          the commands
 city/play.py         live play: the clock, comments, replies to approve, the mind tab
+city/demo.py         ./kingdom demo: a mid-sized kingdom built on the rules
 city/day.py          one day: the post closes, the next one opens
 city/llm.py          the model client (Ollama, or optionally a hosted model for the comments)
 city/storyteller.py  events: starting, ticking, what the comments did to them
@@ -84,6 +86,7 @@ city/living/         the living world
   agents.py          the minds (Aldric, Skarn): two-step decisions
   intents.py         reading comments -> the game decides -> the narrator writes the reply; talk
   wonders.py         wonders: wild claims made real, at a cost
+  routine.py         everyone's day, and the little things between people (friends, feuds)
   director.py        invents events from what's been happening
   scene.py           everything the 3D view needs
 viewer/              the 3D view (three.js, no build step)

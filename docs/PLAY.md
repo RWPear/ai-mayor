@@ -8,6 +8,8 @@ before Instagram is connected.
 ./kingdom play --fresh --king llm      # the same with the model (brainbox) - this is where the variety is
 ./kingdom play                         # pick up where you left off (saved in data/play)
 ./kingdom play --fresh --crowd 15      # plus 15 made-up followers commenting in the background
+./kingdom demo                         # a 50-person kingdom ten days in (built on the rules in seconds), live
+./kingdom demo --people 80 --days 14 --king llm
 ```
 
 Then open the address it prints (`http://<brainbox>:8765/?live`).

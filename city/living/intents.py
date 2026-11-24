@@ -181,7 +181,8 @@ mishap. Their role colours the scene. Nobody ever dies. Keep it PG-13. Mention n
 Someone who "only just arrived in Emberfall" is new: you MUST say where they're sleeping tonight, woven into the
 story with a first impression of the place, not a welcome mat.
 If they have a story so far, it's one story: pick up a thread that's hanging (the goat, the leaky tent, what Aldric
-asked them) when it fits, so it feels like the world remembers them.
+asked them) when it fits, so it feels like the world remembers them. "Their people" are real: a friend can turn up
+in the scene, a rival can be in the way - the town carries on while they're away and they should feel it.
 THE WORLD section is the only truth: never invent people, soldiers, buildings or crowds beyond it. Emberfall is on a
 floating island above the clouds - old, a little magical, and it answers wild claims with "yes, and...": when the
 RESULT says something fantastic CAME TRUE, it really is real - play it straight and make the catch vivid. Claims the
@@ -309,13 +310,11 @@ def _power(city, i):
 
 
 def _bond(city, a, b, delta):
-    key = "|".join(sorted((a, b)))
-    bonds = city.living.setdefault("bonds", {})
-    bonds[key] = bonds.get(key, 0) + delta
-    if len(bonds) > 3000:
-        for k in list(bonds)[:500]:
-            del bonds[k]
-    return bonds[key]
+    from . import routine
+    bd = routine.bonds(city).setdefault("|".join(sorted((a, b))), {"s": 0, "n": 0, "stage": None})
+    bd["s"] += delta
+    bd["n"] += 1
+    return bd["s"]
 
 
 # ---------------------------------------------------------------- 2. roll
@@ -834,6 +833,7 @@ def process(world, free, llm=None, ai_people=0):
         lines = [f"@{r['user']} ({_who(world, c.index[r['user']])}) wrote: {r['text']}\n   RESULT: @{r['user']} {r['facts']}"
                  + (f" (they also tried: {r['also']} - mention it in passing if it fits)" if r.get("also") else "")
                  + (f"\n   Their story so far: {story_so_far(world, r['user'])}" if story_so_far(world, r['user']) else "")
+                 + (f"\n   Their people: {_people(world, r['user'])}" if _people(world, r['user']) else "")
                  for r in batch]
         try:
             res = llm.json(_tell_system(city.rng), _world_now(world) + "\n\nSUBJECTS:\n" + "\n".join(lines), TELL_SCHEMA,
@@ -1082,7 +1082,8 @@ TALK = """You're the bard of Emberfall: warm, dry, a little mischievous. These r
 their move today; now they're talking - to Aldric, to the others, to nobody, or asking about the place. Answer them
 IN the world, like a scene in a story they're inside: Aldric (or a neighbour by name, without the @) answers in quotes,
 or the place answers (the fire pops, a dog barks, the rain starts). Use THE WORLD and their story so far: Aldric's
-quirks, the weather, what's built, what happened to them today - pick up any thread that's hanging.
+quirks, the weather, what's built, what happened to them today, their people (a friend, a rival) - pick up any
+thread that's hanging.
 Nothing is gained or lost and nothing gets built: no coins, wood, food, wounds or deals. If they try to DO something
 (build, steal, fight, make, travel), that's tomorrow's move - set it up ("Aldric eyes the axe. 'Tomorrow,' he says")
 but don't let it happen. Questions get real answers from what THE WORLD says; if the world doesn't say, a character
@@ -1101,6 +1102,11 @@ def remember(world, u, outcome="", reply="", said=""):
     log.append({"day": world.city.day + 1, "time": world.now_str().split(", ")[-1], "said": said[:160],
                 "outcome": outcome[:200], "reply": reply[:300]})
     del log[:-6]
+
+
+def _people(world, u):
+    from . import routine
+    return routine.people_line(world, u)
 
 
 def story_so_far(world, u, n=4):
@@ -1138,7 +1144,8 @@ def talk(world, items, llm=None, ai_people=0):
         for u in batch:
             so_far = story_so_far(world, u)
             lines.append(f"@{u} ({_who(world, c.index[u])}) says: {said[u][:400]}"
-                         + (f"\n   Their story so far: {so_far}" if so_far else ""))
+                         + (f"\n   Their story so far: {so_far}" if so_far else "")
+                         + (f"\n   Their people: {_people(world, u)}" if _people(world, u) else ""))
         try:
             res = llm.json(TALK, _world_now(world) + "\n\nTALKING:\n" + "\n".join(lines), TALK_SCHEMA,
                            max_tokens=150 + 160 * len(batch), temperature=1.0)["results"]

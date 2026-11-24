@@ -22,6 +22,7 @@ import zlib
 import numpy as np
 
 from . import frontier as F
+from . import routine
 
 SCHEMA = "scene/1"
 
@@ -34,6 +35,7 @@ LAYOUT = {
     "hill":  {"pos": [84, 78], "r": 28},
     "road":  {"pos": [16, -46], "r": 6},
     "camp":  {"pos": [46, -64], "r": 20},
+    "commons": {"pos": [-14, -8], "r": 7},      # the fire everyone eats at (nothing gets built on it)
 }
 RIVER = [[-140, -84], [-80, -58], [-30, -42], [8, -66], [48, -112], [70, -160]]       # a slow bend, 10 m wide
 ROAD = [[22, -170], [20, -110], [16, -46], [6, -10]]                                  # from the south to the shack
@@ -148,7 +150,7 @@ def _near_path(x, z, path, width):
 
 def _taken(world):
     L = F.land(world)
-    out = [_rect(LAYOUT["shack"]["pos"], [8, 8, 3], 0)]
+    out = [_rect(LAYOUT["shack"]["pos"], [8, 8, 3], 0), _rect(LAYOUT["commons"]["pos"], [26, 26, 3], 0)]
     for x in L["buildings"] + L["projects"] + L.get("personal", []):
         if x.get("lot"):
             out.append(_rect(x["lot"]["pos"], x["lot"]["size"], x["lot"]["rot"]))
@@ -489,6 +491,11 @@ def export(world, since=None, until=None):
             "crowd": _crowd(world),
         },
         "events": events, "shots": shots,
+        "routine": {"day": [{"from": m, "what": w, "where": x} for m, w, x in routine.DAY],
+                    "commons": LAYOUT["commons"]["pos"]},
+        "encounters": [{"t": e["t"], "a": e["a"], "b": e["b"], "kind": e["kind"], "anim": e["anim"],
+                        "label": e["label"], "text": e["text"], "what": e["what"]}
+                       for e in routine.today(world, since) if e["t"] <= until],
         "today": {"built": [b["name"] for b in L["buildings"] if b.get("day") == city.day],
                   "arrived": sum(1 for m in moments if "walked up the old road" in m["text"])},
     }
@@ -522,34 +529,57 @@ def _named(world, moments, extra=20):
     for m in moments:
         want += m.get("handles", [])
     want += list(L.get("officers", {}).values())
+    want += [e[k] for e in routine.today(world, world.clock - (world.clock % 1440)) for k in ("a", "b")]
     act = np.where(c.active())[0]
     if len(act):
         rng = random.Random(city.day)
-        want += [c.handles[int(i)] for i in rng.sample(act.tolist(), min(extra, len(act)))]
+        want += [c.handles[int(i)] for i in rng.sample(act.tolist(), min(max(extra, 120), len(act)))]
     out = []
     homes = L.get("homes", {})
-    tent_ix = {}
     from .intents import condition
     for h in dict.fromkeys(want):
         i = c.index.get(h)
         if i is None or c.status[i] != 0:
             continue
-        if int(c.walled[i]) == -2:
-            tent_ix.setdefault(h, len(tent_ix))
-            home = {"tent": tent_ix[h]}
-            home_pos = (tents(world, F.tents(city)) or [LAYOUT["camp"]["pos"]])[min(tent_ix[h], max(0, F.tents(city) - 1))]
-        else:
-            bid = homes.get(h)
-            b = next((b for b in L["buildings"] if b["id"] == bid and b.get("lot")), None)
-            home = {"building": bid}
-            home_pos = b["lot"]["pos"] if b else place_pos(world, "field")
+        home = {"tent": 0} if int(c.walled[i]) == -2 else {"building": homes.get(h)}
+        home_pos = home_pos_of(world, h)
         work = F.home_of(c, i)
         cnd = condition(city, h)
         out.append({"handle": h, "name": c.names[i], "role": c.label(i), "home": home, "home_pos": home_pos,
                     "work": work, "work_pos": place_pos(world, work), "mood": round(float(c.mood[i]), 2),
                     "condition": cnd["state"] if cnd else None,
-                    "schedule": [{"from": 7, "to": 19, "at": "work"}, {"from": 19, "to": 7, "at": "home"}]})
+                    "schedule": day_of(world, i, home_pos)})
     return out[:120]
+
+
+def home_pos_of(world, h):
+    c, L = world.city.citizens, F.land(world)
+    i = c.index[h]
+    if int(c.walled[i]) == -2:
+        ts = tents(world, (F.tents(world.city) + 1) // 2) or [LAYOUT["camp"]["pos"]]
+        return ts[zlib.crc32(h.encode()) % len(ts)]
+    b = next((b for b in L["buildings"] if b["id"] == L.get("homes", {}).get(h) and b.get("lot")), None)
+    return b["lot"]["pos"] if b else place_pos(world, "field")
+
+
+def day_of(world, i, home_pos):
+    """Someone's day for the 3D view: each block with where it is."""
+    out = []
+    for b in routine.schedule(world, i):
+        w = b["where"]
+        if w == "home":
+            pos = home_pos
+        elif w == "visit" and b.get("with") in world.city.citizens.index:
+            pos = home_pos_of(world, b["with"])
+        elif w == "own":
+            from . import personal
+            p = personal.of(world, world.city.citizens.handles[int(i)])
+            pos = p["lot"]["pos"] if p and p.get("lot") else home_pos
+        else:
+            pos = place_pos(world, w)
+        out.append({"from": b["from"], "to": b["to"], "what": b["what"], "where": w, "pos": list(pos),
+                    "with": b.get("with")})
+    return out
 
 
 def _crowd(world):

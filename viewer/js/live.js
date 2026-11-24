@@ -43,6 +43,7 @@ export function startLive({ onScene, onState }) {
   $("ltext").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("lform").requestSubmit(); } });
   $("lhandle").addEventListener("change", () => { store.set("kingdom.handle", me()); render(); });
   $("lmine").addEventListener("change", render);
+  $("llittle").addEventListener("change", render);
 
   const control = (body) => api("/live/control", body).then(() => setTimeout(() => poll(true), 300));
   $("lpause").addEventListener("click", () => control({ action: state && state.paused ? "play" : "pause" }));
@@ -122,9 +123,10 @@ export function startLive({ onScene, onState }) {
         if (res.ok) { const i = replies.findIndex((x) => x.id === id); replies[i] = res.reply; render(); }
       }));
     } else {
-      const list = log.filter((m) => !mine || m.who === "@" + mine || (m.text || "").includes("@" + mine)).slice(-250);
+      const little = $("llittle") ? $("llittle").checked : true;
+      const list = log.filter((m) => (little || !m.small) && (!mine || m.who === "@" + mine || (m.text || "").includes("@" + mine))).slice(-300);
       const el = $("llog"), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-      el.innerHTML = list.map((m) => `<div class="lm ${m.comment ? "comment" : ""} ${m.who === "post" ? "post" : ""} ${m.public ? "" : "secret"} d${m.drama}">
+      el.innerHTML = list.map((m) => `<div class="lm ${m.small ? "small" : ""} ${m.comment ? "comment" : ""} ${m.who === "post" ? "post" : ""} ${m.public ? "" : "secret"} d${m.drama}">
         <span class="t">${esc((m.time || "").split(", ")[1] || "")}</span>${m.comment ? `<strong>${esc(m.who)}:</strong> ` : m.public ? "" : "<em>(secret)</em> "}${esc(m.text)}</div>`).join("");
       if (atEnd) el.scrollTop = el.scrollHeight;
     }

@@ -2,6 +2,7 @@
 
 PLAY IT LIVE in your browser - comment as anyone, approve replies:
     ./kingdom play --fresh --king llm
+    ./kingdom demo                     # a 50-person kingdom ten days in, to watch everyone's day
 
 TEST RUN - a whole scenario with a made-up audience:
     ./kingdom test --scenario scenarios/frontier.yaml              (newest run is always runs/latest)
@@ -265,6 +266,15 @@ def cmd_play(args):
           args.port)
 
 
+def cmd_demo(args):
+    from .play import Play, serve
+    from . import demo
+    print(f"Building a {args.people}-person Emberfall, {args.days} days in (rules only, a few seconds)...")
+    play = Play(args.state, mayor=args.mayor, fresh=True, speed=args.speed, seed=args.seed)
+    demo.build(play, args.people, args.days, seed=args.seed)
+    serve(play, args.port)
+
+
 def cmd_record(args):
     from .recorder import record
     record(args.days, names=args.recorders.split(",") if args.recorders else None, every=args.every, size=args.size,
@@ -317,6 +327,15 @@ def main():
     py.add_argument("--crowd", type=int, default=0, help="made-up followers commenting in the background")
     py.add_argument("--seed", type=int, help="the same seed gives the same king and the same luck (default: random)")
     py.add_argument("--port", type=int, default=8765)
+    dm = sub.add_parser("demo", help="a mid-sized kingdom (about 50 people, ten days in) to watch, live")
+    dm.add_argument("--people", type=int, default=50)
+    dm.add_argument("--days", type=int, default=10)
+    dm.add_argument("--state", default="data/demo", help="where it's saved (always starts over)")
+    dm.add_argument("--king", "--mayor", dest="mayor", default="rules", choices=["rules", "llm"],
+                    help="who runs it once it's live (building it is always rules)")
+    dm.add_argument("--speed", default="normal", choices=["slow", "normal", "fast", "faster"])
+    dm.add_argument("--seed", type=int, default=3)
+    dm.add_argument("--port", type=int, default=8765)
     rc = sub.add_parser("record", help="timelapse videos from the recorders in content/recorders.yaml")
     rc.add_argument("--days", default="runs/latest/days", help="a run's days folder")
     rc.add_argument("--recorders", help="comma-separated names (default: all)")
@@ -337,7 +356,7 @@ def main():
     v.add_argument("--last", type=int, help="last day to include")
     v.add_argument("--out", help="default: the run's world/ folder")
     args = p.parse_args()
-    {"test": cmd_test, "day": cmd_day, "status": cmd_status, "event": cmd_event, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record, "play": cmd_play}[args.cmd](args)
+    {"test": cmd_test, "day": cmd_day, "status": cmd_status, "event": cmd_event, "live": cmd_live, "view": cmd_view, "serve": cmd_serve, "record": cmd_record, "play": cmd_play, "demo": cmd_demo}[args.cmd](args)
 
 
 if __name__ == "__main__":

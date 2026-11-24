@@ -92,6 +92,37 @@ leave wonders behind (a whale-song shell, a griffin on the crag, a wizard asleep
   said. Someone who follows without commenting just shows up in the camp.
 - So the very first post's comments already do things: chop wood, help with the roof, start a garden.
 
+## Everyone's day, and the little things in it
+
+Everyone keeps the same simple day (`city/living/routine.py`), each person a few minutes earlier or later
+than the next so it doesn't look like a drill:
+
+| time | what | where |
+|---|---|---|
+| 06:00 | up | at home (a house, or their tent) |
+| 06:30 | breakfast | **the fire** by the shack, where everyone eats |
+| 07:30 | work | their job's place: the woods, the hill, the river, the field, a building going up |
+| 12:00 | lunch | the fire |
+| 13:00 | work | |
+| 17:30 | their own time | fishing, the garden, the woods, the fire, their own build, or a friend's door |
+| 19:00 | supper | the fire (songs, dancing) |
+| 21:30 | bed | home |
+
+**The little things.** Every half hour, people in the same place at the same time bump into each other and
+something small happens: they share bread, swap gossip (about whatever's really going on: a wonder, new
+land, Aldric, another settler), help drag a log, show each other how to split one, argue about whose turn
+it is at the well, catch someone napping, start a song. A few hundred a week in a town of fifty. Each pair
+keeps a running score (comments feed it too: a gift or a punch counts more than a shared loaf), and it adds
+up into **stories that happen while nobody's commenting**:
+
+- **friends** (+5), then **inseparable** (+12): a line in the feed, their names in it;
+- **a feud** (-4), and if it keeps going, **a fight** (-8): someone gets a black eye and sits out a day.
+
+A few of each a day at most; the rest wait their turn. The little things show in *What happened* (the
+"little things" box hides them) and as bubbles over people's heads in 3D. The bard sees each commenter's
+people ("friends with @tob - latest: they sang the one about the drowned miller") so a friend can turn up in
+their reply and a rival can be in their way.
+
 ## From hands to head
 
 - Settlers work every day. On an ordinary day they put in about 1.5 hours; on days they comment WORK or
@@ -181,6 +212,7 @@ cottage is 60% done.").
 ## Try it
 
 ```
+./kingdom demo                                                         # 50 people, ten days in: watch their day, live
 ./kingdom test --scenario scenarios/frontier.yaml --reports            # a slow-growing account, 30 days
 ./kingdom test --scenario scenarios/frontier_viral.yaml --reports      # hundreds walk in during week 2
 OLLAMA_URL=http://192.168.1.23:11434 ./kingdom test --scenario scenarios/frontier.yaml --king llm --days 8 --reports

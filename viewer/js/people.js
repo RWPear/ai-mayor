@@ -155,14 +155,14 @@ export class Crowd {
     this.looks = this.people.map((p) => look(p.role, p.handle));
   }
 
-  // states: [{x, y, z, heading, walkPose, work: "swing"|"stoop"|null, talk, sit, lie, hidden}]
+  // states: [{x, y, z, heading, walkPose, work: "swing"|"stoop"|null, talk, sit, lie, kind (sing/dance/eat), hidden}]
   update(states) {
     const o = this.o, m = this.m, l = this.l, r = this.r, e = this.e, col = this.col, t = performance.now() / 1000, g = geos();
     const n = { tall: 0, wide: 0, small: 0, head: 0 };
     states.forEach((s, i) => {
       if (i >= this.people.length || s.hidden) return;
       const L = this.looks[i], V = g[L.kind], j = (this.people[i].j || i) % 100;
-      const kind = s.lie ? "sleep" : s.walkPose ? "walk" : s.work === "swing" ? "work" : s.work === "stoop" ? "stoop" : s.sit ? "sit" : s.talk ? "talk" : "idle";
+      const kind = s.lie ? "sleep" : s.kind ? s.kind : s.walkPose ? "walk" : s.work === "swing" ? "work" : s.work === "stoop" ? "stoop" : s.sit ? "sit" : s.talk ? "talk" : "idle";
       const q = motion(kind, t, j);
       o.position.set(s.x, s.y + (q.lie ? 0.4 : q.y) * L.size, s.z);
       o.rotation.set(q.lie ? Math.PI / 2 : q.lean, s.heading + q.turn, q.sway, "YXZ");

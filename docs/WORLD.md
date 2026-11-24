@@ -44,6 +44,12 @@ colour. No arms, legs or tools: all the life is in how they move - a waddle when
 they work, a stoop when they garden or fish, a nod and a wobble when they talk (anyone standing about is
 usually chatting), a squash when they sit, lying flat asleep, and they blink. Aldric is a bigger blue one
 (with a little crown once he's crowned). The crowd is drawn instanced: hundreds of people are five draw calls.
+They keep the simulation's day (docs/FRONTIER.md): out of the door at six, breakfast round **the fire**
+(a ring of logs west of the shack, everyone in their own seat), off to work moving from tree to tree or row to
+row, back to the fire for lunch, their own time, supper (some sing, some dance), and in at half past nine.
+When the simulation says two people had a moment, one walks over to the other, they turn to face each other
+and do it, with a little bubble over their heads ("shares bread", "argues", "lends a hand"). Hover over
+anyone to see their whole day.
 
 **The look:** in the spirit of Thronefall, but a world you can walk around in: clean flat colours, no
 textures, low-poly faceted ground, chunky trees (a few already turning orange), golden thatch and cream
