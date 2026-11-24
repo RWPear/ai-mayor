@@ -49,7 +49,6 @@ export function startLive({ onScene, onState }) {
   $("lspeed").addEventListener("change", (e) => control({ action: "speed", speed: e.target.value }));
   $("lstep").addEventListener("click", () => control({ action: "step" }));
   $("lclose").addEventListener("click", () => { $("lclose").disabled = true; control({ action: "close" }).finally(() => setTimeout(() => { $("lclose").disabled = false; }, 2500)); });
-  $("larrive").addEventListener("click", () => control({ action: "arrive" }));
   document.querySelectorAll("#ltabs button").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; render(); if (tab === "mind") pollMind(); }));
 
   async function poll(force) {
@@ -87,7 +86,6 @@ export function startLive({ onScene, onState }) {
     $("lstep").disabled = !state.paused;
     const sp = Object.entries(state.speeds).find(([, v]) => v === state.tick_s);
     if (sp && $("lspeed").value !== sp[0]) $("lspeed").value = sp[0];
-    $("larrive").hidden = !state.road;
     $("lpending").textContent = state.pending ? `(${state.pending})` : "";
     const m = state.model || {};
     $("lmodel").hidden = !!m.off;

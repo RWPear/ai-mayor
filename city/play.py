@@ -223,13 +223,6 @@ class Play:
                 self._close_post()
                 self._collect()
                 self._publish()
-            elif a == "arrive":  # the travellers, now (testing: no week's wait)
-                from .living import frontier as F
-                n = F.arrive(self.world)
-                self.log.append({"n": len(self.log), "time": self.world.now_str(), "who": "world", "public": True,
-                                 "drama": 2, "text": f"(test) Everyone on the road arrives now: {n}."})
-                self._collect()
-                self._publish()
         return stepped
 
     def set_reply(self, body):

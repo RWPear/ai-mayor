@@ -9,7 +9,7 @@ import { makeTextures, TEX, M } from "./materials.js";
 import { Land, V } from "./terrain.js";
 import { Nature } from "./nature.js";
 import { buildingMesh, tentsMesh, pilesMesh, cartMesh, WIN_LIT, FLAME, esc } from "./buildings.js";
-import { Person, Crowd, KitCrowd, makePerson } from "./people.js";
+import { Person, Crowd, makePerson } from "./people.js";
 import { loadAssets, A as KIT } from "./assets.js";
 import { Rig, MODES } from "./camera.js";
 import { hash, rng, clamp } from "./noise.js";
@@ -85,7 +85,7 @@ async function showDay(i, keepTime = false) {
     land.recording = RECORD;
     nature = new Nature(scene, land, S);
     rig = new Rig(camera, renderer.domElement, land);
-    crowd = KIT.chars ? new KitCrowd(scene, QUALITY === "low" ? 220 : 600) : new Crowd(scene, QUALITY === "low" ? 220 : 600);
+    crowd = new Crowd(scene, QUALITY === "low" ? 220 : 600);
     setupPost();
     const kp = S.actors.king.start.pos;
     rig.lookAt(kp, 18);
@@ -481,7 +481,7 @@ function buildHud() {
   const st = S.settlement;
   $("title").textContent = `${S.city}, day ${LIVE ? S.day + 1 : S.day}`;
   const chips = [[st.crowned ? "crowned" : "not crowned"], [st.stage], [`${st.settled} settlers`], [`${st.beds} beds, ${st.free_beds} free`],
-    st.tents ? [`${st.tents} in tents`, "warn"] : null, st.on_road ? [`${st.on_road} on the road`] : null, st.next_arrival ? [`arrivals day ${st.next_arrival}`] : null].filter(Boolean);
+    st.tents ? [`${st.tents} in tents`, "warn"] : null].filter(Boolean);
   $("stats").innerHTML = chips.map(([t, c]) => `<span class="chip ${c || ""}">${esc(t)}</span>`).join("");
   $("events").innerHTML = S.events.map((e, i) => `<button class="ev ${e.public ? "public" : ""} d${e.drama}" data-i="${i}" type="button"><span class="t">${esc(e.time.split(", ")[1])}</span>${esc(e.text)}</button>`).join("");
   document.querySelectorAll(".ev").forEach((el) => el.addEventListener("click", () => { const e = S.events[+el.dataset.i]; now = e.t - S.start - 2; if (e.pos) { rig.set("orbit"); rig.lookAt(e.pos, 16); syncMode(); } }));
@@ -634,7 +634,7 @@ window.kingdom = {
 (async () => {
   bindUi(); resize();
   await Promise.all([loadIndex(), loadAssets((f) => { const el = document.getElementById("loading"); if (el) el.dataset.kit = Math.round(f * 100); })]);
-  window.__kit = { ready: KIT.ready, chars: KIT.chars };
+  window.__kit = { ready: KIT.ready };
   if (!index.days.length) { $("empty").classList.add("show"); $("doing").textContent = "No scene loaded yet."; requestAnimationFrame(frame); return; }
   await showDay(index.days.length - 1);
   if (LIVE) { liveShape = shapeOf(S); live = startLive({ onScene: (d) => liveScene(d), onState: liveState }); }
