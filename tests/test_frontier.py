@@ -355,4 +355,5 @@ def test_growing_a_stage_is_noticed_and_the_island_answers():
     assert len(F.island(city)["lobes"]) == 2                 # a piece of new land per stage crossed
     assert {"jester", "steward"} <= set(F.land(w)["court"])
     w.tick()
-    assert any("risen" in m["text"] or "rose" in m["text"] for m in city.living["moments"][-5:])
+    told = " ".join(m["text"] for m in city.living["moments"])
+    assert "the east meadow" in told and "the glass cliffs" in told           # everyone hears about it
