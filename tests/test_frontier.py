@@ -5,19 +5,23 @@ from city.living import frontier as F
 from city.living import frontier_tools as FT
 
 
-def _world(followers=5, seed=3, llm=None, voice=None, arrivals="weekly"):
+def _world(followers=5, seed=3, llm=None, voice=None):
     from city import config
     from city.living.world import World
     from city.mayor import RuleMayor
     from city.model import City
-    cfg = config.load()
-    cfg["frontier_arrivals"] = arrivals          # most of these tests are about the old weekly road
-    city = City(cfg, seed=seed)
+    city = City(config.load(), seed=seed)
     w = World(city, king_brain=llm, voice_llm=voice)
     w.post(RuleMayor(), [f"u{i}" for i in range(followers)], [])
     for i in range(followers):
         w.note_comment({"username": f"u{i}", "id": f"c{i}", "post": city.day})
     return city, w
+
+
+def _arrive(w, handles):
+    """New followers, straight in (as when they follow)."""
+    c = w.city.citizens
+    return F.join_road(w, c.add_many(handles, w.city.day, w.city.ward_for, revive=False))
 
 
 def _days(w, n, followers=None, comments=None):
@@ -28,12 +32,12 @@ def _days(w, n, followers=None, comments=None):
     return out
 
 
-def test_he_starts_with_nothing_and_people_are_on_the_road():
+def test_he_starts_with_nothing_and_followers_walk_straight_in():
     city, w = _world()
     L = F.land(w)
-    assert w.frontier and w.agent("king")["location"] in F.places(w)
+    assert w.agent("king")["location"] in F.places(w)
     assert city.treasury <= 20 and F.capacity(city) == 0 and not L["crowned"]
-    assert F.settled(city) == 0 and F.on_road(city) == 5              # followers are travelling, not living there
+    assert F.settled(city) == 5 and F.on_road(city) == 0 and F.tents(city) == 5     # no beds yet: tents
     assert {"shack", "woods", "river", "hill", "field", "road"} <= set(F.places(w))
     assert "throne_room" not in F.places(w)
 
@@ -99,13 +103,14 @@ def test_building_uses_materials_and_teaches():
     assert L["stock"]["wood"] < 5
 
 
-def test_arrival_day_beds_then_tents_then_moving_in():
-    city, w = _world(followers=6)
+def test_beds_then_tents_then_moving_in():
+    city, w = _world(followers=0)
     L = F.land(w)
     L["buildings"].append({"id": "bx", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": 2,
                            "place": "field", "quality": "good", "day": 1})
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
+    _arrive(w, [f"u{i}" for i in range(6)])
+    for i in range(6):
+        w.note_comment({"username": f"u{i}", "id": f"c{i}", "post": city.day})
     c = city.citizens
     assert F.settled(city) == 6 and F.housed(city) == 2 and F.tents(city) == 4 and "camp" in F.places(w)
     texts = [a["text"] for a in city.living["just_arrived"].values()]     # (woven into their next reply)
@@ -115,15 +120,6 @@ def test_arrival_day_beds_then_tents_then_moving_in():
     assert F.rehouse(w) == 4 and F.tents(city) == 0
     assert any("moved_in" in x.get("kinds", [x["kind"]]) for x in city.living["outbox"])
     assert int((c.walled[c.active()] >= 0).sum()) == 6
-
-
-def test_word_comes_three_days_before():
-    city, w = _world(followers=8)
-    L = F.land(w)
-    L["next_arrival"] = city.day + 1 + 3
-    F.forecast(w)
-    assert L["forecast"] and L["forecast"]["est"] >= 1
-    assert any("on the road" in m["text"] for m in city.living["moments"][-3:])
 
 
 def test_settlers_work_on_his_projects():
@@ -178,29 +174,18 @@ def test_the_settlers_vote_on_a_crown():
     assert L["crowned"]
 
 
-def test_people_on_the_road_can_send_things_and_write():
-    from city.living import intents
-    city, w = _world()
-    out = intents.process(w, {"u1": "I send the king a sharp iron axe", "u2": "you should build near the river",
-                              "u3": "I punch @u4"}, None, 0)
-    replies = {x["to"]: x["text"] for x in city.living["outbox"]}
-    assert any("axe" in t["name"] for t in F.land(w)["tools"])
-    assert "letter" in replies["u2"] and "road" in replies["u3"].lower()
-    assert len(out) == 3
-
-
 def test_skarn_waits_until_there_is_something_to_raid():
     city, w = _world(followers=3)
     _days(w, 9)
     assert not city.living["warcamp"].get("arrived")
 
 
-def test_a_week_alone_then_people_and_houses():
+def test_a_first_week_of_people_and_houses():
     city, w = _world(followers=4)
     rs = _days(w, 8)
     assert F.settled(city) == 4
     assert any(b["kind"] == "housing" for b in F.land(w)["buildings"])     # he got a roof up in the first week
-    assert all(r["frontier"] for r in rs) and rs[0]["frontier"]["stage"] == "alone"
+    assert all(r["frontier"] for r in rs)
     assert not any(r.get("election") for r in rs)
 
 
@@ -341,7 +326,7 @@ def test_too_big_to_build_alone_becomes_a_petition():
 
 
 def test_followers_walk_in_at_once_by_default():
-    city, w = _world(arrivals="instant")
+    city, w = _world()
     assert F.settled(city) == 5 and F.on_road(city) == 0
     arrived = city.living.get("just_arrived") or {}
     assert set(arrived) <= {f"u{i}" for i in range(5)}
@@ -350,7 +335,7 @@ def test_followers_walk_in_at_once_by_default():
 
 
 def test_a_first_comment_gets_a_welcome_not_a_wait():
-    city, w = _world(followers=0, arrivals="instant")
+    city, w = _world(followers=0)
     from city.mayor import RuleMayor
     w.post(RuleMayor(), ["newbie"], [])
     r = w.post(RuleMayor(), [], [{"username": "newbie", "id": "n1", "text": "I chop wood for the king",

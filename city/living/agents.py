@@ -100,7 +100,7 @@ def king_sections(world, me):
     if projs:
         S["building"].append("Kingdom building projects you could fund (spend): " + ", ".join(projs))
     S["kingdom"].append(f"Emberfall: {city.population()} subjects, {T.summary(world)}, loyalty {city.approval():.0%}, "
-                        f"treasury {city.treasury:,.0f} gold, tax {city.tax_rate:.0%}. The Reckoning (the vote on your "
+                        f"purse {city.treasury:,.0f} gold. The Reckoning (the vote on your "
                         f"crown) is in {city.cfg['season_days'] - (city.day % city.cfg['season_days'])} days.")
     events = [f"{a['title']} ({a['days_left']} days left)" for a in city.events]
     if events:

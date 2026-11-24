@@ -11,9 +11,7 @@ def _world(followers=6):
     from city.living.world import World
     from city.mayor import RuleMayor
     from city.model import City
-    cfg = config.load()
-    cfg["frontier_arrivals"] = "weekly"
-    city = City(cfg, seed=4)
+    city = City(config.load(), seed=4)
     w = World(city)
     r = w.post(RuleMayor(), [f"u{i}" for i in range(followers)], [])
     return city, w, r
@@ -84,13 +82,13 @@ def test_collapses_leave_ruins_where_they_stood():
 
 
 def test_settlers_have_homes_and_work():
-    city, w, _ = _world(followers=4)
+    city, w, _ = _world(followers=0)
     L = F.land(w)
     L["buildings"].append({"id": "bz", "name": "a cottage", "kind": "housing", "scale": "small", "capacity": 2,
                            "place": "field", "quality": "good", "day": 1})
     scene.place(w, L["buildings"][-1])
-    L["next_arrival"] = city.day + 1
-    F.arrive(w)
+    c = city.citizens
+    F.join_road(w, c.add_many([f"u{i}" for i in range(4)], city.day, city.ward_for, revive=False))
     s = scene.export(w)
     people = {p["handle"]: p for p in s["actors"]["settlers"]}
     assert len(people) == 4

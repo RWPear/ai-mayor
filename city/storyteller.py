@@ -65,14 +65,14 @@ def stats_ns(city):
     for e in city.event_log:
         results[e["id"]] = e.get("result")
     ns = {"pop": city.population(), "approval": city.approval(), "treasury": city.treasury,
-          "tax": city.tax_rate, "economy": city.economy, "day": city.day,
+          "tax": 0.0, "economy": city.economy, "day": city.day,
           "season": city.season, "season_day": (city.day - 1) % city.cfg["season_days"] + 1,
           "unrest": max([w["unrest"] for w in city.wards] or [0]),
-          "has": lambda m: m in city.milestones,
+          "has": lambda m: False,
           "happened": lambda eid: eid in results,
           "result": lambda eid: results.get(eid),
           "active": lambda eid: any(a["id"] == eid for a in city.events),
-          "built": lambda pid: any(p["id"] == pid and p["status"] == "done" for p in city.projects)}
+          "built": lambda pid: any(pid in b["name"].lower() for b in ((city.living or {}).get("town", {}).get("land") or {}).get("buildings", []))}
     ns.update({f"q_{s}": city.quality[s] for s in SERVICES})
     ns.update({f"faction_{f}": (fm.get(f) if fm.get(f) is not None else 0.5) for f in FACTIONS})
     camp = (getattr(city, "living", None) or {}).get("warcamp") or {}

@@ -727,10 +727,6 @@ def process(world, free, llm=None, ai_people=0):
     has_event = bool(city.events)
     out = []
     users = [u for u in free if u in c.index and u not in acted and c.status[c.index[u]] == 0]
-    if world.frontier:                    # people still on the road can send things, write, or decide who they'll be
-        road = [u for u in free if u in c.index and u not in acted and c.status[c.index[u]] == 2]
-        out += _on_the_road(world, road, free)
-        acted.update(road)
     city.rng.shuffle(users)
     for u in [u for u in users if condition(city, u)]:
         cnd = condition(city, u)
@@ -871,46 +867,6 @@ def _you(text, handle):
         t = re.sub(a, b, t)
     return t
 
-
-ROAD_REPLIES = ["You're still on the road - the ruts are deep and the nights are cold. That will have to wait until "
-                "you reach Emberfall on day {day}.",
-                "Not yet: you're still days away on the old road. You'll get there on day {day}. Until then you "
-                "can send Aldric something, or leave him a word of advice."]
-
-
-def _on_the_road(world, road, free):
-    """Comments from people who haven't arrived yet: gifts go ahead of them, advice becomes a letter, roles are
-    chosen for when they get there. Anything else waits."""
-    from . import frontier
-    city, c = world.city, world.city.citizens
-    day = frontier.land(world)["next_arrival"]
-    out = []
-    for u in road:
-        text = free[u]
-        p = trades.parse(text)
-        if p and p[2]:
-            world.take_role(u, p[0], p[1])
-            continue
-        act, _ = rule_read(text, False)
-        r = {"user": u, "text": text, "action": "none", "target": "", "drama": 0, "outcome": ""}
-        if act == "gift_king":
-            r.update(action="gift_king", item=_rule_item(text), effort=rule_effort(text), needs=[])
-            resolve(world, r, {})
-            r["outcome"] = _rule_tell(r)
-            r["reply"] = _rule_reply(r) + f" You'll be there yourself on day {day}."
-        elif act == "petition" or re.search(r"\b(should|advice|suggest|tip|try|idea)\b", text, re.I):
-            king = world.agent("king")
-            king.setdefault("letters", []).append({"day": city.day, "from": u, "text": text[:160]})
-            del king["letters"][:-12]
-            log = city.living.setdefault("petitions_log", [])
-            log.append({"who": u, "text": text[:200], "day": city.day + 1})
-            r["reply"] = f"You sent a letter ahead with a passing carter. Aldric will read it. See you on day {day}."
-            world.moment("world", f"A letter for Aldric from @{u}, still on the road: \"{text[:120]}\"", 1,
-                         public=True, handles=[u])
-        else:
-            r["reply"] = city.rng.choice(ROAD_REPLIES).format(day=day)
-        out.append(r)                     # the reply goes out with everyone else's
-    return out
 
 
 def _rule_item(text):

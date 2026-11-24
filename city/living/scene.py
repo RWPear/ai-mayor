@@ -458,7 +458,7 @@ def export(world, since=None, until=None):
         "minutes_per_day": 1440, "post_hour": 19,
         "settlement": {"stage": L["stage"], "crowned": L["crowned"], "settled": F.settled(city),
                        "on_road": F.on_road(city), "beds": F.capacity(city), "free_beds": F.free_beds(city),
-                       "tents": n_tents, "next_arrival": None if F.instant(city) else L["next_arrival"], "know": list(L["know"]),
+                       "tents": n_tents, "know": list(L["know"]),
                        "stores": {m: int(v) for m, v in L["stock"].items() if v >= 1}, "gold": round(city.treasury)},
         "terrain": {"ground": {"size": [420, 420]}, "river": {"path": RIVER, "width": 10},
                     "road": {"path": ROAD, "width": 4}, "hill": {"pos": LAYOUT["hill"]["pos"],

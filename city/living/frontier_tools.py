@@ -360,16 +360,9 @@ def sections(world, me):
         S["kingdom"].append(f"Emberfall is a {L['stage']} of {n} settler{'s' if n > 1 else ''}. Nobody has crowned "
                             f"you - yet.")
     S["kingdom"].append(f"Beds: {F.capacity(city)} ({F.free_beds(city)} free). People in tents: {F.tents(city)}.")
-    if F.instant(city):
-        new = len(city.living.get("just_arrived") or {})
-        S["kingdom"].append("Newcomers walk up the old road whenever word reaches them - any day, any hour."
-                            + (f" {new} arrived in the last day." if new else ""))
-    else:
-        days_to = L["next_arrival"] - (city.day + 1)
-        f = L.get("forecast")
-        S["kingdom"].append(f"Next arrival day: day {L['next_arrival']} (in {days_to} day{'s' if days_to != 1 else ''}). "
-                            + (f"A traveller said about {F._about(f['est'])} are coming." if f else
-                               "Nobody knows yet how many will come."))
+    new = len(city.living.get("just_arrived") or {})
+    S["kingdom"].append("Newcomers walk up the old road whenever word reaches them - any day, any hour."
+                        + (f" {new} arrived in the last day." if new else ""))
     cap = F.max_scale(world)
     S["building"].append(f"The biggest thing you could realistically take on now: something {cap} "
                          f"({F.example(cap, world.city.rng)}). Bigger needs more hands, and you get there by building bigger "
@@ -519,7 +512,7 @@ def _next_idea(world):
         if first:
             L.setdefault("tried", []).append(first)
             return first
-    expected = (L.get("forecast") or {}).get("est", F.on_road(city)) if not F.instant(city) else 2
+    expected = 2                                   # newcomers arrive any time
     gap = expected + F.tents(city) - F.free_beds(city)
     if gap > 0 or not any(b["kind"] == "housing" for b in L["buildings"]):
         cap = F.ORDER.index(F.max_scale(world))

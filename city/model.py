@@ -1,9 +1,7 @@
-"""The kingdom as a whole: gold, services, holds, factions, projects, events,
-milestones and history. Saved as one JSON file next to the subject arrays.
+"""Emberfall as a whole: Aldric's purse, the corners of the settlement, events and history - plus the living
+world (city.living) and everyone in it (city.citizens). Saved as one JSON file next to the people arrays.
 
-Naming note: in the code a hold is still called a "ward" and a lord a
-"councilor" (the engine is theme-neutral). Everything players and content
-authors see says hold and lord; content files may use either word.
+(In the code a corner of the settlement is a "ward": Riverside, Hillfoot, Woodedge - where raids land.)
 """
 import json
 import random
@@ -47,23 +45,16 @@ class City:
         self.day = 0
         self.season = 1
         self.rng = random.Random(seed)
-        self.treasury = cfg["start_treasury"]
-        self.tax_rate = cfg["start_tax_rate"]
-        self.spend_ratio = 1.0
-        self.budget = {s: 0.25 for s in SERVICES}
-        self.quality = {s: 0.8 for s in SERVICES}
+        self.treasury = float(cfg.get("frontier_gold", 15))     # Aldric's purse
+        self.quality = {s: 0.8 for s in SERVICES}   # (only "defense" still matters: how hard raids are)
         self.economy = 1.0
         self.wards = []
         self.events = []          # active events
         self.event_log = []       # finished events
-        self.projects = []        # in progress / done
-        self.milestones = []      # unlocked milestone ids
-        self.petitions = []
         self.history = []         # one row of stats per day
-        self.mayor = {"name": "King Aldric", "term": 1, "promises": []}   # the ruler (AI)
+        self.mayor = {"name": "King Aldric", "term": 1}   # the ruler (AI): his journal lives here
         self.pack = None
-        self.scheduled = []       # events queued by you, the season plan, or follow-ups
-        self.plan = None          # season plan settings + progress (see city/plan.py)
+        self.scheduled = []       # events queued by you or as follow-ups
         self.living = None        # the living world (clock, minds, war camp, moments) - see city/living/
         self.citizens = Citizens()
         for _ in range(cfg["first_wards"]):
@@ -129,9 +120,8 @@ class City:
         return rows
 
     # ------------------------------------------------------------------ save / load
-    STATE_KEYS = ["name", "day", "season", "treasury", "tax_rate", "spend_ratio", "budget", "quality", "economy",
-                  "wards", "events", "event_log", "projects", "milestones", "petitions", "history", "mayor", "pack",
-                  "scheduled", "plan", "living"]
+    STATE_KEYS = ["name", "day", "season", "treasury", "quality", "economy", "wards", "events", "event_log",
+                  "history", "mayor", "pack", "scheduled", "living"]
 
     def save(self, path):
         path = Path(path)

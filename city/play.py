@@ -286,7 +286,6 @@ class Play:
         state = {"day": city.day + 1, "model": self.model, "clock": w.clock, "time": w.now_str(), "post_closes": w.now_str(w.next_post_clock()),
                  "paused": self.paused, "tick_s": self.tick_s, "tick_min": self.W.TICK, "version": self.version,
                  "speeds": SPEEDS, "error": self.error, "frontier": w.frontier,
-                 "road": w.frontier and not F.instant(city),
                  "words": list((pack.get("commands") or {}).keys())[:8],
                  "status": F.status_line(F.summary(w)) if w.frontier else "",
                  "pending": sum(1 for r in self.replies if r["status"] == "pending")}

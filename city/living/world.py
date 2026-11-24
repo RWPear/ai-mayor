@@ -254,15 +254,6 @@ class World:
             i = c.index.get(u)
             if i is None or u in seen or c.status[i] not in (0, F.ROAD) or intents.muted(self, u):
                 continue
-            if c.status[i] == F.ROAD:
-                day = F.land(self)["next_arrival"]
-                self.reply(u, f"👋 You're on the road to Emberfall as {c.names[i]}, {trades.a_(c.label(i))}. Everyone "
-                              f"on the road arrives together on day {day}. Until then: send Aldric something useful "
-                              f"(\"I send an axe ahead\"), leave him a word of advice, or decide who you'll be when "
-                              f"you get there (\"I become a mason\"). Comment STATUS to see your character.", "welcome")
-                seen[u] = self.city.day + 1
-                n += 1
-                continue
             hold = self.city.wards[int(c.ward[i])]["name"]
             home = "with no roof over your head" if c.homeless(i) else (
                 "in a house inside the walls" if int(c.walled[i]) == 1 else "in a house in the hold")
@@ -716,16 +707,10 @@ class World:
         if t == 6 * 60:
             F.morning(self)
             F.peddler(self)
-        if t == 9 * 60 and not F.instant(self.city):
-            F.forecast(self)
         if t == 3 * 60:
             F.rough_night(self)
-        if t == 12 * 60 and day >= L["next_arrival"] and not F.instant(self.city):
+        if t % 120 == 0 and (self.city.citizens.status == F.ROAD).any():   # (an old save's road: let them in)
             F.arrive(self)
-        if F.instant(self.city) and t % 120 == 0:     # (an old save from the weekly road: let them in)
-            stuck = np.where(self.city.citizens.status == F.ROAD)[0]
-            if len(stuck):
-                F.arrive(self, stuck)
         if t in (9 * 60, 12 * 60, 15 * 60, 18 * 60):
             F.labor(self, 0.25)
         if t == 20 * 60:
