@@ -690,7 +690,7 @@ def arrive(world, idx=None):
     idx = np.asarray(idx, np.int64)
     if not len(idx):
         return 0
-    before = stage_of(settled(city))
+    before = L.get("stage", "alone")            # (what Emberfall was before these people walked in)
     c.status[idx] = 0
     c.joined[idx] = city.day + 1
     c.walled[idx] = -2
@@ -992,7 +992,7 @@ def _stage(world, before=None):
                 "city": "Emberfall is a city."}[now]
         world.moment("world", text, 3, public=True)
         world.notify(text)
-        grow_island(world.city, 1)                    # the island answers: new land rises from the clouds
+        grow_island(world.city, order.index(now) - order.index(before))   # the island answers: new land rises
         for s in order[order.index(before) + 1:order.index(now) + 1]:
             npc = COURT_ARRIVES.get(s)
             if npc and npc not in L["court"]:

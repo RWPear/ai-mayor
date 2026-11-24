@@ -370,11 +370,16 @@ def _resolve(world, r, hostile_today):
         return
     if act == "conjure":
         from . import wonders
-        w, r["facts"] = wonders.conjure(world, u, r.get("text", ""), r.get("item", ""))
-        r["wonder"] = w["name"]
-        r["drama_floor"] = 2
-        r["reply_rule"] = f"It's real: {w['what']}. The catch: it {w['cost']}."
-        world.moment("world", f"@{u}'s {w['name']} is real: {w['what']}.", 2, public=True, handles=[u])
+        w, r["facts"], new = wonders.conjure(world, u, r.get("text", ""), r.get("item", ""))
+        if new:
+            r["wonder"] = w["name"]
+            r["drama_floor"] = 2
+            r["reply_rule"] = f"It's real: {w['what']}. The catch: it {w['cost']}."
+            world.moment("world", f"@{u}'s {w['name']} is real: {w['what']}.", 2, public=True, handles=[u])
+        else:
+            r["drama_floor"] = 1
+            r["reply_rule"] = r["facts"][:1].upper() + r["facts"][1:] + "."
+            r["reply_rule"] = "You " + r["facts"].split(" ", 1)[1] + "." if r["facts"].startswith("tried") else r["reply_rule"]
         return
     if (act in SOCIAL or act in ("work", "volunteer")) and t not in ("king", "") and j is None:
         from . import wonders                     # not a person: one of the island's wonders?

@@ -115,22 +115,29 @@ def find(city, text):
 
 
 def conjure(world, u, text, item=""):
-    """Someone claims or calls up something fantastic. It comes true - at a cost. Returns (wonder, facts)."""
+    """Someone claims or calls up something fantastic. It comes true - at a cost.
+    Returns (wonder or None, facts, new?) - None/False when nothing new happened."""
     city = world.city
     st = state(city)
     mine = [w for w in st["open"] if w.get("owner") == u and w["by"] == "conjured" and w["day"] >= city.day - 2]
     if mine:                                          # one wonder every few days each: the island isn't a vending machine
         w = mine[-1]
         return w, (f"tried to conjure something more, but the island is still busy with their {w['name']} - "
-                   f"nothing new happened, and the {w['name']} is still {w['cost']}")
+                   f"nothing new happened, and their {w['name']} still {w['cost']}"), False
+    today = [w for w in st["open"] + st["gone"] if w["by"] == "conjured" and w["day"] == city.day + 1]
+    if len(today) >= 3:                               # the island only has so much magic in it a day
+        return None, ("tried to conjure something, but the island had nothing left to give today - a few sparks, a "
+                      "smell of burnt sugar, and then nothing. Maybe tomorrow"), False
     kind = kind_of(item or text)
     thing = (item or thing_of(text)).strip() or "spell"
+    if find(city, thing) and find(city, thing)["name"].lower() == thing.lower():
+        thing = f"{u}'s {thing}"                     # someone else already has one: this one is theirs
     pick = city.rng.choice(TWISTS.get(kind, TWISTS["magic"]))
     what, upkeep, cost = pick[0].format(thing=thing), pick[1], pick[2]
     w = add(world, thing, kind, owner=u, what=what, cost=cost, upkeep=upkeep)
     _now(world, w)
     return w, (f"IT CAME TRUE, at a cost: there is now {what} on the island (theirs). The catch: it {cost}. "
-               f"Wonders here are real but never free")
+               f"Wonders here are real but never free"), True
 
 
 def _now(world, w):

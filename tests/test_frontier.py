@@ -345,3 +345,14 @@ def test_a_first_comment_gets_a_welcome_not_a_wait():
     txt = " ".join(x["text"] for x in out).lower()
     assert "road" not in txt or "emberfall" in txt
     assert F.settled(city) >= 1
+
+
+def test_growing_a_stage_is_noticed_and_the_island_answers():
+    city, w = _world(followers=0)
+    assert F.land(w)["stage"] == "alone" and not F.island(city)["lobes"]
+    _arrive(w, [f"n{i}" for i in range(12)])                 # alone -> village in one go
+    assert F.land(w)["stage"] == "village"
+    assert len(F.island(city)["lobes"]) == 2                 # a piece of new land per stage crossed
+    assert {"jester", "steward"} <= set(F.land(w)["court"])
+    w.tick()
+    assert any("risen" in m["text"] or "rose" in m["text"] for m in city.living["moments"][-5:])
